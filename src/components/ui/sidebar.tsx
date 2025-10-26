@@ -317,7 +317,7 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background transition-[margin-left] duration-200 ease-linear",
+        "relative flex min-h-svh flex-1 flex-col transition-[margin-left] duration-200 ease-linear",
         "md:peer-data-[state=expanded]:ml-[--sidebar-width]",
         className
       )}
