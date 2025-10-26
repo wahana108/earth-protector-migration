@@ -1,3 +1,64 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-background",
+      "description": "Lush green forest canopy from above",
+      "imageUrl": "https://images.unsplash.com/photo-1706430500215-60107fbb1751?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxmb3Jlc3QlMjBjYW5vcHl8ZW58MHx8fHwxNzYxNDE1MDUzfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "forest canopy"
+    },
+    {
+      "id": "nft-1",
+      "description": "A single tree standing in a green field",
+      "imageUrl": "https://images.unsplash.com/photo-1672207130896-0b4bc0083d3e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8c29saXRhcnklMjB0cmVlfGVufDB8fHx8MTc2MTQ1Njk3Nnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "solitary tree"
+    },
+    {
+      "id": "nft-2",
+      "description": "Clear blue ocean water with sunlight filtering through",
+      "imageUrl": "https://images.unsplash.com/photo-1465634836201-1d5651b9b6d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxibHVlJTIwb2NlYW58ZW58MHx8fHwxNzYxNDIxNzEzfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "blue ocean"
+    },
+    {
+      "id": "nft-3",
+      "description": "An African elephant walking across the savanna",
+      "imageUrl": "https://images.unsplash.com/photo-1654066739382-571760af8b43?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxhZnJpY2FuJTIwZWxlcGhhbnR8ZW58MHx8fHwxNzYxNDU2OTc2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "african elephant"
+    },
+    {
+      "id": "nft-4",
+      "description": "Colorful coral reef teeming with fish",
+      "imageUrl": "https://images.unsplash.com/photo-1515555585025-54136276b6e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxjb3JhbCUyMHJlZWZ8ZW58MHx8fHwxNzYxNDU2OTc2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "coral reef"
+    },
+    {
+      "id": "nft-5",
+      "description": "A Siberian tiger in a snowy forest",
+      "imageUrl": "https://images.unsplash.com/photo-1524132989408-c8ee48d8f147?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxzaWJlcmlhbiUyMHRpZ2VyfGVufDB8fHx8MTc2MTQ1Njk3Nnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "siberian tiger"
+    },
+    {
+      "id": "nft-6",
+      "description": "Misty cloud forest in the mountains",
+      "imageUrl": "https://images.unsplash.com/photo-1568399032147-1011aa65f85a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxjbG91ZCUyMGZvcmVzdHxlbnwwfHx8fDE3NjEzNjgzMTl8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "cloud forest"
+    },
+    {
+      "id": "nft-7",
+      "description": "A black rhino standing in the grass",
+      "imageUrl": "https://images.unsplash.com/photo-1535338134198-e28df7d54e3d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxibGFjayUyMHJoaW5vfGVufDB8fHx8MTc2MTQ1Njk3Nnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "black rhino"
+    },
+    {
+      "id": "nft-8",
+      "description": "A dense mangrove forest with roots in the water",
+      "imageUrl": "https://images.unsplash.com/photo-1618288389681-f135edea12db?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxtYW5ncm92ZSUyMGZvcmVzdHxlbnwwfHx8fDE3NjEzNzA2MDR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "mangrove forest"
+    },
+    {
+      "id": "login-background",
+      "description": "Sunlight filtering through a dense forest",
+      "imageUrl": "https://images.unsplash.com/photo-1577555695198-590127bcee8b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxmb3Jlc3QlMjBsaWdodHxlbnwwfHx8fDE3NjE0MjIzMjV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "forest light"
+    }
+  ]
 }
