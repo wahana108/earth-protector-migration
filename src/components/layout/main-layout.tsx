@@ -7,15 +7,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(!isMobile);
 
   React.useEffect(() => {
-    if (isMobile) {
-      setOpen(false);
-    } else {
-        // A real app might read this from cookies
-        setOpen(true);
-    }
+    setOpen(!isMobile);
   }, [isMobile]);
 
   return (

@@ -8,6 +8,7 @@ import {
   LogOut,
   LayoutGrid,
   User as UserIcon,
+  PanelLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -22,11 +23,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useSidebar } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth';
 
 export function AppHeader() {
   const { user, loading, signOut } = useAuth();
+  const { toggleSidebar } = useSidebar();
 
   const handleSignOut = async () => {
     try {
@@ -37,9 +39,20 @@ export function AppHeader() {
   };
 
   return (
-    <header style={{'--header-height': '65px'} as React.CSSProperties} className="sticky top-0 z-30 flex h-[65px] items-center gap-4 border-b bg-background/95 px-4 backdrop-blur-sm sm:px-6">
+    <header
+      style={{ '--header-height': '65px' } as React.CSSProperties}
+      className="sticky top-0 z-30 flex h-[65px] items-center gap-4 border-b bg-background/95 px-4 backdrop-blur-sm sm:px-6"
+    >
       <div className="flex items-center gap-2">
-        <SidebarTrigger className="md:hidden" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={toggleSidebar}
+        >
+          <PanelLeft />
+          <span className="sr-only">Toggle Sidebar</span>
+        </Button>
       </div>
 
       <div className="relative flex-1">
@@ -70,8 +83,13 @@ export function AppHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.photoURL || ''} alt={user.displayName || 'User'} />
-                  <AvatarFallback>{user.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
+                  <AvatarImage
+                    src={user.photoURL || ''}
+                    alt={user.displayName || 'User'}
+                  />
+                  <AvatarFallback>
+                    {user.displayName?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
@@ -94,7 +112,10 @@ export function AppHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive-foreground focus:bg-destructive">
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                className="text-destructive focus:text-destructive-foreground focus:bg-destructive"
+              >
                 <LogOut />
                 Sign Out
               </DropdownMenuItem>
