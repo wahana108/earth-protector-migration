@@ -15,16 +15,16 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true} open={open} onOpenChange={setOpen}>
-      <div className="min-h-screen">
+      <div className="min-h-screen flex">
         <Sidebar>
           <SidebarNav />
         </Sidebar>
-        <SidebarInset>
+        <div className="flex flex-col flex-1">
           <AppHeader />
-          <main className="p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8">
             {children}
           </main>
-        </SidebarInset>
+        </div>
       </div>
     </SidebarProvider>
   );
