@@ -19,6 +19,7 @@ Kami sangat terbuka dengan inovasi pada protokol IIP:
 - Fork repositori ini.
 - Buat branch baru untuk fitur Anda (`git checkout -b fitur-keren-saya`).
 - Pastikan kode Anda mengikuti standar yang ada di `manifesto.md`.
+- Patuhi CODE_OF_CONDUCT.md yang berlaku.
 - Kirimkan PR dengan penjelasan singkat tentang apa yang Anda ubah.
 
 ## Standar Komunikasi
