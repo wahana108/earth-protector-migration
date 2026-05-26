@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Loader2, ImageOff } from 'lucide-react';
 import Link from 'next/link';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -30,6 +30,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { createNft } from '@/lib/firestore';
 import type { NFTCategory } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const schema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -41,12 +42,16 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+type PreviewStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
 export default function CreatePage() {
   const router = useRouter();
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
 
   const {
     register,
@@ -60,6 +65,32 @@ export default function CreatePage() {
   });
 
   const selectedCategory = watch('category');
+  const imageUrlValue = watch('imageUrl');
+
+  // Debounced image preview — 500ms after last keystroke
+  useEffect(() => {
+    if (!imageUrlValue) {
+      setPreviewUrl('');
+      setPreviewStatus('idle');
+      return;
+    }
+
+    // Only attempt preview if it looks like a valid URL
+    try {
+      new URL(imageUrlValue);
+    } catch {
+      setPreviewUrl('');
+      setPreviewStatus('idle');
+      return;
+    }
+
+    setPreviewStatus('loading');
+    const timer = setTimeout(() => {
+      setPreviewUrl(imageUrlValue);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [imageUrlValue]);
 
   const onSubmit = async (data: FormData) => {
     if (!user) return;
@@ -143,6 +174,35 @@ export default function CreatePage() {
                   <Label htmlFor="imageUrl">Image URL</Label>
                   <Input id="imageUrl" placeholder="https://..." {...register('imageUrl')} />
                   {errors.imageUrl && <p className="text-sm text-destructive">{errors.imageUrl.message}</p>}
+
+                  {/* Image preview */}
+                  {previewStatus !== 'idle' && (
+                    <div className="relative mt-2 aspect-video w-full overflow-hidden rounded-lg border bg-muted">
+                      {previewStatus === 'loading' && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      {previewStatus === 'error' && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                          <ImageOff className="h-8 w-8" />
+                          <p className="text-sm">Could not load image. Check the URL.</p>
+                        </div>
+                      )}
+                      {previewUrl && (
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className={cn(
+                            'h-full w-full object-cover transition-opacity duration-300',
+                            previewStatus === 'loaded' ? 'opacity-100' : 'opacity-0'
+                          )}
+                          onLoad={() => setPreviewStatus('loaded')}
+                          onError={() => setPreviewStatus('error')}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

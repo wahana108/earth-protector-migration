@@ -1,7 +1,6 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon } from 'lucide-react';
@@ -109,13 +108,10 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           <div className="relative aspect-square rounded-xl overflow-hidden">
-            <Image
+            <img
               src={nft.imageUrl}
               alt={nft.title}
-              fill
-              className="object-cover"
-              sizes="(max-width: 768px) 100vw, 50vw"
-              priority
+              className="absolute inset-0 h-full w-full object-cover"
             />
           </div>
 

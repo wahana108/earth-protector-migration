@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { Heart, User } from 'lucide-react';
 import { useState } from 'react';
@@ -32,12 +31,10 @@ export function NftCard({ nft, creator }: NftCardProps) {
     <Card className="overflow-hidden group transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1">
       <CardHeader className="p-0">
         <Link href={`/nft/${nft.id}`} className="block relative aspect-[3/4] overflow-hidden">
-          <Image
+          <img
             src={nft.imageUrl}
             alt={nft.title}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         </Link>
       </CardHeader>
