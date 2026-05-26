@@ -19,6 +19,9 @@ Migrasi platform TMEP dari Lovable (React + Supabase) ke Firebase (Next.js + Fir
 - ✅ Login email/password — berfungsi penuh, tanpa konfirmasi email
 - ✅ Google OAuth — signInWithGoogle() via signInWithPopup, auto-create Firestore user
 - ✅ Protected routes middleware — src/middleware.ts
+- ✅ Firestore security rules — proper rules (tidak ada expiry)
+- ✅ Firestore indexes — 19 composite indexes siap deploy
+- ✅ Seed data script — npm run seed (3 user + 7 NFT ke emulator)
 - 🔴 Seluruh logika bisnis TMEP belum diport dari mockup Lovable
 
 ---
@@ -91,7 +94,8 @@ GEMINI_API_KEY=
 1. Authentication → Sign-in method → Email/Password → Enable
 2. Authentication → Sign-in method → Google → Enable
 3. Firestore → Create database → production mode
-4. Update Firestore Security Rules sebelum 2026-06-04!
+4. Deploy rules: firebase deploy --only firestore:rules
+5. Deploy indexes: firebase deploy --only firestore:indexes
 ```
 
 ---
@@ -139,9 +143,9 @@ reports/{reportId}
 - ✅ Auto-create user di Firestore saat login pertama — createUserDocumentIfNotExists()
 
 ### FASE 2 — FIRESTORE SCHEMA
-- 🔴 Collections setup — belum
-- 🟡 Security rules — ada tapi EXPIRES 2026-06-04, harus diupdate!
-- 🔴 Seed data — belum
+- ✅ Security rules — firestore.rules proper (tidak ada expiry, berbasis auth + ownership)
+- ✅ Composite indexes — firestore.indexes.json (19 index untuk Explore, Profile, Buyback, dll.)
+- ✅ Seed data — scripts/seed-firestore.ts (3 user + 7 NFT, jalankan: npm run seed)
 
 ### FASE 3 — PORT HALAMAN (setelah Fase 1&2)
 - 🔴 Homepage `/`

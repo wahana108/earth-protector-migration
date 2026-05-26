@@ -1,18 +1,105 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 6, 4);
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isMe(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // Admin override: ramawan@live.com (sesuai CLAUDE.md)
+    function isAdmin() {
+      return isAuth() && request.auth.token.email == 'ramawan@live.com';
+    }
+
+    // ─── users/{userId} ───────────────────────────────────────────────────────
+    // Profil publik antar user yang login. Hanya pemilik atau admin yang bisa edit.
+    match /users/{userId} {
+      allow read:   if isAuth();
+      allow create: if isMe(userId);
+      allow update: if isMe(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─── nfts/{nftId} ─────────────────────────────────────────────────────────
+    // Baca: publik (marketplace terbuka).
+    // Tulis: pemilik aset atau admin.
+    match /nfts/{nftId} {
+      allow read:   if true;
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.owner    == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() ||
+        (isAuth() && resource.data.createdBy == request.auth.uid);
+
+      // votes/{userId} — 1 vote per user, bisa diupdate (ubah pilihan)
+      match /votes/{voterId} {
+        allow read:          if isAuth();
+        allow create, update: if isMe(voterId);
+        allow delete:        if isAdmin();
+      }
+
+      // likes/{userId} — 1 like per user, tidak bisa diubah, hanya create/delete
+      match /likes/{likerId} {
+        allow read:   if true;
+        allow create: if isMe(likerId);
+        allow delete: if isMe(likerId) || isAdmin();
+        allow update: if false;
+      }
+    }
+
+    // ─── transactions/{txId} ─────────────────────────────────────────────────
+    // Rekaman permanen. Hanya buyer/seller yang bisa baca transaksi mereka.
+    // Tidak bisa diupdate/dihapus (immutable) kecuali admin.
+    match /transactions/{txId} {
+      allow read: if isAuth() && (
+        resource.data.buyerId  == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create:        if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── buybackRequests/{requestId} ─────────────────────────────────────────
+    // Hanya buyer (pemilik saat ini) dan vendor (kreator) yang bisa baca/update.
+    match /buybackRequests/{requestId} {
+      allow read: if isAuth() && (
+        resource.data.buyerId  == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.vendorId == request.auth.uid ||
+        resource.data.buyerId  == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ─── reports/{reportId} ───────────────────────────────────────────────────
+    // User bisa membuat laporan, hanya admin yang bisa membaca dan mengelola.
+    match /reports/{reportId} {
+      allow read:          if isAdmin();
+      allow create:        if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── topDevelopers/{developerId} ─────────────────────────────────────────
+    // Leaderboard publik. Ditulis oleh Cloud Functions / Admin SDK saja.
+    match /topDevelopers/{developerId} {
+      allow read:  if true;
+      allow write: if isAdmin();
     }
   }
 }
