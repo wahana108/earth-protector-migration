@@ -9,6 +9,7 @@ import {
   HelpCircle,
   PlusCircle,
   LayoutDashboard,
+  ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/explore', label: 'Explore', icon: Compass },
   { href: '/create', label: 'Create', icon: PlusCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/validation', label: 'Validation', icon: ShieldCheck },
   { href: '/rankings', label: 'Rankings', icon: Award },
   { href: '/recommendations', label: 'For You', icon: Sparkles },
 ];

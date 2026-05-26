@@ -30,12 +30,14 @@ export function NftCard({ nft, creator }: NftCardProps) {
   return (
     <Card className="overflow-hidden group transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1">
       <CardHeader className="p-0">
-        <Link href={`/nft/${nft.id}`} className="block relative aspect-[3/4] overflow-hidden">
-          <img
-            src={nft.imageUrl}
-            alt={nft.title}
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+        <Link href={`/nft/${nft.id}`} className="block overflow-hidden">
+          <div className="aspect-video w-full overflow-hidden bg-muted">
+            <img
+              src={nft.imageUrl}
+              alt={nft.title}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          </div>
         </Link>
       </CardHeader>
       <CardContent className="p-4 space-y-3">

@@ -107,11 +107,11 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
         </Button>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <div className="relative aspect-square rounded-xl overflow-hidden">
+          <div className="rounded-xl overflow-hidden bg-zinc-900 flex items-center justify-center max-h-[520px]">
             <img
               src={nft.imageUrl}
               alt={nft.title}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="max-h-[520px] w-full object-contain"
             />
           </div>
 

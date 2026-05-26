@@ -130,3 +130,45 @@ export async function hasUserLiked(nftId: string, userId: string): Promise<boole
   const likeSnap = await getDoc(doc(db, 'nfts', nftId, 'likes', userId));
   return likeSnap.exists();
 }
+
+export async function fetchPendingNfts(): Promise<NFT[]> {
+  const q = query(
+    collection(db, 'nfts'),
+    where('isValid', '==', false),
+    orderBy('createdAt', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toNFT(d.id, d.data()));
+}
+
+export type VoteStatus = 'approve' | 'reject';
+
+export async function getUserVote(nftId: string, userId: string): Promise<VoteStatus | null> {
+  const snap = await getDoc(doc(db, 'nfts', nftId, 'votes', userId));
+  if (!snap.exists()) return null;
+  return snap.data().voteStatus as VoteStatus;
+}
+
+export async function castVote(nftId: string, userId: string, voteStatus: VoteStatus): Promise<void> {
+  await setDoc(doc(db, 'nfts', nftId, 'votes', userId), {
+    voteStatus,
+    createdAt: Timestamp.now(),
+  });
+
+  // Count votes and auto-validate if approve >= 80%
+  const votesSnap = await getDocs(collection(db, 'nfts', nftId, 'votes'));
+  const votes = votesSnap.docs.map(d => d.data().voteStatus as VoteStatus);
+  const approvals = votes.filter(v => v === 'approve').length;
+  const total = votes.length;
+  if (total > 0 && approvals / total >= 0.8) {
+    await updateDoc(doc(db, 'nfts', nftId), { isValid: true });
+  }
+}
+
+export async function fetchVoteStats(nftId: string): Promise<{ approve: number; reject: number; total: number }> {
+  const snap = await getDocs(collection(db, 'nfts', nftId, 'votes'));
+  const votes = snap.docs.map(d => d.data().voteStatus as VoteStatus);
+  const approve = votes.filter(v => v === 'approve').length;
+  const reject = votes.filter(v => v === 'reject').length;
+  return { approve, reject, total: votes.length };
+}

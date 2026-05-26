@@ -153,7 +153,7 @@ reports/{reportId}
 - ✅ Dashboard `/dashboard` — ringkasan akun: statistik user, tab My NFTs + My Collection
 - ✅ Create `/create` — form create NFT, tulis ke Firestore (isValid=false)
 - ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
-- 🔴 Validation `/validation`
+- ✅ Validation `/validation` — daftar NFT pending, vote approve/reject, auto-validate >= 80%
 - 🔴 Top Developers `/top-developers`
 - 🔴 Buyback `/buyback`
 - 🔴 Profile `/profile`
