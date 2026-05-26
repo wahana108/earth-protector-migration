@@ -1,45 +1,90 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ===========================
+# DEPENDENCIES
+# ===========================
+node_modules/
+functions/node_modules/
+mother-earth-core/node_modules/
+.pnp
+.pnp.js
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# ===========================
+# ENVIRONMENT & SECRETS
+# ===========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
 
-# testing
-/coverage
+# ===========================
+# NEXT.JS
+# ===========================
+.next/
+out/
+build/
+dist/
 
-# next.js
-/.next/
-/out/
+# ===========================
+# FIREBASE
+# ===========================
+# Emulator data (jangan di-commit, ini data lokal saja)
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+hosting-debug.log
+functions-debug.log
 
-# production
-/build
+# Functions build output
+functions/lib/
+functions/.runtimeconfig.json
+mother-earth-core/lib/
+mother-earth-core/.runtimeconfig.json
 
-# misc
+# ===========================
+# AI AGENT TOOLS (JANGAN DI-COMMIT)
+# ===========================
+# Gemini CLI internal files — tidak relevan untuk developer lain
+.agents/
+skills-lock.json
+.gemini/
+
+# ===========================
+# EDITOR & OS
+# ===========================
 .DS_Store
-*.pem
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
 
-# debug
+# ===========================
+# LOGS
+# ===========================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+*.log
 
-# vercel
-.vercel
+# ===========================
+# TESTING
+# ===========================
+coverage/
+.nyc_output
 
-# typescript
+# ===========================
+# MISC
+# ===========================
+.turbo/
 *.tsbuildinfo
 next-env.d.ts
-
-.genkit/*
-.env*
-
-# firebase
-firebase-debug.log
-firestore-debug.log

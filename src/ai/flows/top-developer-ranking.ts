@@ -10,7 +10,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { getFirestore, collection, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 import {db} from '@/lib/firebase';
 
 const CalculateTopDevelopersInputSchema = z.object({});
@@ -44,28 +44,18 @@ const calculateTopDevelopersFlow = ai.defineFlow(
     const transactionsSnapshot = await getDocs(transactionsCollection);
     const transactions = transactionsSnapshot.docs.map(doc => doc.data());
 
-    const likesCollection = collection(db, 'likes'); // This might need to be adjusted since likes are in subcollections
-
     // Aggregate contribution scores for each developer.
     const developerScores: { [developerId: string]: number } = {};
 
-    // Calculate scores based on NFT creation, likes received, and transaction volume.
+    // Calculate scores based on NFT creation and likes received in a single pass.
     nfts.forEach((nft: any) => {
       const creatorId = nft.creatorId;
+      const likeCount = nft.likes || 0;
       if (creatorId) {
-        developerScores[creatorId] = (developerScores[creatorId] || 0) + 1; // NFT creation score
+        // 1 point for creation + 0.5 points per like
+        developerScores[creatorId] = (developerScores[creatorId] || 0) + 1 + (likeCount * 0.5);
       }
     });
-
-    // Add scores based on likes received (adjust to fetch likes from subcollections).
-    for (const nftDoc of nftsSnapshot.docs) {
-        const likesSnapshot = await getDocs(collection(db, `nfts/${nftDoc.id}/likes`));
-        const likeCount = likesSnapshot.size;
-        const creatorId = nftDoc.data()?.creatorId;
-        if (creatorId) {
-            developerScores[creatorId] = (developerScores[creatorId] || 0) + likeCount * 0.5; // Like received score
-        }
-    }
 
     transactions.forEach((transaction: any) => {
       const sellerId = transaction.sellerId;
@@ -84,10 +74,12 @@ const calculateTopDevelopersFlow = ai.defineFlow(
 
     // Store the results in a new Firestore collection (topDevelopers).
     const topDevelopersCollection = collection(db, 'topDevelopers');
+    const batch = writeBatch(db);
     for (const developer of rankedDevelopers) {
-      await setDoc(doc(topDevelopersCollection, developer.developerId), developer);
+      batch.set(doc(topDevelopersCollection, developer.developerId), developer);
     }
 
+    await batch.commit();
     return rankedDevelopers;
   }
 );
@@ -100,5 +92,3 @@ const prompt = ai.definePrompt({
     Return a ranked list of developers with their contribution scores.
     Store the results in a new Firestore collection called 'topDevelopers'.`,
 });
-
-
