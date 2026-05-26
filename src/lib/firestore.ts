@@ -83,6 +83,16 @@ export async function fetchNftsByCreator(createdBy: string): Promise<NFT[]> {
   return snap.docs.map(d => toNFT(d.id, d.data()));
 }
 
+export async function fetchNftsByOwner(owner: string): Promise<NFT[]> {
+  const q = query(
+    collection(db, 'nfts'),
+    where('owner', '==', owner),
+    orderBy('createdAt', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toNFT(d.id, d.data()));
+}
+
 export async function createNft(data: {
   title: string;
   description: string;

@@ -150,7 +150,8 @@ reports/{reportId}
 ### FASE 3 — PORT HALAMAN (setelah Fase 1&2)
 - ✅ Homepage `/` — Firestore data via useNfts hook, kategori gunakan nilai baru
 - ✅ Explore `/explore` — Firestore query + filter + sort, creator avatar dari map
-- ✅ Dashboard `/dashboard` — form create NFT, tulis ke Firestore (isValid=false)
+- ✅ Dashboard `/dashboard` — ringkasan akun: statistik user, tab My NFTs + My Collection
+- ✅ Create `/create` — form create NFT, tulis ke Firestore (isValid=false)
 - ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
 - 🔴 Validation `/validation`
 - 🔴 Top Developers `/top-developers`

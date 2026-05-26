@@ -1,94 +1,58 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { PlusCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { PlusCircle, Heart, ShoppingBag, RefreshCcw, Star } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { NftCard } from '@/components/nft-card';
 import { useAuth } from '@/hooks/use-auth';
-import { createNft } from '@/lib/firestore';
-import type { NFTCategory } from '@/lib/types';
-
-const schema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
-  imageUrl: z.string().url('Must be a valid URL'),
-  impact: z.string().min(3, 'Impact must be at least 3 characters'),
-  price: z.coerce.number().positive('Price must be greater than 0'),
-  category: z.enum(['tree_planting', 'ocean_cleanup', 'wildlife_protection']),
-});
-
-type FormData = z.infer<typeof schema>;
+import {
+  fetchUserById,
+  fetchNftsByCreator,
+  fetchNftsByOwner,
+} from '@/lib/firestore';
+import type { NFT, User } from '@/lib/types';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { user } = useAuth();
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [fullProfile, setFullProfile] = useState<User | null>(null);
+  const [createdNfts, setCreatedNfts] = useState<NFT[]>([]);
+  const [ownedNfts, setOwnedNfts] = useState<NFT[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-    reset,
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-  });
-
-  const selectedCategory = watch('category');
-
-  const onSubmit = async (data: FormData) => {
+  useEffect(() => {
     if (!user) return;
-    setSubmitting(true);
-    try {
-      const nftId = await createNft({
-        title: data.title,
-        description: data.description,
-        imageUrl: data.imageUrl,
-        impact: data.impact,
-        price: data.price,
-        category: data.category as NFTCategory,
-        createdBy: user.id,
-      });
-      setSuccess(true);
-      reset();
-      setTimeout(() => router.push(`/nft/${nftId}`), 1500);
-    } finally {
-      setSubmitting(false);
+    async function load() {
+      try {
+        const [profile, created, owned] = await Promise.all([
+          fetchUserById(user!.id),
+          fetchNftsByCreator(user!.id),
+          fetchNftsByOwner(user!.id),
+        ]);
+        setFullProfile(profile);
+        setCreatedNfts(created);
+        setOwnedNfts(owned);
+      } finally {
+        setLoading(false);
+      }
     }
-  };
+    load();
+  }, [user]);
 
   if (!user) {
     return (
       <MainLayout>
         <div className="max-w-md mx-auto text-center py-16">
           <h2 className="text-2xl font-headline font-bold mb-2">Sign in required</h2>
-          <p className="text-muted-foreground mb-4">You must be signed in to create an NFT.</p>
+          <p className="text-muted-foreground mb-4">You must be signed in to view your dashboard.</p>
           <Button asChild>
-            <a href="/login">Sign In</a>
+            <Link href="/login">Sign In</Link>
           </Button>
         </div>
       </MainLayout>
@@ -97,94 +61,166 @@ export default function DashboardPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">Create NFT</h1>
-          <p className="text-muted-foreground">
-            Mint a new environmental impact NFT. It will be pending validation before going live.
-          </p>
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-headline font-bold mb-1">My Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {user.displayName}
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/create" className="gap-2">
+              <PlusCircle className="h-4 w-4" />
+              Create NFT
+            </Link>
+          </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>NFT Details</CardTitle>
-            <CardDescription>
-              Fill in the details for your new environmental NFT.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {success ? (
-              <div className="text-center py-8 space-y-2">
-                <div className="text-4xl">🌱</div>
-                <p className="text-lg font-semibold text-primary">NFT Created!</p>
-                <p className="text-muted-foreground">Your NFT is pending validation. Redirecting...</p>
+        {loading ? (
+          <StatsSkeletons />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              icon={<Heart className="h-5 w-5 text-red-400" />}
+              label="Total Likes"
+              value={fullProfile?.totalLikes ?? 0}
+            />
+            <StatCard
+              icon={<ShoppingBag className="h-5 w-5 text-primary" />}
+              label="NFTs Sold"
+              value={fullProfile?.soldNfts ?? 0}
+            />
+            <StatCard
+              icon={<RefreshCcw className="h-5 w-5 text-blue-400" />}
+              label="Buybacks"
+              value={fullProfile?.buybackCount ?? 0}
+            />
+            <StatCard
+              icon={<Star className="h-5 w-5 text-yellow-400" />}
+              label="Status"
+              value={
+                fullProfile?.isTopDeveloper ? (
+                  <Badge className="text-xs bg-yellow-400/20 text-yellow-600 border-yellow-400/30">
+                    Top Developer
+                  </Badge>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Active User</span>
+                )
+              }
+            />
+          </div>
+        )}
+
+        <Tabs defaultValue="created">
+          <TabsList>
+            <TabsTrigger value="created">
+              My NFTs {!loading && `(${createdNfts.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="owned">
+              My Collection {!loading && `(${ownedNfts.length})`}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="created" className="mt-6">
+            {loading ? (
+              <NftGridSkeleton />
+            ) : createdNfts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {createdNfts.map((nft) => (
+                  <NftCard key={nft.id} nft={nft} creator={user} />
+                ))}
               </div>
             ) : (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input id="title" placeholder="e.g. Amazon Reforestation" {...register('title')} />
-                  {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe the environmental impact of this NFT..."
-                    rows={4}
-                    {...register('description')}
-                  />
-                  {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Image URL</Label>
-                  <Input id="imageUrl" placeholder="https://..." {...register('imageUrl')} />
-                  {errors.imageUrl && <p className="text-sm text-destructive">{errors.imageUrl.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="impact">Impact Statement</Label>
-                  <Input id="impact" placeholder="e.g. 100 trees planted" {...register('impact')} />
-                  {errors.impact && <p className="text-sm text-destructive">{errors.impact.message}</p>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price (ETH)</Label>
-                    <Input id="price" type="number" step="0.01" min="0.01" placeholder="1.5" {...register('price')} />
-                    {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={selectedCategory}
-                      onValueChange={(v) => setValue('category', v as NFTCategory, { shouldValidate: true })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tree_planting">Reforestation</SelectItem>
-                        <SelectItem value="ocean_cleanup">Ocean Cleanup</SelectItem>
-                        <SelectItem value="wildlife_protection">Wildlife Conservation</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full gap-2" disabled={submitting}>
-                  <PlusCircle className="h-5 w-5" />
-                  {submitting ? 'Creating...' : 'Create NFT'}
-                </Button>
-              </form>
+              <EmptyState
+                message="You haven't created any NFTs yet."
+                action={{ href: '/create', label: 'Create your first NFT' }}
+              />
             )}
-          </CardContent>
-        </Card>
+          </TabsContent>
+
+          <TabsContent value="owned" className="mt-6">
+            {loading ? (
+              <NftGridSkeleton />
+            ) : ownedNfts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {ownedNfts.map((nft) => (
+                  <NftCard key={nft.id} nft={nft} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                message="You don't own any NFTs yet."
+                action={{ href: '/explore', label: 'Explore NFTs' }}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        {icon}
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ message, action }: { message: string; action: { href: string; label: string } }) {
+  return (
+    <div className="text-center py-16 border-2 border-dashed rounded-lg">
+      <p className="text-muted-foreground mb-4">{message}</p>
+      <Button asChild variant="outline">
+        <Link href={action.href}>{action.label}</Link>
+      </Button>
+    </div>
+  );
+}
+
+function StatsSkeletons() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader className="pb-2">
+            <Skeleton className="h-4 w-24" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-16" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function NftGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="space-y-4">
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      ))}
+    </div>
   );
 }

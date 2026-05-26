@@ -7,6 +7,8 @@ import {
   Sparkles,
   Settings,
   HelpCircle,
+  PlusCircle,
+  LayoutDashboard,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -26,6 +28,8 @@ import { Logo } from '@/components/logo';
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/explore', label: 'Explore', icon: Compass },
+  { href: '/create', label: 'Create', icon: PlusCircle },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/rankings', label: 'Rankings', icon: Award },
   { href: '/recommendations', label: 'For You', icon: Sparkles },
 ];
