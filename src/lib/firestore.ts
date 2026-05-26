@@ -12,9 +12,10 @@ import {
   increment,
   setDoc,
   deleteDoc,
+  limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { NFT, User, NFTCategory } from './types';
+import type { NFT, User, NFTCategory, TopDeveloper } from './types';
 
 export const CATEGORY_LABELS: Record<NFTCategory, string> = {
   tree_planting: 'Reforestation',
@@ -171,4 +172,26 @@ export async function fetchVoteStats(nftId: string): Promise<{ approve: number; 
   const approve = votes.filter(v => v === 'approve').length;
   const reject = votes.filter(v => v === 'reject').length;
   return { approve, reject, total: votes.length };
+}
+
+export async function fetchTopDevelopers(maxResults = 20): Promise<TopDeveloper[]> {
+  const q = query(
+    collection(db, 'topDevelopers'),
+    orderBy('contributionScore', 'desc'),
+    limit(maxResults)
+  );
+  const snap = await getDocs(q);
+  const developers: TopDeveloper[] = snap.docs.map(d => ({
+    developerId: d.id,
+    contributionScore: d.data().contributionScore ?? 0,
+  }));
+
+  // Enrich with user profiles
+  const enriched = await Promise.all(
+    developers.map(async (dev) => {
+      const user = await fetchUserById(dev.developerId);
+      return { ...dev, user: user ?? undefined };
+    })
+  );
+  return enriched;
 }

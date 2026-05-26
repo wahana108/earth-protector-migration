@@ -154,7 +154,7 @@ reports/{reportId}
 - ✅ Create `/create` — form create NFT, tulis ke Firestore (isValid=false)
 - ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
 - ✅ Validation `/validation` — daftar NFT pending, vote approve/reject, auto-validate >= 80%
-- 🔴 Top Developers `/top-developers`
+- ✅ Top Developers `/top-developers` — ranking dari Firestore topDevelopers, medal rank 1-3, score display
 - 🔴 Buyback `/buyback`
 - 🔴 Profile `/profile`
 - 🔴 Recommendations `/recommendations`
