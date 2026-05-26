@@ -1,9 +1,15 @@
+export type NFTCategory = 'tree_planting' | 'ocean_cleanup' | 'wildlife_protection';
+
 export type User = {
   id: string;
   displayName: string | null;
   photoURL: string | null;
   email: string | null;
   createdAt: Date;
+  totalLikes?: number;
+  soldNfts?: number;
+  buybackCount?: number;
+  isTopDeveloper?: boolean;
 };
 
 export type NFT = {
@@ -13,11 +19,11 @@ export type NFT = {
   imageUrl: string;
   impact: string;
   likes: number;
-  ownerId: string | null;
-  creatorId: string;
+  owner: string | null;
+  createdBy: string;
   forSale: boolean;
   price: number;
-  category: 'Reforestation' | 'Ocean Cleanup' | 'Wildlife Conservation';
+  category: NFTCategory;
   isValid: boolean;
   isRecommended: boolean;
   createdAt: Date;
@@ -31,24 +37,26 @@ export type Transaction = {
   price: number;
   description: string;
   proofLink: string;
+  type: 'purchase' | 'buyback';
   createdAt: Date;
 };
 
 export type Vote = {
   userId: string;
   voteStatus: 'approve' | 'reject';
+  createdAt: Date;
 };
 
 export type Like = {
   userId: string;
-  likedAt: Date;
+  createdAt: Date;
 };
 
 export type BuybackRequest = {
-  id:string;
+  id: string;
   nftId: string;
-  buyerId: string; // current owner
-  vendorId: string; // creator
+  buyerId: string;
+  vendorId: string;
   status: 'pending' | 'confirmed' | 'rejected' | 'completed';
   proofUrl: string | null;
   createdAt: Date;

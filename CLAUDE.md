@@ -148,16 +148,22 @@ reports/{reportId}
 - ✅ Seed data — scripts/seed-firestore.ts (3 user + 7 NFT, jalankan: npm run seed)
 
 ### FASE 3 — PORT HALAMAN (setelah Fase 1&2)
-- 🔴 Homepage `/`
-- 🔴 Explore `/explore`
-- 🔴 Dashboard `/dashboard`
+- ✅ Homepage `/` — Firestore data via useNfts hook, kategori gunakan nilai baru
+- ✅ Explore `/explore` — Firestore query + filter + sort, creator avatar dari map
+- ✅ Dashboard `/dashboard` — form create NFT, tulis ke Firestore (isValid=false)
+- ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
 - 🔴 Validation `/validation`
 - 🔴 Top Developers `/top-developers`
 - 🔴 Buyback `/buyback`
 - 🔴 Profile `/profile`
 - 🔴 Recommendations `/recommendations`
 - 🔴 Transaction Log `/transactions`
-- 🔴 NFT Detail `/nft/[id]`
+
+**File baru di Fase 3:**
+- `src/lib/firestore.ts` — fetchAllNfts, fetchNftById, fetchUserById, createNft, likeNft, hasUserLiked
+- `src/hooks/use-nfts.ts` — hook: { nfts, creatorsMap, loading, error }
+- `src/components/nft-card.tsx` — terima prop `creator?: User`, hapus placeholder import
+- `src/lib/placeholder-data.ts` — field: createdBy/owner, kategori: tree_planting/ocean_cleanup/wildlife_protection
 
 ### FASE 4 — AI (masa depan)
 - 🔵 Anomali detector transaksi (Genkit + Gemini)

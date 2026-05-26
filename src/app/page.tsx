@@ -1,3 +1,5 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -5,20 +7,21 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { NftCard } from '@/components/nft-card';
-import { getNfts } from '@/lib/placeholder-data';
+import { useNfts } from '@/hooks/use-nfts';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { ArrowRight, Leaf, Sprout, Recycle } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function HomePage() {
-  const allNfts = getNfts();
-  const featuredNfts = allNfts.slice(0, 4);
+  const { nfts, creatorsMap, loading } = useNfts();
+  const featuredNfts = nfts.slice(0, 4);
 
   const heroImage = PlaceHolderImages.find(img => img.id === 'hero-background');
 
   const categories = [
-    { name: 'Reforestation', icon: <Leaf className="w-8 h-8 text-primary" />, description: 'NFTs funding tree planting projects worldwide.' },
-    { name: 'Ocean Cleanup', icon: <Recycle className="w-8 h-8 text-primary" />, description: 'Support initiatives to clean our polluted seas.' },
-    { name: 'Wildlife Conservation', icon: <Sprout className="w-8 h-8 text-primary" />, description: 'Protect endangered species and their habitats.' },
+    { value: 'tree_planting', name: 'Reforestation', icon: <Leaf className="w-8 h-8 text-primary" />, description: 'NFTs funding tree planting projects worldwide.' },
+    { value: 'ocean_cleanup', name: 'Ocean Cleanup', icon: <Recycle className="w-8 h-8 text-primary" />, description: 'Support initiatives to clean our polluted seas.' },
+    { value: 'wildlife_protection', name: 'Wildlife Conservation', icon: <Sprout className="w-8 h-8 text-primary" />, description: 'Protect endangered species and their habitats.' },
   ];
 
   return (
@@ -26,14 +29,14 @@ export default function HomePage() {
       <div className="flex flex-col gap-16">
         <section className="relative rounded-xl overflow-hidden min-h-[400px] md:min-h-[500px] flex items-center justify-center text-center p-4">
           {heroImage && (
-             <Image
-                src={heroImage.imageUrl}
-                alt={heroImage.description}
-                fill
-                className="object-cover"
-                data-ai-hint={heroImage.imageHint}
-                priority
-              />
+            <Image
+              src={heroImage.imageUrl}
+              alt={heroImage.description}
+              fill
+              className="object-cover"
+              data-ai-hint={heroImage.imageHint}
+              priority
+            />
           )}
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative z-10 text-white max-w-3xl flex flex-col items-center gap-6">
@@ -51,7 +54,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
-                <Link href="/create">Create Impact</Link>
+                <Link href="/dashboard">Create Impact</Link>
               </Button>
             </div>
           </div>
@@ -64,31 +67,43 @@ export default function HomePage() {
               <Link href="/explore">View All <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredNfts.map((nft) => (
-              <NftCard key={nft.id} nft={nft} />
-            ))}
-          </div>
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-4">
+                  <Skeleton className="h-80 w-full" />
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredNfts.map((nft) => (
+                <NftCard key={nft.id} nft={nft} creator={creatorsMap[nft.createdBy]} />
+              ))}
+            </div>
+          )}
         </section>
 
         <section>
-           <h2 className="text-3xl font-headline font-semibold text-center mb-8">Impact Categories</h2>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <h2 className="text-3xl font-headline font-semibold text-center mb-8">Impact Categories</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {categories.map((category) => (
-              <Card key={category.name} className="bg-card/80 backdrop-blur-sm border-2 border-primary/10 hover:border-primary/30 transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-primary/20">
+              <Card key={category.value} className="bg-card/80 backdrop-blur-sm border-2 border-primary/10 hover:border-primary/30 transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-primary/20">
                 <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                   <div className="p-4 bg-secondary rounded-full">
                     {category.icon}
                   </div>
                   <h3 className="text-xl font-headline font-semibold">{category.name}</h3>
                   <p className="text-muted-foreground">{category.description}</p>
-                   <Button variant="outline" className="mt-2" asChild>
-                    <Link href={`/explore?category=${category.name}`}>View Collection</Link>
+                  <Button variant="outline" className="mt-2" asChild>
+                    <Link href={`/explore?category=${category.value}`}>View Collection</Link>
                   </Button>
                 </CardContent>
               </Card>
             ))}
-           </div>
+          </div>
         </section>
       </div>
     </MainLayout>

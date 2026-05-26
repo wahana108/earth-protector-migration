@@ -13,15 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getNfts } from '@/lib/placeholder-data';
+import { useNfts } from '@/hooks/use-nfts';
 import type { NFT } from '@/lib/types';
 import { Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function ExplorePageContent() {
   const searchParams = useSearchParams();
-  const nfts = getNfts();
-  
+  const { nfts, creatorsMap, loading } = useNfts();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [category, setCategory] = useState(searchParams.get('category') || 'all');
   const [sortBy, setSortBy] = useState('newest');
@@ -51,6 +51,10 @@ function ExplorePageContent() {
       });
   }, [nfts, searchTerm, category, sortBy]);
 
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+
   return (
     <MainLayout>
       <div className="space-y-8">
@@ -78,9 +82,9 @@ function ExplorePageContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="Reforestation">Reforestation</SelectItem>
-                <SelectItem value="Ocean Cleanup">Ocean Cleanup</SelectItem>
-                <SelectItem value="Wildlife Conservation">Wildlife Conservation</SelectItem>
+                <SelectItem value="tree_planting">Reforestation</SelectItem>
+                <SelectItem value="ocean_cleanup">Ocean Cleanup</SelectItem>
+                <SelectItem value="wildlife_protection">Wildlife Conservation</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={setSortBy}>
@@ -101,7 +105,7 @@ function ExplorePageContent() {
         {filteredAndSortedNfts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredAndSortedNfts.map((nft) => (
-              <NftCard key={nft.id} nft={nft} />
+              <NftCard key={nft.id} nft={nft} creator={creatorsMap[nft.createdBy]} />
             ))}
           </div>
         ) : (
@@ -115,11 +119,10 @@ function ExplorePageContent() {
   );
 }
 
-
 function LoadingSkeleton() {
   return (
     <MainLayout>
-       <div className="space-y-8">
+      <div className="space-y-8">
         <div>
           <Skeleton className="h-10 w-64 mb-2" />
           <Skeleton className="h-5 w-80" />
@@ -148,14 +151,13 @@ function CardSkeleton() {
         <Skeleton className="h-4 w-1/2" />
       </div>
     </div>
-  )
+  );
 }
 
-
 export default function ExplorePage() {
-    return (
-        <Suspense fallback={<LoadingSkeleton />}>
-            <ExplorePageContent />
-        </Suspense>
-    )
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ExplorePageContent />
+    </Suspense>
+  );
 }

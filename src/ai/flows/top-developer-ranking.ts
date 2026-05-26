@@ -49,11 +49,11 @@ const calculateTopDevelopersFlow = ai.defineFlow(
 
     // Calculate scores based on NFT creation and likes received in a single pass.
     nfts.forEach((nft: any) => {
-      const creatorId = nft.creatorId;
+      const createdBy = nft.createdBy;
       const likeCount = nft.likes || 0;
-      if (creatorId) {
+      if (createdBy) {
         // 1 point for creation + 0.5 points per like
-        developerScores[creatorId] = (developerScores[creatorId] || 0) + 1 + (likeCount * 0.5);
+        developerScores[createdBy] = (developerScores[createdBy] || 0) + 1 + (likeCount * 0.5);
       }
     });
 
