@@ -10,6 +10,8 @@ import {
   PlusCircle,
   LayoutDashboard,
   ShieldCheck,
+  RefreshCcw,
+  ArrowLeftRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,6 +34,8 @@ const navItems = [
   { href: '/create', label: 'Create', icon: PlusCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/validation', label: 'Validation', icon: ShieldCheck },
+  { href: '/buyback', label: 'Buyback', icon: RefreshCcw },
+  { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/top-developers', label: 'Rankings', icon: Award },
   { href: '/recommendations', label: 'For You', icon: Sparkles },
 ];

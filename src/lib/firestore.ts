@@ -15,7 +15,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { NFT, User, NFTCategory, TopDeveloper } from './types';
+import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction } from './types';
 
 export const CATEGORY_LABELS: Record<NFTCategory, string> = {
   tree_planting: 'Reforestation',
@@ -173,6 +173,104 @@ export async function fetchVoteStats(nftId: string): Promise<{ approve: number; 
   const reject = votes.filter(v => v === 'reject').length;
   return { approve, reject, total: votes.length };
 }
+
+// ─── Converters ───────────────────────────────────────────────────────────────
+
+function toBuybackRequest(id: string, data: Record<string, any>): BuybackRequest {
+  return {
+    id,
+    nftId: data.nftId,
+    buyerId: data.buyerId,
+    vendorId: data.vendorId,
+    status: data.status,
+    proofUrl: data.proofUrl ?? null,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+  };
+}
+
+function toTransaction(id: string, data: Record<string, any>): Transaction {
+  return {
+    id,
+    nftId: data.nftId,
+    buyerId: data.buyerId,
+    sellerId: data.sellerId,
+    price: data.price ?? 0,
+    description: data.description ?? '',
+    proofLink: data.proofLink ?? '',
+    type: data.type as 'purchase' | 'buyback',
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+  };
+}
+
+// ─── BuybackRequest ───────────────────────────────────────────────────────────
+
+export async function fetchBuybackRequestsByVendor(vendorId: string): Promise<BuybackRequest[]> {
+  const q = query(collection(db, 'buybackRequests'), where('vendorId', '==', vendorId), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toBuybackRequest(d.id, d.data()));
+}
+
+export async function fetchBuybackRequestsByBuyer(buyerId: string): Promise<BuybackRequest[]> {
+  const q = query(collection(db, 'buybackRequests'), where('buyerId', '==', buyerId), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toBuybackRequest(d.id, d.data()));
+}
+
+export async function createBuybackRequest(nftId: string, vendorId: string, buyerId: string): Promise<string> {
+  const ref = await addDoc(collection(db, 'buybackRequests'), {
+    nftId, vendorId, buyerId,
+    status: 'pending',
+    proofUrl: null,
+    createdAt: Timestamp.now(),
+  });
+  return ref.id;
+}
+
+export async function confirmBuybackRequest(requestId: string, proofUrl: string): Promise<void> {
+  await updateDoc(doc(db, 'buybackRequests', requestId), { status: 'confirmed', proofUrl });
+}
+
+export async function rejectBuybackRequest(requestId: string): Promise<void> {
+  await updateDoc(doc(db, 'buybackRequests', requestId), { status: 'rejected' });
+}
+
+export async function completeBuybackRequest(requestId: string, nftId: string): Promise<void> {
+  await updateDoc(doc(db, 'buybackRequests', requestId), { status: 'completed' });
+  await updateDoc(doc(db, 'nfts', nftId), { owner: null, forSale: true });
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+export async function fetchTransactionsByUser(userId: string): Promise<Transaction[]> {
+  const [asB, asS] = await Promise.all([
+    getDocs(query(collection(db, 'transactions'), where('buyerId', '==', userId), orderBy('createdAt', 'desc'))),
+    getDocs(query(collection(db, 'transactions'), where('sellerId', '==', userId), orderBy('createdAt', 'desc'))),
+  ]);
+  const seen = new Set<string>();
+  const all: Transaction[] = [];
+  for (const snap of [asB, asS]) {
+    for (const d of snap.docs) {
+      if (!seen.has(d.id)) { seen.add(d.id); all.push(toTransaction(d.id, d.data())); }
+    }
+  }
+  return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+// ─── Recommendations ──────────────────────────────────────────────────────────
+
+export async function fetchRecommendedNfts(): Promise<NFT[]> {
+  const q = query(collection(db, 'nfts'), where('isRecommended', '==', true), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toNFT(d.id, d.data()));
+}
+
+// ─── User profile ─────────────────────────────────────────────────────────────
+
+export async function updateUserDisplayName(userId: string, displayName: string): Promise<void> {
+  await updateDoc(doc(db, 'users', userId), { displayName });
+}
+
+// ─── Top Developers ───────────────────────────────────────────────────────────
 
 export async function fetchTopDevelopers(maxResults = 20): Promise<TopDeveloper[]> {
   const q = query(
