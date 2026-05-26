@@ -16,8 +16,9 @@ Migrasi platform TMEP dari Lovable (React + Supabase) ke Firebase (Next.js + Fir
 **Status saat ini (2026-05-26):**
 - ✅ Website bisa jalan lokal (npm run dev di port 9002)
 - ✅ Firebase emulator aktif (Auth :9099, Firestore :8080)
-- ✅ Login email/password sudah ada (perlu difix: hapus konfirmasi email)
-- 🔴 Google OAuth belum ada
+- ✅ Login email/password — berfungsi penuh, tanpa konfirmasi email
+- ✅ Google OAuth — signInWithGoogle() via signInWithPopup, auto-create Firestore user
+- ✅ Protected routes middleware — src/middleware.ts
 - 🔴 Seluruh logika bisnis TMEP belum diport dari mockup Lovable
 
 ---
@@ -132,10 +133,10 @@ reports/{reportId}
 ## 🗺️ STATUS FITUR
 
 ### FASE 1 — AUTH (SEKARANG)
-- 🟡 Email/Password login — ada, perlu fix (hapus konfirmasi email)
-- 🔴 Google OAuth — belum ada
-- 🔴 Protected routes middleware — belum ada
-- 🔴 Auto-create user di Firestore saat login pertama — belum ada
+- ✅ Email/Password login — berfungsi, tanpa konfirmasi email
+- ✅ Google OAuth — signInWithGoogle() via signInWithPopup
+- ✅ Protected routes middleware — src/middleware.ts (cookie-based)
+- ✅ Auto-create user di Firestore saat login pertama — createUserDocumentIfNotExists()
 
 ### FASE 2 — FIRESTORE SCHEMA
 - 🔴 Collections setup — belum
