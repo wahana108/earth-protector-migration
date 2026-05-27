@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { Heart, User } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { NFT, User as UserType } from '@/lib/types';
-import { CATEGORY_LABELS } from '@/lib/firestore';
+import { CATEGORY_LABELS, likeNft, hasUserLiked } from '@/lib/firestore';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,12 +18,27 @@ type NftCardProps = {
 };
 
 export function NftCard({ nft, creator }: NftCardProps) {
+  const { user } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(nft.likes);
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
+  // Init isLiked from Firestore on mount
+  useEffect(() => {
+    if (!user) return;
+    hasUserLiked(nft.id, user.id).then(setIsLiked);
+  }, [nft.id, user]);
+
+  const handleLike = async () => {
+    if (!user) return;
+    const newLiked = !isLiked;
+    setIsLiked(newLiked);
+    setLikeCount(prev => newLiked ? prev + 1 : prev - 1);
+    try {
+      await likeNft(nft.id, user.id);
+    } catch {
+      setIsLiked(!newLiked);
+      setLikeCount(prev => newLiked ? prev - 1 : prev + 1);
+    }
   };
 
   const categoryLabel = CATEGORY_LABELS[nft.category] ?? nft.category;

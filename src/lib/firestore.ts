@@ -19,9 +19,12 @@ import { db } from './firebase';
 import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction } from './types';
 
 export const CATEGORY_LABELS: Record<NFTCategory, string> = {
-  tree_planting: 'Reforestation',
+  tree_planting: 'Tree Planting',
   ocean_cleanup: 'Ocean Cleanup',
-  wildlife_protection: 'Wildlife Conservation',
+  wildlife_protection: 'Wildlife Protection',
+  renewable_energy: 'Renewable Energy',
+  carbon_reduction: 'Carbon Reduction',
+  ecosystem_restoration: 'Ecosystem Restoration',
 };
 
 function toNFT(id: string, data: Record<string, any>): NFT {
@@ -57,10 +60,12 @@ function toUser(id: string, data: Record<string, any>): User {
   };
 }
 
+const notDeleted = (nft: NFT) => nft.title !== '[DELETED]';
+
 export async function fetchAllNfts(): Promise<NFT[]> {
   const q = query(collection(db, 'nfts'), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
 
 export async function fetchNftById(id: string): Promise<NFT | null> {
@@ -82,7 +87,7 @@ export async function fetchNftsByCreator(createdBy: string): Promise<NFT[]> {
     orderBy('createdAt', 'desc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
 
 export async function fetchNftsByOwner(owner: string): Promise<NFT[]> {
@@ -92,7 +97,7 @@ export async function fetchNftsByOwner(owner: string): Promise<NFT[]> {
     orderBy('createdAt', 'desc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
 
 export async function createNft(data: {
@@ -140,7 +145,31 @@ export async function fetchPendingNfts(): Promise<NFT[]> {
     orderBy('createdAt', 'desc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
+}
+
+export async function deleteNft(nftId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'nfts', nftId));
+  } catch {
+    // Fallback: soft-delete if outside the 30-min rules window
+    await updateDoc(doc(db, 'nfts', nftId), { title: '[DELETED]', isValid: false, forSale: false });
+  }
+}
+
+export async function setNftRecommended(nftId: string, recommended: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (recommended) {
+    const nftSnap = await getDoc(doc(db, 'nfts', nftId));
+    if (!nftSnap.exists()) return { ok: false, error: 'NFT not found.' };
+    const createdBy = nftSnap.data().createdBy as string;
+
+    const poolSnap = await getDocs(query(collection(db, 'nfts'), where('isRecommended', '==', true)));
+    if (poolSnap.docs.length >= 3) return { ok: false, error: 'Recommendation pool is full (max 3).' };
+    const alreadyHas = poolSnap.docs.some(d => d.data().createdBy === createdBy);
+    if (alreadyHas) return { ok: false, error: 'You already have an NFT in the recommendation pool.' };
+  }
+  await updateDoc(doc(db, 'nfts', nftId), { isRecommended: recommended });
+  return { ok: true };
 }
 
 export type VoteStatus = 'approve' | 'reject';
@@ -236,8 +265,17 @@ export async function rejectBuybackRequest(requestId: string): Promise<void> {
 }
 
 export async function completeBuybackRequest(requestId: string, nftId: string): Promise<void> {
-  await updateDoc(doc(db, 'buybackRequests', requestId), { status: 'completed' });
-  await updateDoc(doc(db, 'nfts', nftId), { owner: null, forSale: true });
+  const reqSnap = await getDoc(doc(db, 'buybackRequests', requestId));
+  const vendorId = reqSnap.exists() ? (reqSnap.data().vendorId as string) : null;
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'buybackRequests', requestId), { status: 'completed' });
+  batch.update(doc(db, 'nfts', nftId), { owner: null, forSale: true });
+  if (vendorId) {
+    const vendorSnap = await getDoc(doc(db, 'users', vendorId));
+    if (vendorSnap.exists()) batch.update(doc(db, 'users', vendorId), { buybackCount: increment(1) });
+  }
+  await batch.commit();
 }
 
 // ─── Purchase ─────────────────────────────────────────────────────────────────
@@ -305,7 +343,7 @@ export async function fetchValidatedNfts(): Promise<NFT[]> {
     orderBy('createdAt', 'desc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
@@ -313,7 +351,7 @@ export async function fetchValidatedNfts(): Promise<NFT[]> {
 export async function fetchRecommendedNfts(): Promise<NFT[]> {
   const q = query(collection(db, 'nfts'), where('isRecommended', '==', true), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
-  return snap.docs.map(d => toNFT(d.id, d.data()));
+  return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
 
 // ─── User profile ─────────────────────────────────────────────────────────────
@@ -409,38 +447,54 @@ function getFibonacciCap(activeUsers: number): number {
 
 export async function recalculateTopDevelopers(): Promise<{ promoted: string[]; demoted: string[] }> {
   // Fetch all source data in parallel
-  const [usersSnap, nftsSnap, txsSnap] = await Promise.all([
+  const [usersSnap, nftsSnap, txsSnap, buybackSnap] = await Promise.all([
     getDocs(collection(db, 'users')),
     getDocs(collection(db, 'nfts')),
     getDocs(collection(db, 'transactions')),
+    getDocs(query(collection(db, 'buybackRequests'), where('status', '==', 'completed'))),
   ]);
 
   type UserDoc = { id: string; soldNfts: number; buybackCount: number; isTopDeveloper: boolean };
   type NftDoc  = { id: string; createdBy: string; isValid: boolean; isRecommended: boolean; likes: number };
+  type TxDoc   = { sellerId?: string; buyerId?: string; nftId?: string; type?: string };
   const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }) as UserDoc);
   const allNfts  = nftsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NftDoc);
-  const allTxs   = txsSnap.docs.map(d => d.data() as { sellerId?: string });
+  const allTxs   = txsSnap.docs.map(d => d.data() as TxDoc);
 
-  // ── Score calculation (same formula as top-developer-ranking.ts) ─────────
+  // Count completed buybacks per vendor from buybackRequests collection
+  const completedBuybacksByVendor: Record<string, number> = {};
+  buybackSnap.docs.forEach(d => {
+    const vendorId = d.data().vendorId as string;
+    if (vendorId) completedBuybacksByVendor[vendorId] = (completedBuybacksByVendor[vendorId] || 0) + 1;
+  });
+
+  // Check which buyers have purchased a recommended NFT
+  const recommendedNftIds = new Set(allNfts.filter(n => n.isRecommended).map(n => n.id));
+  const recPurchasesByBuyer: Record<string, number> = {};
+  allTxs.forEach(tx => {
+    if (tx.type === 'purchase' && tx.buyerId && tx.nftId && recommendedNftIds.has(tx.nftId)) {
+      recPurchasesByBuyer[tx.buyerId] = (recPurchasesByBuyer[tx.buyerId] || 0) + 1;
+    }
+  });
+
+  // ── Score calculation ─────────────────────────────────────────────────────
   const scores: Record<string, number> = {};
   allNfts.forEach(nft => {
-    const createdBy = nft.createdBy as string;
-    if (createdBy) {
-      scores[createdBy] = (scores[createdBy] || 0) + 1 + ((nft.likes || 0) * 0.5);
+    if (nft.createdBy) {
+      scores[nft.createdBy] = (scores[nft.createdBy] || 0) + 1 + ((nft.likes || 0) * 0.5);
     }
   });
   allTxs.forEach(tx => {
-    if (tx.sellerId) {
-      scores[tx.sellerId] = (scores[tx.sellerId] || 0) + 0.2;
-    }
+    if (tx.sellerId) scores[tx.sellerId] = (scores[tx.sellerId] || 0) + 0.2;
   });
 
-  // ── Eligibility criteria (CLAUDE.md: soldNfts≥30, buybackPct≥50%) ────────
+  // ── Eligibility: soldNfts≥30, buybackPct≥50%, recPurchases≥1 ─────────────
   const eligible = allUsers.filter(u => {
-    const sold = (u.soldNfts as number) || 0;
+    const sold = u.soldNfts || 0;
     if (sold < 30) return false;
-    const buybackPct = sold > 0 ? ((u.buybackCount as number) || 0) / sold : 0;
-    return buybackPct >= 0.5;
+    const completedBuybacks = completedBuybacksByVendor[u.id] || 0;
+    if (sold > 0 && completedBuybacks / sold < 0.5) return false;
+    return (recPurchasesByBuyer[u.id] || 0) >= 1;
   });
 
   // ── Fibonacci cap based on total active users ─────────────────────────────

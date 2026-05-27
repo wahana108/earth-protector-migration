@@ -1,4 +1,10 @@
-export type NFTCategory = 'tree_planting' | 'ocean_cleanup' | 'wildlife_protection';
+export type NFTCategory =
+  | 'tree_planting'
+  | 'ocean_cleanup'
+  | 'wildlife_protection'
+  | 'renewable_energy'
+  | 'carbon_reduction'
+  | 'ecosystem_restoration';
 
 export type User = {
   id: string;

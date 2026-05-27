@@ -46,7 +46,8 @@ service cloud.firestore {
         isAdmin()
       );
       allow delete: if isAdmin() ||
-        (isAuth() && resource.data.createdBy == request.auth.uid);
+        (isAuth() && resource.data.createdBy == request.auth.uid &&
+         request.time < resource.data.createdAt + duration.time(30, "m"));
 
       // votes/{userId} — 1 vote per user, bisa diupdate (ubah pilihan)
       match /votes/{voterId} {

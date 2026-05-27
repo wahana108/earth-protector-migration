@@ -82,9 +82,12 @@ function ExplorePageContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="tree_planting">Reforestation</SelectItem>
+                <SelectItem value="tree_planting">Tree Planting</SelectItem>
                 <SelectItem value="ocean_cleanup">Ocean Cleanup</SelectItem>
-                <SelectItem value="wildlife_protection">Wildlife Conservation</SelectItem>
+                <SelectItem value="wildlife_protection">Wildlife Protection</SelectItem>
+                <SelectItem value="renewable_energy">Renewable Energy</SelectItem>
+                <SelectItem value="carbon_reduction">Carbon Reduction</SelectItem>
+                <SelectItem value="ecosystem_restoration">Ecosystem Restoration</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={setSortBy}>

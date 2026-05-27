@@ -38,7 +38,7 @@ const schema = z.object({
   imageUrl: z.string().url('Must be a valid URL'),
   impact: z.string().min(3, 'Impact must be at least 3 characters'),
   price: z.coerce.number().positive('Price must be greater than 0'),
-  category: z.enum(['tree_planting', 'ocean_cleanup', 'wildlife_protection']),
+  category: z.enum(['tree_planting', 'ocean_cleanup', 'wildlife_protection', 'renewable_energy', 'carbon_reduction', 'ecosystem_restoration']),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -235,9 +235,12 @@ export default function CreatePage() {
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="tree_planting">Reforestation</SelectItem>
+                        <SelectItem value="tree_planting">Tree Planting</SelectItem>
                         <SelectItem value="ocean_cleanup">Ocean Cleanup</SelectItem>
-                        <SelectItem value="wildlife_protection">Wildlife Conservation</SelectItem>
+                        <SelectItem value="wildlife_protection">Wildlife Protection</SelectItem>
+                        <SelectItem value="renewable_energy">Renewable Energy</SelectItem>
+                        <SelectItem value="carbon_reduction">Carbon Reduction</SelectItem>
+                        <SelectItem value="ecosystem_restoration">Ecosystem Restoration</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
