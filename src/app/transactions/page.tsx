@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeftRight, ShoppingBag, RefreshCcw, ExternalLink, Receipt } from 'lucide-react';
+import { ArrowLeftRight, ShoppingBag, RefreshCcw, ExternalLink, Receipt, TriangleAlert, Loader2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,17 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { fetchTransactionsByUser, fetchNftById } from '@/lib/firestore';
+import { fetchTransactionsByUser, fetchNftById, createReport } from '@/lib/firestore';
 import type { Transaction, NFT } from '@/lib/types';
 
 type TransactionWithNft = {
@@ -30,41 +39,118 @@ function TxRow({ item, userId }: { item: TransactionWithNft; userId: string }) {
   const cfg = TYPE_CONFIG[tx.type];
   const role = tx.buyerId === userId ? 'Buyer' : 'Seller';
 
-  return (
-    <Card>
-      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant={cfg.variant} className="gap-1 text-xs">
-              {cfg.icon}{cfg.label}
-            </Badge>
-            <Badge variant="outline" className="text-xs">{role}</Badge>
-          </div>
-          <p className="font-medium truncate">
-            {nft ? (
-              <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">
-                {nft.title}
-              </Link>
-            ) : tx.nftId}
-          </p>
-          {tx.description && (
-            <p className="text-xs text-muted-foreground truncate">{tx.description}</p>
-          )}
-        </div>
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
 
-        <div className="flex items-center gap-4 flex-shrink-0 text-sm">
-          {tx.proofLink && (
-            <a href={tx.proofLink} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-primary hover:underline text-xs">
-              <ExternalLink className="h-3 w-3" /> Proof
-            </a>
-          )}
-          <span className="text-muted-foreground text-xs whitespace-nowrap">
-            {format(tx.createdAt, 'dd MMM yyyy')}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+  const handleReport = async () => {
+    if (!reason.trim() || reporting) return;
+    setReporting(true);
+    try {
+      await createReport(tx.id, userId, reason.trim());
+      setReported(true);
+      setReportOpen(false);
+      setReason('');
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={cfg.variant} className="gap-1 text-xs">
+                {cfg.icon}{cfg.label}
+              </Badge>
+              <Badge variant="outline" className="text-xs">{role}</Badge>
+              {reported && (
+                <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-500/40">
+                  Reported
+                </Badge>
+              )}
+            </div>
+            <p className="font-medium truncate">
+              {nft ? (
+                <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">
+                  {nft.title}
+                </Link>
+              ) : tx.nftId}
+            </p>
+            {tx.description && (
+              <p className="text-xs text-muted-foreground truncate">{tx.description}</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {tx.proofLink && (
+              <a href={tx.proofLink} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-primary hover:underline text-xs">
+                <ExternalLink className="h-3 w-3" /> View Proof
+              </a>
+            )}
+            <span className="text-muted-foreground text-xs whitespace-nowrap">
+              {format(tx.createdAt, 'dd MMM yyyy')}
+            </span>
+            {!reported && (
+              <button
+                title="Report anomaly"
+                onClick={() => setReportOpen(true)}
+                className="text-muted-foreground hover:text-yellow-500 transition-colors p-1 rounded"
+              >
+                <TriangleAlert className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={reportOpen} onOpenChange={open => { if (!reporting) setReportOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-yellow-500" />
+              Report Anomaly
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Describe why this transaction looks suspicious. The admin will review your report.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor={`reason-${tx.id}`}>Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                id={`reason-${tx.id}`}
+                placeholder="e.g. Proof link is invalid, price mismatch, duplicate transaction..."
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+                disabled={reporting}
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReportOpen(false)} disabled={reporting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReport}
+              disabled={!reason.trim() || reporting}
+              className="gap-2"
+            >
+              {reporting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Submit Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

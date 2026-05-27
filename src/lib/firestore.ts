@@ -300,6 +300,17 @@ export async function updateUserDisplayName(userId: string, displayName: string)
   await updateDoc(doc(db, 'users', userId), { displayName });
 }
 
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+export async function createReport(transactionId: string, userId: string, reason: string): Promise<void> {
+  await addDoc(collection(db, 'reports'), {
+    transactionId,
+    userId,
+    reason,
+    createdAt: Timestamp.now(),
+  });
+}
+
 // ─── Top Developers ───────────────────────────────────────────────────────────
 
 export async function fetchTopDevelopers(maxResults = 20): Promise<TopDeveloper[]> {

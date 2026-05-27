@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2 } from 'lucide-react';
+import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2, RefreshCcw } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import {
   likeNft,
   hasUserLiked,
   buyNft,
+  createBuybackRequest,
   CATEGORY_LABELS,
 } from '@/lib/firestore';
 import type { NFT, User } from '@/lib/types';
@@ -50,6 +51,10 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
   const [proofLink, setProofLink] = useState('');
   const [description, setDescription] = useState('');
   const [buying, setBuying] = useState(false);
+
+  // Buyback request state
+  const [requestingBuyback, setRequestingBuyback] = useState(false);
+  const [buybackDone, setBuybackDone] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -109,6 +114,20 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
   };
 
   const canBuy = !!nft?.forSale && !!authUser && nft.owner !== authUser.id;
+  // Current owner who bought from someone else can request creator buyback
+  const canRequestBuyback = !!nft && !nft.forSale && !!authUser &&
+    nft.owner === authUser.id && nft.createdBy !== authUser.id && !buybackDone;
+
+  const handleRequestBuyback = async () => {
+    if (!authUser || !nft || requestingBuyback) return;
+    setRequestingBuyback(true);
+    try {
+      await createBuybackRequest(nft.id, nft.createdBy, authUser.id);
+      setBuybackDone(true);
+    } finally {
+      setRequestingBuyback(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -212,14 +231,34 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
               )}
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {canBuy && (
                 <Button size="lg" className="flex-1 gap-2" onClick={() => setBuyOpen(true)}>
                   <ShoppingBag className="h-5 w-5" />
                   Buy Now
                 </Button>
               )}
-              {nft.forSale && authUser && nft.owner === authUser.id && (
+              {canRequestBuyback && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={requestingBuyback}
+                  onClick={handleRequestBuyback}
+                >
+                  {requestingBuyback
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <RefreshCcw className="h-4 w-4" />
+                  }
+                  Request Buyback
+                </Button>
+              )}
+              {buybackDone && (
+                <Badge variant="outline" className="text-sm px-3 py-1 self-center text-green-600 border-green-500/40">
+                  Buyback requested — check /buyback
+                </Badge>
+              )}
+              {!nft.forSale && authUser && nft.owner === authUser.id && nft.createdBy === authUser.id && (
                 <Badge variant="outline" className="text-sm px-3 py-1 self-center">You own this NFT</Badge>
               )}
               <Button
