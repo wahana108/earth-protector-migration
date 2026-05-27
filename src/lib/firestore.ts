@@ -296,6 +296,18 @@ export async function fetchTransactionsByUser(userId: string): Promise<Transacti
   return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+// ─── Validated NFTs ───────────────────────────────────────────────────────────
+
+export async function fetchValidatedNfts(): Promise<NFT[]> {
+  const q = query(
+    collection(db, 'nfts'),
+    where('isValid', '==', true),
+    orderBy('createdAt', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toNFT(d.id, d.data()));
+}
+
 // ─── Recommendations ──────────────────────────────────────────────────────────
 
 export async function fetchRecommendedNfts(): Promise<NFT[]> {
@@ -335,7 +347,6 @@ export async function fetchTopDevelopers(maxResults = 20): Promise<TopDeveloper[
     contributionScore: d.data().contributionScore ?? 0,
   }));
 
-  // Enrich with user profiles
   const enriched = await Promise.all(
     developers.map(async (dev) => {
       const user = await fetchUserById(dev.developerId);
@@ -343,4 +354,147 @@ export async function fetchTopDevelopers(maxResults = 20): Promise<TopDeveloper[
     })
   );
   return enriched;
+}
+
+// ─── Refund (admin only) ──────────────────────────────────────────────────────
+
+export async function refundTransaction(txId: string): Promise<void> {
+  const txSnap = await getDoc(doc(db, 'transactions', txId));
+  if (!txSnap.exists()) throw new Error('Transaction not found');
+  const data = txSnap.data();
+
+  const sellerRef = doc(db, 'users', data.sellerId);
+  const sellerSnap = await getDoc(sellerRef);
+
+  const batch = writeBatch(db);
+
+  // Refund record: original seller receives NFT back
+  const refundRef = doc(collection(db, 'transactions'));
+  batch.set(refundRef, {
+    nftId: data.nftId,
+    buyerId: data.sellerId,   // original seller is now "receiving" NFT back
+    sellerId: data.buyerId,   // original buyer is "returning" NFT
+    proofLink: '',
+    description: `Admin refund of transaction ${txId}`,
+    price: 0,
+    type: 'refund',
+    createdAt: Timestamp.now(),
+  });
+
+  // Return NFT to original seller, put back on market
+  batch.update(doc(db, 'nfts', data.nftId), {
+    owner: data.sellerId,
+    forSale: true,
+  });
+
+  // Reverse seller's soldNfts increment
+  if (sellerSnap.exists()) {
+    batch.update(sellerRef, { soldNfts: increment(-1) });
+  }
+
+  await batch.commit();
+}
+
+// ─── Top Developer recalculation (admin only) ─────────────────────────────────
+
+function getFibonacciCap(activeUsers: number): number {
+  const fibs = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+  let cap = 1;
+  for (const f of fibs) {
+    if (f <= activeUsers) cap = f;
+    else break;
+  }
+  return cap;
+}
+
+export async function recalculateTopDevelopers(): Promise<{ promoted: string[]; demoted: string[] }> {
+  // Fetch all source data in parallel
+  const [usersSnap, nftsSnap, txsSnap] = await Promise.all([
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'nfts')),
+    getDocs(collection(db, 'transactions')),
+  ]);
+
+  type UserDoc = { id: string; soldNfts: number; buybackCount: number; isTopDeveloper: boolean };
+  type NftDoc  = { id: string; createdBy: string; isValid: boolean; isRecommended: boolean; likes: number };
+  const allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }) as UserDoc);
+  const allNfts  = nftsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NftDoc);
+  const allTxs   = txsSnap.docs.map(d => d.data() as { sellerId?: string });
+
+  // ── Score calculation (same formula as top-developer-ranking.ts) ─────────
+  const scores: Record<string, number> = {};
+  allNfts.forEach(nft => {
+    const createdBy = nft.createdBy as string;
+    if (createdBy) {
+      scores[createdBy] = (scores[createdBy] || 0) + 1 + ((nft.likes || 0) * 0.5);
+    }
+  });
+  allTxs.forEach(tx => {
+    if (tx.sellerId) {
+      scores[tx.sellerId] = (scores[tx.sellerId] || 0) + 0.2;
+    }
+  });
+
+  // ── Eligibility criteria (CLAUDE.md: soldNfts≥30, buybackPct≥50%) ────────
+  const eligible = allUsers.filter(u => {
+    const sold = (u.soldNfts as number) || 0;
+    if (sold < 30) return false;
+    const buybackPct = sold > 0 ? ((u.buybackCount as number) || 0) / sold : 0;
+    return buybackPct >= 0.5;
+  });
+
+  // ── Fibonacci cap based on total active users ─────────────────────────────
+  const cap = getFibonacciCap(allUsers.length);
+
+  // ── Top developers = eligible users ranked by score, capped ──────────────
+  const ranked = eligible
+    .sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0))
+    .slice(0, cap);
+
+  const newTopIds = new Set(ranked.map(u => u.id));
+
+  // ── Batch writes ──────────────────────────────────────────────────────────
+  const batch = writeBatch(db);
+
+  // Clear old topDevelopers entries
+  const oldTopSnap = await getDocs(collection(db, 'topDevelopers'));
+  oldTopSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // Write new entries
+  ranked.forEach(u => {
+    batch.set(doc(db, 'topDevelopers', u.id), { contributionScore: scores[u.id] || 0 });
+  });
+
+  // Update users.isTopDeveloper flags
+  const promoted: string[] = [];
+  const demoted:  string[] = [];
+  allUsers.forEach(u => {
+    const wasTop = !!(u.isTopDeveloper as boolean);
+    const isTop  = newTopIds.has(u.id);
+    if (wasTop !== isTop) {
+      batch.update(doc(db, 'users', u.id), { isTopDeveloper: isTop });
+      if (isTop) promoted.push(u.id);
+      else demoted.push(u.id);
+    }
+  });
+
+  // ── Auto-set isRecommended: one valid NFT per top developer, max 3 ────────
+  const newRecommendedIds = new Set<string>();
+  for (const devUser of ranked.slice(0, 3)) {
+    const devNfts = allNfts
+      .filter(n => n.createdBy === devUser.id && n.isValid)
+      .sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    if (devNfts.length > 0) newRecommendedIds.add(devNfts[0].id);
+  }
+
+  allNfts.forEach(nft => {
+    const wasRec = !!(nft.isRecommended as boolean);
+    const isRec  = newRecommendedIds.has(nft.id);
+    if (wasRec !== isRec) {
+      batch.update(doc(db, 'nfts', nft.id), { isRecommended: isRec });
+    }
+  });
+
+  await batch.commit();
+  return { promoted, demoted };
 }

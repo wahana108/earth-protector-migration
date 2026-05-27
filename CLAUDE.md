@@ -154,11 +154,14 @@ reports/{reportId}
 - ✅ Create `/create` — form create NFT, tulis ke Firestore (isValid=false)
 - ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
 - ✅ Validation `/validation` — daftar NFT pending, vote approve/reject, auto-validate >= 80%
-- ✅ Top Developers `/top-developers` — ranking dari Firestore topDevelopers, medal rank 1-3, score display
+- ✅ Top Developers `/top-developers` — ranking dari Firestore topDevelopers, medal rank 1-3, score display, admin Recalculate button
 - ✅ Buyback `/buyback` — two tabs (Sent by Me / Received), vendor confirm+reject, buyer complete
 - ✅ Profile `/profile` — avatar, inline name edit (Firestore+Auth), stats, Top Dev badge, NFT tabs
 - ✅ Recommendations `/recommendations` — grid of isRecommended NFTs from Firestore, creator enriched
-- ✅ Transaction Log `/transactions` — all user txs (buyer+seller), tabs: all/purchases/buybacks
+- ✅ Transaction Log `/transactions` — all user txs (buyer+seller), tabs: all/purchases/buybacks, Report Anomaly, Admin Refund
+- ✅ Validated `/validated` — grid of isValid=true NFTs, 80%+ approval required
+- ✅ Refund flow — admin-only, reverts purchase, returns NFT to seller, decrements soldNfts
+- ✅ Top Developer algorithm — Fibonacci cap, soldNfts≥30 + buybackPct≥50% criteria, auto-set isRecommended
 
 **File baru di Fase 3:**
 - `src/lib/firestore.ts` — fetchAllNfts, fetchNftById, fetchUserById, createNft, likeNft, hasUserLiked

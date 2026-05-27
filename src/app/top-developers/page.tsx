@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, Medal, Star, TrendingUp } from 'lucide-react';
+import { Trophy, Medal, Star, TrendingUp, RefreshCcw, Loader2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTopDevelopers } from '@/lib/firestore';
+import { useAuth } from '@/hooks/use-auth';
+import { fetchTopDevelopers, recalculateTopDevelopers } from '@/lib/firestore';
 import type { TopDeveloper } from '@/lib/types';
 
 const RANK_STYLES: Record<number, { icon: React.ReactNode; badge: string; ring: string }> = {
@@ -29,25 +31,66 @@ const RANK_STYLES: Record<number, { icon: React.ReactNode; badge: string; ring: 
   },
 };
 
+const ADMIN_EMAIL = 'ramawan@live.com';
+
 export default function TopDevelopersPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const [developers, setDevelopers] = useState<TopDeveloper[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcResult, setRecalcResult] = useState<{ promoted: string[]; demoted: string[] } | null>(null);
 
-  useEffect(() => {
+  const loadDevelopers = () => {
+    setLoading(true);
     fetchTopDevelopers(20)
       .then(setDevelopers)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadDevelopers(); }, []);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    setRecalcResult(null);
+    try {
+      const result = await recalculateTopDevelopers();
+      setRecalcResult(result);
+      loadDevelopers();
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <MainLayout>
       <div className="space-y-8 max-w-3xl mx-auto">
-        <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">Top Developers</h1>
-          <p className="text-muted-foreground">
-            Ranked by contribution score — based on NFTs created, likes received, and transaction volume.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-headline font-bold mb-2">Top Developers</h1>
+            <p className="text-muted-foreground">
+              Ranked by contribution score — based on NFTs created, likes received, and transaction volume.
+            </p>
+          </div>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRecalculate}
+              disabled={recalculating}
+              className="flex-shrink-0 gap-2"
+            >
+              {recalculating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              Recalculate
+            </Button>
+          )}
         </div>
+        {recalcResult && (
+          <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-3">
+            Recalculation complete: <span className="text-green-600 font-medium">{recalcResult.promoted.length} promoted</span>,{' '}
+            <span className="text-destructive font-medium">{recalcResult.demoted.length} demoted</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-3">

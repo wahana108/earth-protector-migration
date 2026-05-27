@@ -37,7 +37,7 @@ export type Transaction = {
   price: number;
   description: string;
   proofLink: string;
-  type: 'purchase' | 'buyback';
+  type: 'purchase' | 'buyback' | 'refund';
   createdAt: Date;
 };
 

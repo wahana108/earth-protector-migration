@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeftRight, ShoppingBag, RefreshCcw, ExternalLink, Receipt, TriangleAlert, Loader2 } from 'lucide-react';
+import { ArrowLeftRight, ShoppingBag, RefreshCcw, ExternalLink, Receipt, TriangleAlert, Loader2, Undo2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { fetchTransactionsByUser, fetchNftById, createReport } from '@/lib/firestore';
+import { fetchTransactionsByUser, fetchNftById, createReport, refundTransaction } from '@/lib/firestore';
 import type { Transaction, NFT } from '@/lib/types';
 
 type TransactionWithNft = {
@@ -29,20 +29,31 @@ type TransactionWithNft = {
   nft: NFT | null;
 };
 
-const TYPE_CONFIG: Record<Transaction['type'], { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' }> = {
+const TYPE_CONFIG: Record<'purchase' | 'buyback', { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' }> = {
   purchase: { label: 'Purchase', icon: <ShoppingBag className="h-3 w-3" />, variant: 'default' },
   buyback:  { label: 'Buyback',  icon: <RefreshCcw className="h-3 w-3" />, variant: 'secondary' },
 };
 
-function TxRow({ item, userId }: { item: TransactionWithNft; userId: string }) {
+const TYPE_CONFIG_EXTENDED: Partial<Record<Transaction['type'], { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' | 'destructive' }>> = {
+  refund: { label: 'Refund', icon: <Undo2 className="h-3 w-3" />, variant: 'destructive' },
+};
+
+function TxRow({ item, userId, isAdmin, onRefundDone }: { item: TransactionWithNft; userId: string; isAdmin: boolean; onRefundDone: () => void }) {
   const { tx, nft } = item;
-  const cfg = TYPE_CONFIG[tx.type];
+  const cfg = TYPE_CONFIG_EXTENDED[tx.type] ?? TYPE_CONFIG[tx.type as 'purchase' | 'buyback'];
   const role = tx.buyerId === userId ? 'Buyer' : 'Seller';
+
+  const handleRefund = async () => {
+    if (!window.confirm(`Refund this transaction and return the NFT to the original seller?`)) return;
+    setRefunding(true);
+    try { await refundTransaction(tx.id); onRefundDone(); } finally { setRefunding(false); }
+  };
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [reporting, setReporting] = useState(false);
   const [reported, setReported] = useState(false);
+  const [refunding, setRefunding] = useState(false);
 
   const handleReport = async () => {
     if (!reason.trim() || reporting) return;
@@ -102,6 +113,16 @@ function TxRow({ item, userId }: { item: TransactionWithNft; userId: string }) {
                 className="text-muted-foreground hover:text-yellow-500 transition-colors p-1 rounded"
               >
                 <TriangleAlert className="h-4 w-4" />
+              </button>
+            )}
+            {isAdmin && tx.type === 'purchase' && (
+              <button
+                title="Admin refund"
+                disabled={refunding}
+                onClick={handleRefund}
+                className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded disabled:opacity-50"
+              >
+                {refunding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
               </button>
             )}
           </div>
@@ -182,8 +203,11 @@ function LoadingSkeleton() {
   );
 }
 
+const ADMIN_EMAIL = 'ramawan@live.com';
+
 export default function TransactionsPage() {
   const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
   const [items, setItems] = useState<TransactionWithNft[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -248,7 +272,7 @@ export default function TransactionsPage() {
                 {items.length === 0 ? <EmptyTransactions /> : (
                   <div className="space-y-3">
                     {items.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} />
+                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
                     ))}
                   </div>
                 )}
@@ -258,7 +282,7 @@ export default function TransactionsPage() {
                 {purchases.length === 0 ? <EmptyTransactions /> : (
                   <div className="space-y-3">
                     {purchases.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} />
+                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
                     ))}
                   </div>
                 )}
@@ -268,7 +292,7 @@ export default function TransactionsPage() {
                 {buybacks.length === 0 ? <EmptyTransactions /> : (
                   <div className="space-y-3">
                     {buybacks.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} />
+                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
                     ))}
                   </div>
                 )}
