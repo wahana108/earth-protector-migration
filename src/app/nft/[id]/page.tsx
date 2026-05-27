@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2, RefreshCcw } from 'lucide-react';
+import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2, RefreshCcw, BadgeCheck } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -99,10 +99,11 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
   };
 
   const handleBuy = async () => {
-    if (!authUser || !nft || !nft.owner || !proofLink.trim() || buying) return;
+    if (!authUser || !nft || !proofLink.trim() || buying) return;
     setBuying(true);
     try {
-      await buyNft(nft.id, authUser.id, nft.owner, proofLink.trim(), description.trim());
+      const sellerId = nft.owner ?? nft.createdBy;
+      await buyNft(nft.id, authUser.id, sellerId, proofLink.trim(), description.trim());
       setNft(prev => prev ? { ...prev, owner: authUser.id, forSale: false } : prev);
       setOwner({ id: authUser.id, displayName: authUser.displayName, photoURL: authUser.photoURL, email: authUser.email, createdAt: new Date() });
       setBuyOpen(false);
@@ -113,7 +114,7 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
     }
   };
 
-  const canBuy = !!nft?.forSale && !!authUser && nft.owner !== authUser.id;
+  const canBuy = !!nft?.forSale && !!authUser && nft.owner !== authUser.id && nft.createdBy !== authUser.id;
   // Current owner who bought from someone else can request creator buyback
   const canRequestBuyback = !!nft && !nft.forSale && !!authUser &&
     nft.owner === authUser.id && nft.createdBy !== authUser.id && !buybackDone;
@@ -170,13 +171,20 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
 
           <div className="space-y-6">
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge variant="outline" className="gap-1">
                   <Leaf className="h-3 w-3" />
                   {categoryLabel}
                 </Badge>
-                {!nft.isValid && (
-                  <Badge variant="destructive">Pending Validation</Badge>
+                {nft.isValid ? (
+                  <Badge className="gap-1 bg-green-600/20 text-green-600 dark:text-green-400 border-green-600/30">
+                    <BadgeCheck className="h-3 w-3" />
+                    Community Validated
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Awaiting Community Endorsement
+                  </Badge>
                 )}
               </div>
               <h1 className="text-3xl font-headline font-bold">{nft.title}</h1>

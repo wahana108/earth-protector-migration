@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, User } from 'lucide-react';
+import { Heart, User, BadgeCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { NFT, User as UserType } from '@/lib/types';
@@ -67,6 +67,12 @@ export function NftCard({ nft, creator }: NftCardProps) {
             <Badge variant="outline">Not for sale</Badge>
           )}
         </div>
+        {nft.isValid && (
+          <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+            <BadgeCheck className="h-3.5 w-3.5" />
+            <span>Community Validated</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Avatar className="h-6 w-6">

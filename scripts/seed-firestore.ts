@@ -135,10 +135,10 @@ const NFTS = [
     category:      'wildlife_protection',
     likes:         42,
     createdBy:     'seed-user-2',
-    owner:         'seed-user-2',
-    forSale:       false,
+    owner:         null,
+    forSale:       true,
     price:         4.5,
-    isValid:       false, // Belum divalidasi — masuk antrian validation
+    isValid:       false, // Belum divalidasi — dapat badge endorsed setelah 80% vote
     isRecommended: false,
     createdAt:     Timestamp.fromDate(new Date('2025-02-10')),
   },

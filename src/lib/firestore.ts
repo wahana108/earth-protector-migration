@@ -63,7 +63,7 @@ function toUser(id: string, data: Record<string, any>): User {
 const notDeleted = (nft: NFT) => nft.title !== '[DELETED]';
 
 export async function fetchAllNfts(): Promise<NFT[]> {
-  const q = query(collection(db, 'nfts'), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'nfts'), where('forSale', '==', true), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map(d => toNFT(d.id, d.data())).filter(notDeleted);
 }
@@ -112,8 +112,8 @@ export async function createNft(data: {
   const ref = await addDoc(collection(db, 'nfts'), {
     ...data,
     likes: 0,
-    owner: data.createdBy,
-    forSale: false,
+    owner: null,
+    forSale: true,
     isValid: false,
     isRecommended: false,
     createdAt: Timestamp.now(),
@@ -149,12 +149,7 @@ export async function fetchPendingNfts(): Promise<NFT[]> {
 }
 
 export async function deleteNft(nftId: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'nfts', nftId));
-  } catch {
-    // Fallback: soft-delete if outside the 30-min rules window
-    await updateDoc(doc(db, 'nfts', nftId), { title: '[DELETED]', isValid: false, forSale: false });
-  }
+  await deleteDoc(doc(db, 'nfts', nftId));
 }
 
 export async function setNftRecommended(nftId: string, recommended: boolean): Promise<{ ok: boolean; error?: string }> {

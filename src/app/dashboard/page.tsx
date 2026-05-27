@@ -152,6 +152,7 @@ export default function DashboardPage() {
   const [ownedNfts, setOwnedNfts] = useState<NFT[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = async () => {
     if (!user) return;
@@ -175,11 +176,14 @@ export default function DashboardPage() {
   }, [user]);
 
   const handleDelete = async (nftId: string) => {
-    if (!window.confirm('Delete this NFT? This cannot be undone after 30 minutes.')) return;
+    if (!window.confirm('Delete this NFT? You have 30 minutes from creation to delete.')) return;
     setDeleting(nftId);
+    setDeleteError(null);
     try {
       await deleteNft(nftId);
       await load();
+    } catch {
+      setDeleteError('Could not delete this NFT. The 30-minute window may have passed.');
     } finally {
       setDeleting(null);
     }
@@ -280,24 +284,34 @@ export default function DashboardPage() {
             {loading ? (
               <NftGridSkeleton />
             ) : createdNfts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {createdNfts.map((nft) => (
-                  <div key={nft.id} className="relative">
-                    <NftCard nft={nft} creator={user} />
-                    <button
-                      onClick={() => handleDelete(nft.id)}
-                      disabled={deleting === nft.id}
-                      title="Delete NFT"
-                      className="absolute top-2 right-2 z-10 rounded-md bg-background/80 p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                    >
-                      {deleting === nft.id
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <Trash2 className="h-4 w-4" />
-                      }
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <>
+                {deleteError && (
+                  <p className="text-sm text-destructive mb-4 px-1">{deleteError}</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {createdNfts.map((nft) => {
+                    const withinWindow = (nft.createdAt.getTime() + 30 * 60 * 1000) > Date.now();
+                    return (
+                      <div key={nft.id} className="relative">
+                        <NftCard nft={nft} creator={user} />
+                        {withinWindow && (
+                          <button
+                            onClick={() => handleDelete(nft.id)}
+                            disabled={deleting === nft.id}
+                            title="Delete NFT (available within 30 min of creation)"
+                            className="absolute top-2 right-2 z-10 rounded-md bg-background/80 p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                          >
+                            {deleting === nft.id
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <Trash2 className="h-4 w-4" />
+                            }
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
               <EmptyState
                 message="You haven't created any NFTs yet."

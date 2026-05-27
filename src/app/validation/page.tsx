@@ -94,9 +94,10 @@ export default function ValidationPage() {
     <MainLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">NFT Validation</h1>
+          <h1 className="text-4xl font-headline font-bold mb-2">Community Endorsement</h1>
           <p className="text-muted-foreground">
-            Review and vote on pending NFTs. An NFT is validated when 80% or more votes are approvals.
+            All NFTs are available for purchase from the moment they are listed. Voting here gives an NFT
+            the <strong>Community Validated</strong> badge — a mark of trust, not a prerequisite to buy.
           </p>
         </div>
 
@@ -122,8 +123,8 @@ export default function ValidationPage() {
         ) : items.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed rounded-lg">
             <ShieldCheck className="h-12 w-12 mx-auto text-primary mb-4" />
-            <h3 className="text-xl font-semibold mb-1">All NFTs Validated</h3>
-            <p className="text-muted-foreground">No NFTs are pending validation right now.</p>
+            <h3 className="text-xl font-semibold mb-1">Nothing Pending Endorsement</h3>
+            <p className="text-muted-foreground">All listed NFTs have already been reviewed by the community.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -158,12 +159,12 @@ export default function ValidationPage() {
 
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{stats.approve} approve · {stats.reject} reject</span>
+                        <span>{stats.approve} endorse · {stats.reject} reject</span>
                         <span className="font-medium text-primary">{approvePct}%</span>
                       </div>
                       <Progress value={approvePct} className="h-2" />
                       <p className="text-xs text-muted-foreground">
-                        Needs 80% approval · {stats.total} vote{stats.total !== 1 ? 's' : ''} cast
+                        80% endorsement earns the Validated badge · {stats.total} vote{stats.total !== 1 ? 's' : ''} cast
                       </p>
                     </div>
                   </CardContent>
