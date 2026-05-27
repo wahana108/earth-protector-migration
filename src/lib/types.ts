@@ -73,3 +73,15 @@ export type TopDeveloper = {
   contributionScore: number;
   user?: User;
 };
+
+export type Report = {
+  id: string;
+  transactionId: string;
+  userId: string;
+  reason: string;
+  createdAt: Date;
+  status: 'pending' | 'upheld' | 'dismissed';
+  resolvedBy?: string;
+  resolvedAt?: Date;
+  resolutionNotes?: string;
+};

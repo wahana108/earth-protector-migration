@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { NftCard } from '@/components/nft-card';
 import { useNfts } from '@/hooks/use-nfts';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { ArrowRight, Leaf, Sprout, Recycle } from 'lucide-react';
+import { ArrowRight, Leaf, Waves, PawPrint, Zap, CloudOff, Globe } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function HomePage() {
@@ -19,9 +19,12 @@ export default function HomePage() {
   const heroImage = PlaceHolderImages.find(img => img.id === 'hero-background');
 
   const categories = [
-    { value: 'tree_planting', name: 'Reforestation', icon: <Leaf className="w-8 h-8 text-primary" />, description: 'NFTs funding tree planting projects worldwide.' },
-    { value: 'ocean_cleanup', name: 'Ocean Cleanup', icon: <Recycle className="w-8 h-8 text-primary" />, description: 'Support initiatives to clean our polluted seas.' },
-    { value: 'wildlife_protection', name: 'Wildlife Conservation', icon: <Sprout className="w-8 h-8 text-primary" />, description: 'Protect endangered species and their habitats.' },
+    { value: 'tree_planting',        name: 'Tree Planting',         icon: <Leaf     className="w-8 h-8 text-primary" />, description: 'NFTs funding tree planting projects that restore forests worldwide.' },
+    { value: 'ocean_cleanup',        name: 'Ocean Cleanup',         icon: <Waves    className="w-8 h-8 text-primary" />, description: 'Support initiatives removing plastic and pollution from our oceans.' },
+    { value: 'wildlife_protection',  name: 'Wildlife Protection',   icon: <PawPrint className="w-8 h-8 text-primary" />, description: 'Protect endangered species and fund anti-poaching efforts.' },
+    { value: 'renewable_energy',     name: 'Renewable Energy',      icon: <Zap      className="w-8 h-8 text-primary" />, description: 'Fund solar, wind, and hydro projects transitioning to clean energy.' },
+    { value: 'carbon_reduction',     name: 'Carbon Reduction',      icon: <CloudOff className="w-8 h-8 text-primary" />, description: 'Verified carbon offset NFTs funding emission reduction programs.' },
+    { value: 'ecosystem_restoration',name: 'Ecosystem Restoration', icon: <Globe    className="w-8 h-8 text-primary" />, description: 'Protect and restore critical biomes, wetlands, and natural habitats.' },
   ];
 
   return (
@@ -88,7 +91,7 @@ export default function HomePage() {
 
         <section>
           <h2 className="text-3xl font-headline font-semibold text-center mb-8">Impact Categories</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {categories.map((category) => (
               <Card key={category.value} className="bg-card/80 backdrop-blur-sm border-2 border-primary/10 hover:border-primary/30 transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-primary/20">
                 <CardContent className="p-6 flex flex-col items-center text-center gap-4">

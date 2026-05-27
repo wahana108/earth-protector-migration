@@ -1,7 +1,7 @@
 # KONTEKS_FIREBASE_TERKINI.md — The Mother Earth Protocol
 
-> Dibuat: 2026-05-27 berdasarkan pembacaan menyeluruh seluruh source code.
-> Update ini: setelah selesainya migrasi fase 1-3 dari Lovable → Firebase.
+> Dibuat: 2026-05-27 | Update terakhir: 2026-05-27
+> Migrasi fase 1-3 selesai + semua bug B1-B5 diselesaikan.
 
 ---
 
@@ -87,8 +87,8 @@
 ### `/buyback`
 **Status:** Berfungsi.
 **Queries:**
-- `fetchBuybackRequestsByVendor(user.id)` → `where('vendorId','==',uid)` — tab "Sent by Me"
-- `fetchBuybackRequestsByBuyer(user.id)` → `where('buyerId','==',uid)` — tab "Received"
+- `fetchBuybackRequestsByVendor(user.id)` → `where('vendorId','==',uid)` — tab "As Vendor"
+- `fetchBuybackRequestsByBuyer(user.id)` → `where('buyerId','==',uid)` — tab "As Buyer"
 **Fitur:** Alur 4-status (pending → confirmed/rejected; confirmed → completed). Vendor: Confirm + upload proof URL, Reject. Buyer: Mark Complete. `completeBuybackRequest()` increments vendor's `buybackCount` via batch dan set `nft.owner=null, forSale=true`.
 
 ---
@@ -96,7 +96,7 @@
 ### `/transactions`
 **Status:** Berfungsi.
 **Queries:** `fetchTransactionsByUser(user.id)` → union dari `where('buyerId','==',uid)` dan `where('sellerId','==',uid)`
-**Fitur:** Tabs All/Purchases/Buybacks, badge Role (Buyer/Seller) dan Type (Purchase/Buyback/Refund), proof link, Report Anomaly dialog (tulis ke `reports/`), tombol Admin Refund (visible hanya `ramawan@live.com`, hanya pada type='purchase').
+**Fitur:** Tabs All/Purchases/Buybacks, badge Role (Buyer/Seller) dan Type (Purchase/Buyback/Refund), proof link, Report Anomaly dialog (tulis ke `reports/`), tombol Admin Refund (visible hanya `ramawan@live.com`, hanya pada type='purchase'). Tab **Reports** (admin-only): daftar semua `reports/` ter-enrich dengan NFT+reporter, tombol Uphold (refund + resolve) dan Dismiss.
 
 ---
 
@@ -181,10 +181,11 @@ refundTransaction() [admin only]
 - `deleteNft()`: hard delete saja, tidak ada soft-delete fallback
 - Setelah 30 menit: hanya admin bisa delete
 
-### Report & Admin Refund ⚠️ Partial
-- Report: user bisa buat via `/transactions` → tulis ke `reports/` ✅
-- Refund: admin bisa trigger via `/transactions` tombol Undo ✅
-- **Belum ada:** UI untuk admin membaca/mengelola daftar reports
+### Report & Admin Refund ✅
+- Report: user bisa buat via `/transactions` → tulis ke `reports/` dengan `status: 'pending'`
+- Refund: admin bisa trigger via `/transactions` tombol Undo (per-transaksi)
+- Admin panel: tab **Reports** di `/transactions` (hanya `ramawan@live.com`) — lihat semua reports, Uphold (refund + mark upheld) atau Dismiss
+- `reports/{id}` kini punya field: `status`, `resolvedBy`, `resolvedAt`, `resolutionNotes`
 
 ---
 
@@ -242,8 +243,16 @@ refundTransaction() [admin only]
 `nftId`, `buyerId` (pemilik NFT), `vendorId` (kreator), `status`, `proofUrl`, `createdAt`
 
 ### `reports/{reportId}`
-`transactionId`, `userId`, `reason`, `createdAt`
-*Catatan: tidak ada field `status`/`resolvedBy` (berbeda dari mockup Supabase)*
+| Field | Tipe | Deskripsi |
+|---|---|---|
+| `transactionId` | string | ID transaksi yang dilaporkan |
+| `userId` | string | UID pelapor |
+| `reason` | string | Alasan laporan |
+| `createdAt` | Timestamp | |
+| `status` | string | `'pending'|'upheld'|'dismissed'` |
+| `resolvedBy` | string? | Admin UID yang menyelesaikan |
+| `resolvedAt` | Timestamp? | Waktu diselesaikan |
+| `resolutionNotes` | string? | Catatan resolusi (opsional) |
 
 ### `topDevelopers/{userId}`
 `contributionScore: number`
@@ -270,30 +279,11 @@ refundTransaction() [admin only]
 
 ## 5. BUG YANG DIKETAHUI
 
-### B1 — `totalLikes` tidak pernah di-update [MEDIUM]
-`users.totalLikes` diinisialisasi di seed/fetchUserProfile tapi TIDAK di-increment saat user like NFT.
-`likeNft()` hanya update `nfts.likes` counter dan subcollection. Stats "Total Likes" di dashboard/profile selalu stale.
-**Fix yang diperlukan:** Increment `users/{createdBy}.totalLikes` di `likeNft()` saat like ditambah, decrement saat unlike.
-
-### B2 — Home page kategori hardcoded 3 nilai lama [LOW]
-`src/app/page.tsx` menampilkan 3 kategori dengan nama lama ("Reforestation", "Wildlife Conservation").
-Perlu update ke 6 kategori dengan nama yang konsisten dengan `CATEGORY_LABELS`.
-
-### B3 — `src/ai/flows/top-developer-ranking.ts` duplikat tidak terpakai [LOW]
-File ini mengimplementasikan versi sederhana algoritma ranking (tanpa Fibonacci cap, tanpa eligibility).
-Tidak dipanggil dari manapun di UI. UI menggunakan `recalculateTopDevelopers()` dari `firestore.ts`.
-
-### B4 — Tidak ada admin UI untuk membaca reports [MEDIUM]
-Reports bisa dibuat oleh user, tapi tidak ada halaman admin untuk membacanya.
-`reports/` collection hanya bisa diakses via Firestore Console atau script.
-
-### B5 — Tab label `/buyback` membingungkan [LOW]
-"Sent by Me" = vendor/kreator yang menunggu request, "Received" = buyer yang submit request.
-Labelnya berkebalikan dari intuisi natural. Sebaiknya: "As Vendor" / "As Buyer".
-
 ### B6 — `transactions.price` selalu 0 [INFO]
 `buyNft()` hardcode `price: 0`. Harga dari `nft.price` tidak disimpan di transaksi.
 Tidak ada pembayaran nyata, tapi perlu diperhatikan jika integrasi harga diimplementasikan.
+
+*B1-B5 sudah diselesaikan di sesi 2026-05-27.*
 
 ---
 
@@ -309,15 +299,11 @@ Tidak ada pembayaran nyata, tapi perlu diperhatikan jika integrasi harga diimple
 - `/help` — route ada di sidebar tapi page kosong/404
 
 ### Fitur UI yang Belum Ada
-- Admin panel untuk membaca dan mengelola `reports/` collection
-- Home page: update 3 kategori hardcoded ke 6 kategori + nama yang benar
 - Notifikasi in-app atau email (NFT divalidasi, buyback dikonfirmasi, dll)
 - Scheduled trigger untuk `recalculateTopDevelopers()` (saat ini manual)
 
 ### Inkonsistensi yang Belum Diselesaikan
-- `users.totalLikes` tidak sinkron dengan subcollection likes (Bug B1)
-- `reports/` tidak punya field `status`/`resolvedBy`/`resolution_notes` (ada di mockup Supabase)
-- `transactions.price` selalu 0 (Bug B6)
+- `transactions.price` selalu 0 (B6 — no real payment system)
 
 ---
 

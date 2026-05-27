@@ -216,10 +216,10 @@ export default function BuybackPage() {
         <Tabs defaultValue="sent">
           <TabsList>
             <TabsTrigger value="sent">
-              Sent by Me {!loading && `(${vendorItems.length})`}
+              As Vendor {!loading && `(${vendorItems.length})`}
             </TabsTrigger>
             <TabsTrigger value="received">
-              Received {!loading && `(${buyerItems.length})`}
+              As Buyer {!loading && `(${buyerItems.length})`}
             </TabsTrigger>
           </TabsList>
 

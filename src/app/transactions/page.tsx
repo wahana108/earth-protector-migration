@@ -21,12 +21,28 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { fetchTransactionsByUser, fetchNftById, createReport, refundTransaction } from '@/lib/firestore';
-import type { Transaction, NFT } from '@/lib/types';
+import {
+  fetchTransactionsByUser,
+  fetchNftById,
+  fetchTransactionById,
+  fetchUserById,
+  createReport,
+  refundTransaction,
+  fetchAllReports,
+  resolveReport,
+} from '@/lib/firestore';
+import type { Transaction, NFT, Report, User } from '@/lib/types';
 
 type TransactionWithNft = {
   tx: Transaction;
   nft: NFT | null;
+};
+
+type ReportWithMeta = {
+  report: Report;
+  tx: Transaction | null;
+  nft: NFT | null;
+  reporter: User | null;
 };
 
 const TYPE_CONFIG: Record<'purchase' | 'buyback', { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' }> = {
@@ -175,6 +191,98 @@ function TxRow({ item, userId, isAdmin, onRefundDone }: { item: TransactionWithN
   );
 }
 
+const REPORT_STATUS_STYLES: Record<Report['status'], string> = {
+  pending:   'text-yellow-600 border-yellow-500/40 bg-yellow-500/10',
+  upheld:    'text-green-600 border-green-500/40 bg-green-500/10',
+  dismissed: 'text-muted-foreground border-border bg-muted/40',
+};
+
+function ReportCard({ item, adminId, onResolved }: { item: ReportWithMeta; adminId: string; onResolved: () => void }) {
+  const { report, tx, nft, reporter } = item;
+  const [upholding, setUpholding] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handleUphold = async () => {
+    if (!window.confirm('Uphold this report? The transaction will be refunded.')) return;
+    setUpholding(true);
+    setErr(null);
+    try {
+      if (tx) await refundTransaction(report.transactionId);
+      await resolveReport(report.id, 'upheld', adminId);
+      onResolved();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Failed to uphold report.');
+    } finally {
+      setUpholding(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    setDismissing(true);
+    setErr(null);
+    try {
+      await resolveReport(report.id, 'dismissed', adminId);
+      onResolved();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Failed to dismiss report.');
+    } finally {
+      setDismissing(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-sm font-medium truncate">
+              {nft ? (
+                <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">{nft.title}</Link>
+              ) : report.transactionId}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              by {reporter?.displayName || report.userId} · {format(report.createdAt, 'dd MMM yyyy')}
+            </p>
+          </div>
+          <Badge variant="outline" className={`text-xs flex-shrink-0 ${REPORT_STATUS_STYLES[report.status]}`}>
+            {report.status}
+          </Badge>
+        </div>
+
+        <p className="text-sm bg-muted/40 rounded p-2 text-muted-foreground leading-relaxed">{report.reason}</p>
+
+        {tx?.proofLink && (
+          <a href={tx.proofLink} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-primary hover:underline text-xs">
+            <ExternalLink className="h-3 w-3" /> View transaction proof
+          </a>
+        )}
+
+        {err && <p className="text-xs text-destructive">{err}</p>}
+
+        {report.status === 'pending' && (
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" variant="destructive" className="gap-1.5" disabled={upholding || dismissing} onClick={handleUphold}>
+              {upholding && <Loader2 className="h-3 w-3 animate-spin" />}
+              Uphold (Refund)
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={upholding || dismissing} onClick={handleDismiss}>
+              {dismissing && <Loader2 className="h-3 w-3 animate-spin" />}
+              Dismiss
+            </Button>
+          </div>
+        )}
+        {report.status !== 'pending' && report.resolvedAt && (
+          <p className="text-xs text-muted-foreground">
+            Resolved {format(report.resolvedAt, 'dd MMM yyyy')}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function EmptyTransactions() {
   return (
     <div className="text-center py-20 border-2 border-dashed rounded-lg">
@@ -210,6 +318,8 @@ export default function TransactionsPage() {
   const isAdmin = user?.email === ADMIN_EMAIL;
   const [items, setItems] = useState<TransactionWithNft[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportItems, setReportItems] = useState<ReportWithMeta[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -225,7 +335,31 @@ export default function TransactionsPage() {
     }
   }, [user]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadReports = useCallback(async () => {
+    if (!user || user.email !== ADMIN_EMAIL) return;
+    setLoadingReports(true);
+    try {
+      const reports = await fetchAllReports();
+      const enriched = await Promise.all(
+        reports.map(async (report) => {
+          const tx = await fetchTransactionById(report.transactionId);
+          const [nft, reporter] = await Promise.all([
+            tx ? fetchNftById(tx.nftId) : Promise.resolve(null),
+            fetchUserById(report.userId),
+          ]);
+          return { report, tx, nft, reporter };
+        })
+      );
+      setReportItems(enriched);
+    } finally {
+      setLoadingReports(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    load();
+    loadReports();
+  }, [load, loadReports]);
 
   if (!user) {
     return (
@@ -262,6 +396,11 @@ export default function TransactionsPage() {
             <TabsTrigger value="buybacks">
               Buybacks {!loading && `(${buybacks.length})`}
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="reports">
+                Reports {!loadingReports && reportItems.length > 0 && `(${reportItems.filter(r => r.report.status === 'pending').length} pending)`}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {loading ? (
@@ -297,6 +436,31 @@ export default function TransactionsPage() {
                   </div>
                 )}
               </TabsContent>
+
+              {isAdmin && (
+                <TabsContent value="reports" className="mt-6">
+                  {loadingReports ? (
+                    <LoadingSkeleton />
+                  ) : reportItems.length === 0 ? (
+                    <div className="text-center py-20 border-2 border-dashed rounded-lg">
+                      <TriangleAlert className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-semibold mb-1">No reports</h3>
+                      <p className="text-muted-foreground text-sm">No anomaly reports from users.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {reportItems.map(item => (
+                        <ReportCard
+                          key={item.report.id}
+                          item={item}
+                          adminId={user.id}
+                          onResolved={() => { load(); loadReports(); }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
             </>
           )}
         </Tabs>

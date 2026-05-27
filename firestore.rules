@@ -25,7 +25,8 @@ service cloud.firestore {
       allow read:   if isAuth();
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
-        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['soldNfts']));
+        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['soldNfts'])) ||
+        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalLikes']));
       allow delete: if isAdmin();
     }
 

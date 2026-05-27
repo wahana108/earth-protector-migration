@@ -16,7 +16,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction } from './types';
+import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction, Report } from './types';
 
 export const CATEGORY_LABELS: Record<NFTCategory, string> = {
   tree_planting: 'Tree Planting',
@@ -74,6 +74,12 @@ export async function fetchNftById(id: string): Promise<NFT | null> {
   return toNFT(snap.id, snap.data());
 }
 
+export async function fetchTransactionById(id: string): Promise<Transaction | null> {
+  const snap = await getDoc(doc(db, 'transactions', id));
+  if (!snap.exists()) return null;
+  return toTransaction(snap.id, snap.data());
+}
+
 export async function fetchUserById(id: string): Promise<User | null> {
   const snap = await getDoc(doc(db, 'users', id));
   if (!snap.exists()) return null;
@@ -123,14 +129,32 @@ export async function createNft(data: {
 
 export async function likeNft(nftId: string, userId: string): Promise<void> {
   const likeRef = doc(db, 'nfts', nftId, 'likes', userId);
-  const likeSnap = await getDoc(likeRef);
-  if (likeSnap.exists()) {
-    await deleteDoc(likeRef);
-    await updateDoc(doc(db, 'nfts', nftId), { likes: increment(-1) });
+  const nftRef = doc(db, 'nfts', nftId);
+
+  const [likeSnap, nftSnap] = await Promise.all([
+    getDoc(likeRef),
+    getDoc(nftRef),
+  ]);
+
+  const createdBy = nftSnap.exists() ? (nftSnap.data().createdBy as string) : null;
+  const isUnlike = likeSnap.exists();
+  const delta = isUnlike ? -1 : 1;
+
+  const batch = writeBatch(db);
+  if (isUnlike) {
+    batch.delete(likeRef);
   } else {
-    await setDoc(likeRef, { userId, createdAt: Timestamp.now() });
-    await updateDoc(doc(db, 'nfts', nftId), { likes: increment(1) });
+    batch.set(likeRef, { userId, createdAt: Timestamp.now() });
   }
+  batch.update(nftRef, { likes: increment(delta) });
+  if (createdBy) {
+    const creatorRef = doc(db, 'users', createdBy);
+    const creatorSnap = await getDoc(creatorRef);
+    if (creatorSnap.exists()) {
+      batch.update(creatorRef, { totalLikes: increment(delta) });
+    }
+  }
+  await batch.commit();
 }
 
 export async function hasUserLiked(nftId: string, userId: string): Promise<boolean> {
@@ -357,12 +381,47 @@ export async function updateUserDisplayName(userId: string, displayName: string)
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
+function toReport(id: string, data: Record<string, any>): Report {
+  return {
+    id,
+    transactionId: data.transactionId,
+    userId: data.userId,
+    reason: data.reason,
+    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    status: data.status ?? 'pending',
+    resolvedBy: data.resolvedBy,
+    resolvedAt: data.resolvedAt instanceof Timestamp ? data.resolvedAt.toDate() : undefined,
+    resolutionNotes: data.resolutionNotes,
+  };
+}
+
 export async function createReport(transactionId: string, userId: string, reason: string): Promise<void> {
   await addDoc(collection(db, 'reports'), {
     transactionId,
     userId,
     reason,
+    status: 'pending',
     createdAt: Timestamp.now(),
+  });
+}
+
+export async function fetchAllReports(): Promise<Report[]> {
+  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => toReport(d.id, d.data()));
+}
+
+export async function resolveReport(
+  reportId: string,
+  status: 'upheld' | 'dismissed',
+  resolvedBy: string,
+  resolutionNotes?: string
+): Promise<void> {
+  await updateDoc(doc(db, 'reports', reportId), {
+    status,
+    resolvedBy,
+    resolvedAt: Timestamp.now(),
+    ...(resolutionNotes ? { resolutionNotes } : {}),
   });
 }
 
