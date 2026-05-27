@@ -8,7 +8,7 @@ import React, {
   ReactNode,
 } from "react";
 import { User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { User } from "@/lib/types";
 import {
@@ -44,15 +44,39 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
       displayName: data.displayName ?? firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "Anonymous",
       photoURL: data.photoURL ?? firebaseUser.photoURL,
       createdAt: data.createdAt?.toDate?.() ?? new Date(),
+      totalLikes: data.totalLikes ?? 0,
+      soldNfts: data.soldNfts ?? 0,
+      buybackCount: data.buybackCount ?? 0,
+      isTopDeveloper: data.isTopDeveloper ?? false,
     };
   }
+
+  // Doc missing — covers race condition between onAuthStateChanged and
+  // createUserDocumentIfNotExists in auth.ts, or a silent creation failure.
+  // Creating here is safe: isMe(uid) rule passes because the user IS authenticated.
+  const defaultData = {
+    uid: firebaseUser.uid,
+    email: firebaseUser.email,
+    displayName: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Anonymous",
+    photoURL: firebaseUser.photoURL ?? null,
+    createdAt: serverTimestamp(),
+    totalLikes: 0,
+    soldNfts: 0,
+    buybackCount: 0,
+    isTopDeveloper: false,
+  };
+  await setDoc(userRef, defaultData);
 
   return {
     id: firebaseUser.uid,
     email: firebaseUser.email,
-    displayName: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Anonymous",
-    photoURL: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/100/100`,
-    createdAt: new Date(firebaseUser.metadata.creationTime || Date.now()),
+    displayName: defaultData.displayName,
+    photoURL: defaultData.photoURL,
+    createdAt: new Date(),
+    totalLikes: 0,
+    soldNfts: 0,
+    buybackCount: 0,
+    isTopDeveloper: false,
   };
 }
 

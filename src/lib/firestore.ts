@@ -249,6 +249,11 @@ export async function buyNft(
   proofLink: string,
   description: string
 ): Promise<void> {
+  // Pre-flight: batch.update fails with NOT_FOUND if the seller doc doesn't
+  // exist yet (e.g. new user whose doc creation lost a race with onAuthStateChanged).
+  const sellerRef = doc(db, 'users', sellerId);
+  const sellerSnap = await getDoc(sellerRef);
+
   const batch = writeBatch(db);
 
   const txRef = doc(collection(db, 'transactions'));
@@ -264,7 +269,12 @@ export async function buyNft(
   });
 
   batch.update(doc(db, 'nfts', nftId), { owner: buyerId, forSale: false });
-  batch.update(doc(db, 'users', sellerId), { soldNfts: increment(1) });
+
+  if (sellerSnap.exists()) {
+    batch.update(sellerRef, { soldNfts: increment(1) });
+  }
+  // If seller doc doesn't exist the buy still completes; their soldNfts
+  // counter will be initialised to 0 when they next log in.
 
   await batch.commit();
 }
