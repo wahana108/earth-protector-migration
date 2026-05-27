@@ -20,10 +20,12 @@ service cloud.firestore {
 
     // ─── users/{userId} ───────────────────────────────────────────────────────
     // Profil publik antar user yang login. Hanya pemilik atau admin yang bisa edit.
+    // Pengecualian: field soldNfts boleh di-increment oleh buyer saat buy flow.
     match /users/{userId} {
       allow read:   if isAuth();
       allow create: if isMe(userId);
-      allow update: if isMe(userId) || isAdmin();
+      allow update: if isMe(userId) || isAdmin() ||
+        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['soldNfts']));
       allow delete: if isAdmin();
     }
 
@@ -36,6 +38,11 @@ service cloud.firestore {
       allow update: if isAuth() && (
         resource.data.createdBy == request.auth.uid ||
         resource.data.owner    == request.auth.uid ||
+        // Buy flow: siapapun yang auth boleh ambil NFT forSale, tapi hanya field owner+forSale
+        (resource.data.forSale == true &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['owner', 'forSale'])) ||
+        // Like flow: siapapun yang auth boleh update field likes saja
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) ||
         isAdmin()
       );
       allow delete: if isAdmin() ||
@@ -66,7 +73,7 @@ service cloud.firestore {
         resource.data.sellerId == request.auth.uid ||
         isAdmin()
       );
-      allow create:        if isAuth();
+      allow create:        if isAuth() && request.resource.data.buyerId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
