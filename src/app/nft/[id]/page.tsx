@@ -3,19 +3,30 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon } from 'lucide-react';
+import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
 import {
   fetchNftById,
   fetchUserById,
   likeNft,
   hasUserLiked,
+  buyNft,
   CATEGORY_LABELS,
 } from '@/lib/firestore';
 import type { NFT, User } from '@/lib/types';
@@ -33,6 +44,12 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
   const [likeCount, setLikeCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
+
+  // Buy dialog state
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [proofLink, setProofLink] = useState('');
+  const [description, setDescription] = useState('');
+  const [buying, setBuying] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -75,6 +92,23 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
       setLiking(false);
     }
   };
+
+  const handleBuy = async () => {
+    if (!authUser || !nft || !nft.owner || !proofLink.trim() || buying) return;
+    setBuying(true);
+    try {
+      await buyNft(nft.id, authUser.id, nft.owner, proofLink.trim(), description.trim());
+      setNft(prev => prev ? { ...prev, owner: authUser.id, forSale: false } : prev);
+      setOwner({ id: authUser.id, displayName: authUser.displayName, photoURL: authUser.photoURL, email: authUser.email, createdAt: new Date() });
+      setBuyOpen(false);
+      setProofLink('');
+      setDescription('');
+    } finally {
+      setBuying(false);
+    }
+  };
+
+  const canBuy = !!nft?.forSale && !!authUser && nft.owner !== authUser.id;
 
   if (loading) {
     return (
@@ -179,10 +213,14 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
             </div>
 
             <div className="flex gap-3">
-              {nft.forSale && authUser && (
-                <Button size="lg" className="flex-1">
+              {canBuy && (
+                <Button size="lg" className="flex-1 gap-2" onClick={() => setBuyOpen(true)}>
+                  <ShoppingBag className="h-5 w-5" />
                   Buy Now
                 </Button>
+              )}
+              {nft.forSale && authUser && nft.owner === authUser.id && (
+                <Badge variant="outline" className="text-sm px-3 py-1 self-center">You own this NFT</Badge>
               )}
               <Button
                 variant="outline"
@@ -209,6 +247,55 @@ export default function NftDetailPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       </div>
+
+      {/* Buy Dialog */}
+      <Dialog open={buyOpen} onOpenChange={open => { if (!buying) setBuyOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buy &ldquo;{nft.title}&rdquo;</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Complete your purchase on an external marketplace, then submit the proof link below to record the transaction.
+            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="proof-link">Proof URL <span className="text-destructive">*</span></Label>
+              <Input
+                id="proof-link"
+                placeholder="https://opensea.io/..."
+                value={proofLink}
+                onChange={e => setProofLink(e.target.value)}
+                disabled={buying}
+              />
+              <p className="text-xs text-muted-foreground">Link to the transaction on an external marketplace.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="buy-description">Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Textarea
+                id="buy-description"
+                placeholder="e.g. Purchased via OpenSea auction on 2026-05-27"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                disabled={buying}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBuyOpen(false)} disabled={buying}>
+              Cancel
+            </Button>
+            <Button onClick={handleBuy} disabled={!proofLink.trim() || buying} className="gap-2">
+              {buying && <Loader2 className="h-4 w-4 animate-spin" />}
+              Confirm Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

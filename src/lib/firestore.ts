@@ -13,6 +13,7 @@ import {
   setDoc,
   deleteDoc,
   limit,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction } from './types';
@@ -237,6 +238,35 @@ export async function rejectBuybackRequest(requestId: string): Promise<void> {
 export async function completeBuybackRequest(requestId: string, nftId: string): Promise<void> {
   await updateDoc(doc(db, 'buybackRequests', requestId), { status: 'completed' });
   await updateDoc(doc(db, 'nfts', nftId), { owner: null, forSale: true });
+}
+
+// ─── Purchase ─────────────────────────────────────────────────────────────────
+
+export async function buyNft(
+  nftId: string,
+  buyerId: string,
+  sellerId: string,
+  proofLink: string,
+  description: string
+): Promise<void> {
+  const batch = writeBatch(db);
+
+  const txRef = doc(collection(db, 'transactions'));
+  batch.set(txRef, {
+    nftId,
+    buyerId,
+    sellerId,
+    proofLink,
+    description,
+    price: 0,
+    type: 'purchase',
+    createdAt: Timestamp.now(),
+  });
+
+  batch.update(doc(db, 'nfts', nftId), { owner: buyerId, forSale: false });
+  batch.update(doc(db, 'users', sellerId), { soldNfts: increment(1) });
+
+  await batch.commit();
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
