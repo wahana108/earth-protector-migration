@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   ArrowLeftRight,
   BadgeCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,6 +33,7 @@ import { Logo } from '@/components/logo';
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/explore', label: 'Explore', icon: Compass },
+  { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
   { href: '/validated', label: 'Validated', icon: BadgeCheck },
   { href: '/create', label: 'Create', icon: PlusCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },

@@ -85,3 +85,18 @@ export type Report = {
   resolvedAt?: Date;
   resolutionNotes?: string;
 };
+
+export type CommunityConfig = {
+  harga_dasar: number;
+  batas_atas: number;
+  nilai_minimum_project: number;
+  minimum_buyback_pct: number;
+  fee_project_pct: { min: number; max: number };
+  minimum_top_developer: number;
+  kapasitas_pool_minimum: number;
+  fase_aktif: number;
+  ai_provider: string;
+  ai_anomali_threshold: { flag: number; invalid: number };
+  updated_at: Date;
+  updated_by: string;
+};
