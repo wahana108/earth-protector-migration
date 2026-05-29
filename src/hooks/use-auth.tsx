@@ -16,6 +16,7 @@ import {
   signUpWithEmail,
   signInWithGoogle,
   signOutUser,
+  resendEmailVerification,
   AuthCredentials,
 } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,10 +25,12 @@ interface AuthContextType {
   user: User | null;
   firebaseUser: FirebaseUser | null;
   loading: boolean;
+  emailVerified: boolean;
   signIn: (credentials: AuthCredentials) => Promise<FirebaseUser>;
   signUp: (credentials: AuthCredentials) => Promise<FirebaseUser>;
   signInWithGoogle: () => Promise<FirebaseUser>;
   signOut: () => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -106,10 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     firebaseUser,
     loading,
+    emailVerified: firebaseUser?.emailVerified ?? false,
     signIn: signInWithEmail,
     signUp: signUpWithEmail,
     signInWithGoogle,
     signOut: signOutUser,
+    resendVerificationEmail: resendEmailVerification,
   };
 
   return (

@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import type { CommunityConfig } from './types';
 
 const COLLECTION = 'community_config';
@@ -33,6 +33,18 @@ export async function seedCommunityConfig(adminUid: string): Promise<void> {
   const ref = doc(db, COLLECTION, DOC_ID);
   await setDoc(ref, {
     ...DEFAULT_COMMUNITY_CONFIG,
+    updated_at: serverTimestamp(),
+    updated_by: adminUid,
+  });
+}
+
+export async function updateCommunityConfig(
+  adminUid: string,
+  updates: Partial<Omit<CommunityConfig, 'updated_at' | 'updated_by'>>
+): Promise<void> {
+  const ref = doc(db, COLLECTION, DOC_ID);
+  await updateDoc(ref, {
+    ...updates,
     updated_at: serverTimestamp(),
     updated_by: adminUid,
   });

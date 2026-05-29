@@ -5,23 +5,74 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Pencil } from 'lucide-react';
 import {
   getCommunityConfig,
   seedCommunityConfig,
+  updateCommunityConfig,
   DEFAULT_COMMUNITY_CONFIG,
 } from '@/lib/community-config';
 import { useAuth } from '@/hooks/use-auth';
 import type { CommunityConfig } from '@/lib/types';
 
-function formatRupiah(value: number): string {
+const ADMIN_EMAIL = 'ramawan@live.com';
+
+// ─── Tipe flat untuk form edit ───────────────────────────────────────────────
+type EditValues = {
+  harga_dasar: number;
+  batas_atas: number;
+  nilai_minimum_project: number;
+  minimum_buyback_pct: number;
+  fee_min: number;
+  fee_max: number;
+  minimum_top_developer: number;
+  kapasitas_pool_minimum: number;
+  fase_aktif: number;
+  ai_provider: string;
+  anomali_flag: number;
+  anomali_invalid: number;
+};
+
+function configToEdit(c: CommunityConfig): EditValues {
+  return {
+    harga_dasar: c.harga_dasar,
+    batas_atas: c.batas_atas,
+    nilai_minimum_project: c.nilai_minimum_project,
+    minimum_buyback_pct: c.minimum_buyback_pct,
+    fee_min: c.fee_project_pct.min,
+    fee_max: c.fee_project_pct.max,
+    minimum_top_developer: c.minimum_top_developer,
+    kapasitas_pool_minimum: c.kapasitas_pool_minimum,
+    fase_aktif: c.fase_aktif,
+    ai_provider: c.ai_provider,
+    anomali_flag: c.ai_anomali_threshold.flag,
+    anomali_invalid: c.ai_anomali_threshold.invalid,
+  };
+}
+
+function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'updated_by'> {
+  return {
+    harga_dasar: e.harga_dasar,
+    batas_atas: e.batas_atas,
+    nilai_minimum_project: e.nilai_minimum_project,
+    minimum_buyback_pct: e.minimum_buyback_pct,
+    fee_project_pct: { min: e.fee_min, max: e.fee_max },
+    minimum_top_developer: e.minimum_top_developer,
+    kapasitas_pool_minimum: e.kapasitas_pool_minimum,
+    fase_aktif: e.fase_aktif,
+    ai_provider: e.ai_provider,
+    ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
+  };
+}
+
+// ─── Sub-komponen ─────────────────────────────────────────────────────────────
+function formatRupiah(v: number) {
   return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-  }).format(value);
+    style: 'currency', currency: 'IDR', minimumFractionDigits: 0,
+  }).format(v);
 }
 
 function ParamRow({ label, value }: { label: string; value: string }) {
@@ -33,28 +84,56 @@ function ParamRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EditRow({
+  label, value, type = 'number', onChange,
+}: {
+  label: string;
+  value: number | string;
+  type?: 'number' | 'text';
+  onChange: (v: number | string) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <label className="text-sm text-muted-foreground shrink-0">{label}</label>
+      <Input
+        type={type}
+        className="w-36 text-right font-mono text-sm h-8"
+        value={value}
+        onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+      />
+    </div>
+  );
+}
+
 function ParamCardSkeleton() {
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-5 w-36" />
-      </CardHeader>
+      <CardHeader className="pb-2"><Skeleton className="h-5 w-36" /></CardHeader>
       <CardContent className="space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-4 w-full" />
-        ))}
+        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-4 w-full" />)}
       </CardContent>
     </Card>
   );
 }
 
+// ─── Halaman utama ────────────────────────────────────────────────────────────
 export default function ParametersPage() {
   const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
   const [config, setConfig] = useState<CommunityConfig | null>(null);
   const [isDefault, setIsDefault] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValues, setEditValues] = useState<EditValues | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  function setField<K extends keyof EditValues>(key: K, value: EditValues[K]) {
+    setEditValues(prev => prev ? { ...prev, [key]: value } : null);
+  }
 
   useEffect(() => {
     getCommunityConfig()
@@ -62,23 +141,14 @@ export default function ParametersPage() {
         if (data) {
           setConfig(data);
         } else {
-          setConfig({
-            ...DEFAULT_COMMUNITY_CONFIG,
-            updated_at: new Date(),
-            updated_by: '',
-          });
+          setConfig({ ...DEFAULT_COMMUNITY_CONFIG, updated_at: new Date(), updated_by: '' });
           setIsDefault(true);
         }
       })
       .catch((err: unknown) => {
         const detail = err instanceof Error ? err.message : String(err);
         console.error('getCommunityConfig error:', detail);
-        // Firestore tidak terbaca — tampilkan nilai default + init button
-        setConfig({
-          ...DEFAULT_COMMUNITY_CONFIG,
-          updated_at: new Date(),
-          updated_by: '',
-        });
+        setConfig({ ...DEFAULT_COMMUNITY_CONFIG, updated_at: new Date(), updated_by: '' });
         setIsDefault(true);
         setError(
           detail.toLowerCase().includes('permission')
@@ -88,6 +158,36 @@ export default function ParametersPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  function handleEdit() {
+    if (!config) return;
+    setEditValues(configToEdit(config));
+    setIsEditing(true);
+    setError(null);
+  }
+
+  function handleCancel() {
+    setIsEditing(false);
+    setEditValues(null);
+    setError(null);
+  }
+
+  async function handleSave() {
+    if (!editValues || !user) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateCommunityConfig(user.id, editToConfig(editValues));
+      const data = await getCommunityConfig();
+      setConfig(data);
+      setIsEditing(false);
+      setEditValues(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleSeed() {
     if (!user) return;
@@ -118,14 +218,34 @@ export default function ParametersPage() {
             </div>
             <p className="text-sm text-muted-foreground">
               Kontrak sosial TMEP — variabel sistem yang berlaku untuk seluruh transaksi.
-              Hanya administrator yang dapat mengubah nilai ini.
+              {isAdmin
+                ? ' Mode admin aktif — kamu dapat mengubah nilai ini.'
+                : ' Hanya administrator yang dapat mengubah nilai ini.'}
             </p>
           </div>
-          {!loading && (
-            <Badge variant={isDefault ? 'outline' : 'secondary'} className="shrink-0 mt-1">
-              {isDefault ? 'Belum Aktif' : `Fase ${config!.fase_aktif}`}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2 shrink-0 mt-1">
+            {!loading && (
+              <Badge variant={isDefault ? 'outline' : 'secondary'}>
+                {isDefault ? 'Belum Aktif' : `Fase ${config!.fase_aktif}`}
+              </Badge>
+            )}
+            {isAdmin && !isDefault && !isEditing && !loading && (
+              <Button size="sm" variant="outline" onClick={handleEdit}>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Ubah Parameter
+              </Button>
+            )}
+            {isAdmin && isEditing && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleCancel} disabled={saving}>
+                  Batal
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Banner: belum diinisialisasi */}
@@ -137,15 +257,13 @@ export default function ParametersPage() {
             </AlertTitle>
             <AlertDescription className="text-yellow-700 dark:text-yellow-300 space-y-3">
               <p>
-                <code className="font-mono text-xs bg-yellow-100 px-1 rounded">community_config/v1</code>{' '}
+                <code className="font-mono text-xs bg-yellow-100 px-1 rounded">
+                  community_config/v1
+                </code>{' '}
                 belum diinisialisasi. Nilai default ditampilkan di bawah.
               </p>
-              {error && (
-                <p className="text-xs opacity-80">
-                  Detail: {error}
-                </p>
-              )}
-              {user?.email === 'ramawan@live.com' ? (
+              {error && <p className="text-xs opacity-80">Detail: {error}</p>}
+              {isAdmin ? (
                 <Button
                   size="sm"
                   onClick={handleSeed}
@@ -155,7 +273,9 @@ export default function ParametersPage() {
                   {seeding ? 'Menyimpan ke Firestore...' : 'Inisialisasi Konfigurasi'}
                 </Button>
               ) : (
-                <p className="text-xs italic">Hanya administrator yang dapat menginisialisasi.</p>
+                <p className="text-xs italic">
+                  Hanya administrator yang dapat menginisialisasi.
+                </p>
               )}
             </AlertDescription>
           </Alert>
@@ -170,11 +290,14 @@ export default function ParametersPage() {
               <span className="font-medium">
                 {config.updated_at.toLocaleString('id-ID')}
               </span>
+              {config.updated_by && (
+                <span className="text-muted-foreground"> · oleh {config.updated_by}</span>
+              )}
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Error saat seed gagal (bukan error load) */}
+        {/* Error saat save gagal */}
         {!isDefault && error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -183,17 +306,70 @@ export default function ParametersPage() {
           </Alert>
         )}
 
-        {/* Parameter cards */}
+        {/* Cards — edit mode atau read-only */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? (
+            <><ParamCardSkeleton /><ParamCardSkeleton /><ParamCardSkeleton /></>
+          ) : config && isEditing && editValues ? (
+            // ── EDIT MODE (admin only) ──────────────────────────────────────
             <>
-              <ParamCardSkeleton />
-              <ParamCardSkeleton />
-              <ParamCardSkeleton />
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Harga & Transaksi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Harga Dasar (Rp)" value={editValues.harga_dasar}
+                    onChange={v => setField('harga_dasar', v as number)} />
+                  <EditRow label="Batas Atas (Rp)" value={editValues.batas_atas}
+                    onChange={v => setField('batas_atas', v as number)} />
+                  <EditRow label="Min. Project (Rp)" value={editValues.nilai_minimum_project}
+                    onChange={v => setField('nilai_minimum_project', v as number)} />
+                  <EditRow label="Min. Buyback (%)" value={editValues.minimum_buyback_pct}
+                    onChange={v => setField('minimum_buyback_pct', v as number)} />
+                  <EditRow label="Fee Min (%)" value={editValues.fee_min}
+                    onChange={v => setField('fee_min', v as number)} />
+                  <EditRow label="Fee Max (%)" value={editValues.fee_max}
+                    onChange={v => setField('fee_max', v as number)} />
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Komunitas & Pool
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Min. Top Developer" value={editValues.minimum_top_developer}
+                    onChange={v => setField('minimum_top_developer', v as number)} />
+                  <EditRow label="Min. Kapasitas Pool" value={editValues.kapasitas_pool_minimum}
+                    onChange={v => setField('kapasitas_pool_minimum', v as number)} />
+                  <EditRow label="Fase Aktif" value={editValues.fase_aktif}
+                    onChange={v => setField('fase_aktif', v as number)} />
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    AI Monitoring
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="AI Provider" type="text" value={editValues.ai_provider}
+                    onChange={v => setField('ai_provider', v as string)} />
+                  <EditRow label="Threshold Flag (%)" value={editValues.anomali_flag}
+                    onChange={v => setField('anomali_flag', v as number)} />
+                  <EditRow label="Threshold Invalid (%)" value={editValues.anomali_invalid}
+                    onChange={v => setField('anomali_invalid', v as number)} />
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
+            // ── READ-ONLY MODE ──────────────────────────────────────────────
             <>
-              {/* Card 1: Harga & Transaksi */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -203,22 +379,13 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <ParamRow label="Harga Dasar" value={formatRupiah(config.harga_dasar)} />
                   <ParamRow label="Batas Atas" value={formatRupiah(config.batas_atas)} />
-                  <ParamRow
-                    label="Nilai Min. Project"
-                    value={formatRupiah(config.nilai_minimum_project)}
-                  />
-                  <ParamRow
-                    label="Min. Buyback"
-                    value={`${config.minimum_buyback_pct}%`}
-                  />
-                  <ParamRow
-                    label="Fee Project"
-                    value={`${config.fee_project_pct.min}% – ${config.fee_project_pct.max}%`}
-                  />
+                  <ParamRow label="Nilai Min. Project" value={formatRupiah(config.nilai_minimum_project)} />
+                  <ParamRow label="Min. Buyback" value={`${config.minimum_buyback_pct}%`} />
+                  <ParamRow label="Fee Project"
+                    value={`${config.fee_project_pct.min}% – ${config.fee_project_pct.max}%`} />
                 </CardContent>
               </Card>
 
-              {/* Card 2: Komunitas & Pool */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -226,22 +393,15 @@ export default function ParametersPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="divide-y divide-border">
-                  <ParamRow
-                    label="Min. Top Developer"
-                    value={`${config.minimum_top_developer} developer`}
-                  />
-                  <ParamRow
-                    label="Min. Kapasitas Pool"
-                    value={`${config.kapasitas_pool_minimum} NFT`}
-                  />
-                  <ParamRow
-                    label="Fase Aktif"
-                    value={`Fase ${config.fase_aktif} — Infrastruktur Terpusat`}
-                  />
+                  <ParamRow label="Min. Top Developer"
+                    value={`${config.minimum_top_developer} developer`} />
+                  <ParamRow label="Min. Kapasitas Pool"
+                    value={`${config.kapasitas_pool_minimum} NFT`} />
+                  <ParamRow label="Fase Aktif"
+                    value={`Fase ${config.fase_aktif} — Infrastruktur Terpusat`} />
                 </CardContent>
               </Card>
 
-              {/* Card 3: AI Monitoring */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -250,21 +410,17 @@ export default function ParametersPage() {
                 </CardHeader>
                 <CardContent className="divide-y divide-border">
                   <ParamRow label="AI Provider" value={config.ai_provider} />
-                  <ParamRow
-                    label="Threshold Flag"
-                    value={`≥ ${config.ai_anomali_threshold.flag}% anomali`}
-                  />
-                  <ParamRow
-                    label="Threshold Invalid"
-                    value={`= ${config.ai_anomali_threshold.invalid}% anomali`}
-                  />
+                  <ParamRow label="Threshold Flag"
+                    value={`≥ ${config.ai_anomali_threshold.flag}% anomali`} />
+                  <ParamRow label="Threshold Invalid"
+                    value={`= ${config.ai_anomali_threshold.invalid}% anomali`} />
                 </CardContent>
               </Card>
             </>
           ) : null}
         </div>
 
-        {/* Aturan fixed */}
+        {/* Aturan fixed — selalu tampil */}
         <div className="rounded-lg border bg-muted/30 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
             Aturan Sistem — Tidak Dapat Diubah
@@ -277,7 +433,7 @@ export default function ParametersPage() {
               'Semua perubahan nilai wajib tercatat di log transaksi',
               'Tidak ada entitas yang memegang dana komunitas',
               'Algoritma membaca neraca, bukan keputusan admin',
-            ].map((rule) => (
+            ].map(rule => (
               <div key={rule} className="flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                 <span className="text-sm text-muted-foreground">{rule}</span>

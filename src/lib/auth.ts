@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { app, db, googleProvider } from "./firebase";
@@ -41,6 +42,7 @@ export async function signUpWithEmail({ email, password }: AuthCredentials) {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const { user } = userCredential;
+    await sendEmailVerification(user);
     await createUserDocumentIfNotExists(user.uid, {
       email: user.email,
       displayName: user.displayName || email.split("@")[0],
@@ -82,4 +84,10 @@ export async function signOutUser() {
   } catch (error: any) {
     throw new Error(error.message || "Failed to sign out.");
   }
+}
+
+export async function resendEmailVerification(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('Tidak ada user yang login.');
+  await sendEmailVerification(currentUser);
 }
