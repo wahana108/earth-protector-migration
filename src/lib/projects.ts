@@ -85,6 +85,11 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   return projectId;
 }
 
+// Toggle for_sale pada nft_unit milik owner
+export async function toggleForSale(nftUnitId: string, newForSale: boolean): Promise<void> {
+  await updateDoc(doc(db, 'nft_units', nftUnitId), { for_sale: newForSale });
+}
+
 // Update gambar_url di project + cascade ke semua nft_units dalam project tersebut
 export async function updateProjectGambar(
   projectId: string,

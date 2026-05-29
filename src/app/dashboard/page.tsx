@@ -1,410 +1,687 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { PlusCircle, Heart, ShoppingBag, RefreshCcw, Star, Trash2, Loader2, BadgeCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  collection, doc, getDoc, getDocs,
+  query, where, orderBy, limit, Timestamp,
+} from 'firebase/firestore';
+import {
+  PlusCircle, Loader2, Lock, Pencil, ImageOff,
+  RefreshCcw, TrendingDown, TrendingUp, Minus,
+} from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { NftCard } from '@/components/nft-card';
-import { useAuth } from '@/hooks/use-auth';
 import {
-  fetchUserById,
-  fetchNftsByCreator,
-  fetchNftsByOwner,
-  deleteNft,
-  setNftRecommended,
-} from '@/lib/firestore';
-import type { NFT, User } from '@/lib/types';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
+import { toggleForSale, updateProjectGambar } from '@/lib/projects';
+import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
-// Simple inline progress bar
-function ProgressBar({ value, max }: { value: number; max: number }) {
-  const pct = Math.min(100, Math.round((value / max) * 100));
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatIDR(n: number) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function formatDelta(delta: number) {
+  const prefix = delta > 0 ? '+' : '';
+  return `${prefix}${formatIDR(delta)}`;
+}
+
+function relativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+  if (d < 30) return `${d} hari lalu`;
+  return date.toLocaleDateString('id-ID');
+}
+
+function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
+  return {
+    id,
+    project_id: data.project_id as string,
+    developer_id: data.developer_id as string,
+    owner_id: data.owner_id as string,
+    nama_nft: data.nama_nft as string,
+    nama_project: (data.nama_project as string) ?? '',
+    gambar_url: (data.gambar_url as string) ?? '',
+    kategori: (data.kategori as ProjectCategory) ?? 'lainnya',
+    status: (data.status as NFTUnit['status']) ?? 'biasa',
+    harga_jual: (data.harga_jual as number) ?? 0,
+    harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
+    nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    for_sale: (data.for_sale as boolean) ?? false,
+    digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
+    project_validasi_id: (data.project_validasi_id as string | null) ?? null,
+    like_count: (data.like_count as number) ?? 0,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+  };
+}
+
+function toNeracaLog(id: string, data: Record<string, unknown>): NeracaLog {
+  return {
+    id,
+    type: (data.type as NeracaLog['type']) ?? 'beli',
+    nft_unit_id: data.nft_unit_id as string,
+    nama_nft: (data.nama_nft as string) ?? '',
+    harga_transaksi: (data.harga_transaksi as number) ?? 0,
+    nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    delta: (data.delta as number) ?? 0,
+    counterparty_id: (data.counterparty_id as string) ?? '',
+    timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
+  };
+}
+
+function toProject(id: string, data: Record<string, unknown>): Project {
+  return {
+    id,
+    developer_id: data.developer_id as string,
+    nama_project: (data.nama_project as string) ?? '',
+    deskripsi_project: (data.deskripsi_project as string) ?? '',
+    gambar_url: (data.gambar_url as string) ?? '',
+    link_bukti: (data.link_bukti as string) ?? '',
+    tanggal_tindakan: (data.tanggal_tindakan as string) ?? '',
+    kategori: (data.kategori as ProjectCategory) ?? 'lainnya',
+    lokasi_tindakan: (data.lokasi_tindakan as string) ?? '',
+    nilai_project: (data.nilai_project as number) ?? 0,
+    harga_jual: (data.harga_jual as number) ?? 0,
+    jumlah_nft: (data.jumlah_nft as number) ?? 0,
+    status_project: (data.status_project as Project['status_project']) ?? 'aktif',
+    daftar_invalidasi: (data.daftar_invalidasi as boolean) ?? false,
+    pool_jaminan: (data.pool_jaminan as number) ?? 0,
+    jumlah_validator: (data.jumlah_validator as number) ?? 0,
+    validator_list: (data.validator_list as string[]) ?? [],
+    like_count: (data.like_count as number) ?? 0,
+    anomali_flag: (data.anomali_flag as boolean) ?? false,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+  };
+}
+
+const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
+  beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback',
+};
+
+// ─── Edit Gambar Project Dialog ───────────────────────────────────────────────
+
+interface EditProjectGambarDialogProps {
+  project: Project;
+  onClose: () => void;
+  onSaved: (projectId: string, newUrl: string) => void;
+}
+
+function EditProjectGambarDialog({ project, onClose, onSaved }: EditProjectGambarDialogProps) {
+  const [url, setUrl] = useState(project.gambar_url);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    try { new URL(url); } catch { setError('Harus URL yang valid.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await updateProjectGambar(project.id, url);
+      onSaved(project.id, url);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-      <div
-        className="h-full rounded-full bg-primary transition-all"
-        style={{ width: `${pct}%` }}
-      />
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Gambar Project</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm font-medium">{project.nama_project}</p>
+          <div className="space-y-2">
+            <Label htmlFor="proj-gambar-url">URL Gambar Baru</Label>
+            <Input
+              id="proj-gambar-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <p className="text-xs text-muted-foreground">
+              Akan mengupdate gambar di semua {project.jumlah_nft} NFT dalam project ini.
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Batal</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Simpan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Section: Ringkasan Neraca ────────────────────────────────────────────────
+
+interface RingkasanProps {
+  totalPoin: number;
+  nftDimiliki: number;
+  soldNfts: number;
+  buybackCount: number;
+}
+
+function RingkasanNeraca({ totalPoin, nftDimiliki, soldNfts, buybackCount }: RingkasanProps) {
+  const buybackPct = soldNfts > 0 ? Math.round((buybackCount / soldNfts) * 100) : 0;
+  const isPositif = totalPoin >= 0;
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">Total Poin Neraca</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className={cn('text-2xl font-bold', isPositif ? 'text-green-600' : 'text-destructive')}>
+            {totalPoin >= 0 ? '+' : ''}{formatIDR(totalPoin)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isPositif ? 'akumulasi dari pembelian' : 'akumulasi dari penjualan'}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">NFT Dimiliki</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold">{nftDimiliki}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">unit saat ini</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">NFT Terjual</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold">{soldNfts}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">total semua transaksi jual</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-xs font-medium text-muted-foreground">Persentase Buyback</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className={cn('text-2xl font-bold', buybackPct >= 50 ? 'text-green-600' : '')}>
+            {buybackPct}%
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {soldNfts > 0 ? `${buybackCount} dari ${soldNfts} terjual` : 'belum ada penjualan'}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function VendorStatusCard({ profile, soldNfts }: { profile: User; soldNfts: number }) {
-  const sold = profile.soldNfts ?? 0;
-  const buybackCount = profile.buybackCount ?? 0;
-  const buybackRate = sold > 0 ? Math.round((buybackCount / sold) * 100) : 0;
-  const isTopDev = profile.isTopDeveloper ?? false;
+// ─── Section: Daftar NFT Dimiliki ────────────────────────────────────────────
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Star className="h-4 w-4 text-yellow-400" />
-          Vendor Status
-          {isTopDev && (
-            <Badge className="ml-auto text-xs bg-yellow-400/20 text-yellow-600 border-yellow-400/30">
-              Top Developer
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">NFTs Sold</span>
-            <span className={sold >= 30 ? 'text-green-500 font-semibold' : ''}>{sold}/30</span>
-          </div>
-          <ProgressBar value={sold} max={30} />
-        </div>
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Buyback Rate</span>
-            <span className={buybackRate >= 50 ? 'text-green-500 font-semibold' : ''}>{buybackRate}%/50%</span>
-          </div>
-          <ProgressBar value={buybackRate} max={50} />
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <BadgeCheck className={`h-4 w-4 ${soldNfts > 0 ? 'text-green-500' : 'text-muted-foreground'}`} />
-          <span className="text-muted-foreground">
-            Recommended NFT purchase
-            {soldNfts === 0 && <span className="ml-1 text-xs">(buy a recommended NFT to qualify)</span>}
-          </span>
-        </div>
-        {!isTopDev && (
-          <p className="text-xs text-muted-foreground pt-1 border-t">
-            Criteria: Sell 30+ NFTs · 50%+ buyback rate · Buy 1 recommended NFT
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
+interface DaftarNFTProps {
+  units: NFTUnit[];
+  toggling: string | null;
+  onToggleForSale: (unit: NFTUnit) => void;
 }
 
-function RecommendationManagement({ createdNfts, onChanged }: { createdNfts: NFT[]; onChanged: () => void }) {
-  const [saving, setSaving] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function DaftarNFT({ units, toggling, onToggleForSale }: DaftarNFTProps) {
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
 
-  const validNfts = createdNfts.filter(n => n.isValid);
-  const poolCount = createdNfts.filter(n => n.isRecommended).length;
-
-  const toggle = async (nft: NFT) => {
-    setSaving(nft.id);
-    setError(null);
-    const result = await setNftRecommended(nft.id, !nft.isRecommended);
-    setSaving(null);
-    if (!result.ok) {
-      setError(result.error ?? 'Failed to update.');
-    } else {
-      onChanged();
-    }
-  };
+  if (units.length === 0) {
+    return (
+      <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
+        <p>Belum ada NFT yang kamu miliki.</p>
+        <Button variant="outline" className="mt-3" asChild>
+          <Link href="/explore">Beli NFT di Explorer</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Star className="h-4 w-4 text-yellow-400" />
-          NFT Recommendation Management
-          <Badge variant="outline" className="ml-auto text-xs">{poolCount}/3 slots</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {error && <p className="text-xs text-destructive">{error}</p>}
-        {validNfts.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No validated NFTs to manage. Create and get NFTs validated first.</p>
-        ) : (
-          <div className="space-y-2">
-            {validNfts.map(nft => (
-              <div key={nft.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-muted/40">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{nft.title}</p>
-                  <p className="text-xs text-muted-foreground">{nft.likes} likes</p>
+    <div className="space-y-3">
+      {units.map((unit) => {
+        const imgErr = imgErrors.has(unit.id);
+        const locked = unit.digunakan_validasi;
+
+        return (
+          <div
+            key={unit.id}
+            className="flex gap-3 rounded-xl border bg-card p-3 items-start"
+          >
+            {/* Thumbnail */}
+            <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden shrink-0">
+              {unit.gambar_url && !imgErr ? (
+                <img
+                  src={unit.gambar_url}
+                  alt={unit.nama_nft}
+                  className="w-full h-full object-cover"
+                  onError={() => setImgErrors((prev) => new Set(prev).add(unit.id))}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                  <ImageOff className="h-5 w-5" />
                 </div>
-                <Button
-                  size="sm"
-                  variant={nft.isRecommended ? 'default' : 'outline'}
-                  disabled={saving === nft.id}
-                  onClick={() => toggle(nft)}
-                  className="flex-shrink-0 gap-1 text-xs"
-                >
-                  {saving === nft.id && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {nft.isRecommended ? 'Remove' : 'Add to Pool'}
-                </Button>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-start gap-2 flex-wrap">
+                <p className="font-semibold text-sm leading-snug">{unit.nama_nft}</p>
+                {locked && (
+                  <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+                    <Lock className="h-2.5 w-2.5" />
+                    Dipakai Validasi
+                  </Badge>
+                )}
+                {unit.for_sale && !locked && (
+                  <Badge variant="outline" className="text-xs text-green-600 border-green-300 shrink-0">
+                    Dijual
+                  </Badge>
+                )}
               </div>
-            ))}
+              <p className="text-xs text-muted-foreground">{unit.nama_project}</p>
+              <div className="flex gap-3 text-xs text-muted-foreground">
+                <span>Beli: <span className="text-foreground font-medium">{formatIDR(unit.harga_beli_terakhir)}</span></span>
+                <span>Selisih: <span className={cn('font-medium', unit.nilai_selisih > 0 ? 'text-green-600' : unit.nilai_selisih < 0 ? 'text-destructive' : 'text-foreground')}>
+                  {unit.nilai_selisih >= 0 ? '+' : ''}{formatIDR(unit.nilai_selisih)}
+                </span></span>
+              </div>
+            </div>
+
+            {/* Tombol */}
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <Button
+                size="sm"
+                variant={unit.for_sale ? 'outline' : 'default'}
+                className="h-7 text-xs px-3"
+                disabled={locked || toggling === unit.id}
+                onClick={() => onToggleForSale(unit)}
+                title={locked ? 'Sedang dipakai validasi' : unit.for_sale ? 'Stop menjual' : 'Pasang untuk dijual'}
+              >
+                {toggling === unit.id
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : unit.for_sale ? 'Stop Jual' : 'Jual'
+                }
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs px-3"
+                disabled
+                title="Fitur buyback segera hadir"
+              >
+                <RefreshCcw className="h-3 w-3 mr-1" />
+                Buyback
+              </Button>
+            </div>
           </div>
-        )}
-        <p className="text-xs text-muted-foreground">Max 3 NFTs in pool · 1 per vendor · NFT must be validated</p>
-      </CardContent>
-    </Card>
+        );
+      })}
+    </div>
   );
 }
+
+// ─── Section: Log Transaksi ───────────────────────────────────────────────────
+
+function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
+  if (logs.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-6 text-center">
+        Belum ada transaksi.
+      </p>
+    );
+  }
+
+  return (
+    <div className="divide-y rounded-xl border overflow-hidden">
+      {logs.map((log) => {
+        const isPos = log.delta > 0;
+        const isNeg = log.delta < 0;
+
+        return (
+          <div key={log.id} className="flex items-center gap-3 px-4 py-3 bg-card text-sm">
+            {/* Delta icon */}
+            <div className={cn(
+              'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
+              isPos ? 'bg-green-50 text-green-600' : isNeg ? 'bg-red-50 text-destructive' : 'bg-muted text-muted-foreground',
+            )}>
+              {isPos ? <TrendingUp className="h-4 w-4" /> : isNeg ? <TrendingDown className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+            </div>
+
+            {/* Detail */}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium leading-snug truncate">{log.nama_nft}</p>
+              <p className="text-xs text-muted-foreground">
+                {LOG_TYPE_LABELS[log.type]} · {relativeTime(log.timestamp)}
+              </p>
+            </div>
+
+            {/* Delta amount */}
+            <span className={cn(
+              'font-bold shrink-0',
+              isPos ? 'text-green-600' : isNeg ? 'text-destructive' : 'text-muted-foreground',
+            )}>
+              {formatDelta(log.delta)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Section: Project Saya ────────────────────────────────────────────────────
+
+interface ProjectSayaProps {
+  projects: Project[];
+  ownedCountByProject: Record<string, number>;
+  onEditGambar: (project: Project) => void;
+}
+
+function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSayaProps) {
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
+
+  return (
+    <div className="space-y-3">
+      {projects.map((project) => {
+        const stillOwned = ownedCountByProject[project.id] ?? 0;
+        const terjual = project.jumlah_nft - stillOwned;
+        const imgErr = imgErrors.has(project.id);
+
+        return (
+          <div key={project.id} className="flex gap-3 rounded-xl border bg-card p-3 items-start">
+            {/* Thumbnail */}
+            <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden shrink-0 relative group/img">
+              {project.gambar_url && !imgErr ? (
+                <img
+                  src={project.gambar_url}
+                  alt={project.nama_project}
+                  className="w-full h-full object-cover"
+                  onError={() => setImgErrors((prev) => new Set(prev).add(project.id))}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                  <ImageOff className="h-5 w-5" />
+                </div>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0 space-y-1">
+              <p className="font-semibold text-sm leading-snug">{project.nama_project}</p>
+              <p className="text-xs text-muted-foreground capitalize">
+                {project.kategori} · {project.lokasi_tindakan}
+              </p>
+              <div className="flex gap-3 text-xs text-muted-foreground">
+                <span>
+                  Terjual:
+                  <span className="text-foreground font-medium ml-1">{terjual}/{project.jumlah_nft}</span>
+                </span>
+                <span>
+                  ♥
+                  <span className="text-foreground font-medium ml-1">{project.like_count}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Edit button */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2 shrink-0 gap-1"
+              onClick={() => onEditGambar(project)}
+            >
+              <Pencil className="h-3 w-3" />
+              Gambar
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader className="pb-1"><Skeleton className="h-3 w-24" /></CardHeader>
+            <CardContent><Skeleton className="h-8 w-28" /></CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [fullProfile, setFullProfile] = useState<User | null>(null);
-  const [createdNfts, setCreatedNfts] = useState<NFT[]>([]);
-  const [ownedNfts, setOwnedNfts] = useState<NFT[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
 
-  const load = async () => {
+  const [loading, setLoading] = useState(true);
+  const [totalPoin, setTotalPoin] = useState(0);
+  const [soldNfts, setSoldNfts] = useState(0);
+  const [buybackCount, setBuybackCount] = useState(0);
+  const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
+  const [logs, setLogs] = useState<NeracaLog[]>([]);
+  const [myProjects, setMyProjects] = useState<Project[]>([]);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [editProjectTarget, setEditProjectTarget] = useState<Project | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login');
+  }, [user, authLoading, router]);
+
+  const loadData = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
     try {
-      const [profile, created, owned] = await Promise.all([
-        fetchUserById(user.id),
-        fetchNftsByCreator(user.id),
-        fetchNftsByOwner(user.id),
+      const [userSnap, unitsSnap, logsSnap, projectsSnap] = await Promise.all([
+        getDoc(doc(db, 'users', user.id)),
+        getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
+        getDocs(query(
+          collection(db, 'users', user.id, 'neraca_log'),
+          orderBy('timestamp', 'desc'),
+          limit(20),
+        )),
+        getDocs(query(collection(db, 'projects'), where('developer_id', '==', user.id))),
       ]);
-      setFullProfile(profile);
-      setCreatedNfts(created);
-      setOwnedNfts(owned);
+
+      if (userSnap.exists()) {
+        const d = userSnap.data();
+        setTotalPoin((d.total_poin as number) ?? 0);
+        setSoldNfts((d.soldNfts as number) ?? 0);
+        setBuybackCount((d.buybackCount as number) ?? 0);
+      }
+
+      setOwnedUnits(
+        unitsSnap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>)),
+      );
+      setLogs(
+        logsSnap.docs.map((d) => toNeracaLog(d.id, d.data() as Record<string, unknown>)),
+      );
+      setMyProjects(
+        projectsSnap.docs.map((d) => toProject(d.id, d.data() as Record<string, unknown>)),
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const handleDelete = async (nftId: string) => {
-    if (!window.confirm('Delete this NFT? You have 30 minutes from creation to delete.')) return;
-    setDeleting(nftId);
-    setDeleteError(null);
-    try {
-      await deleteNft(nftId);
-      await load();
-    } catch {
-      setDeleteError('Could not delete this NFT. The 30-minute window may have passed.');
-    } finally {
-      setDeleting(null);
-    }
-  };
+  useEffect(() => { loadData(); }, [loadData]);
 
-  if (!user) {
+  async function handleToggleForSale(unit: NFTUnit) {
+    const newVal = !unit.for_sale;
+    setToggling(unit.id);
+    setOwnedUnits((prev) =>
+      prev.map((u) => (u.id === unit.id ? { ...u, for_sale: newVal } : u)),
+    );
+    try {
+      await toggleForSale(unit.id, newVal);
+    } catch {
+      setOwnedUnits((prev) =>
+        prev.map((u) => (u.id === unit.id ? { ...u, for_sale: !newVal } : u)),
+      );
+    } finally {
+      setToggling(null);
+    }
+  }
+
+  function handleProjectGambarSaved(projectId: string, newUrl: string) {
+    setMyProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, gambar_url: newUrl } : p)),
+    );
+    // Juga update gambar di ownedUnits yang project_id-nya sama
+    setOwnedUnits((prev) =>
+      prev.map((u) => (u.project_id === projectId ? { ...u, gambar_url: newUrl } : u)),
+    );
+  }
+
+  // Hitung jumlah unit per project yang masih dimiliki developer (untuk stat "terjual")
+  const ownedCountByProject = ownedUnits.reduce<Record<string, number>>((acc, u) => {
+    acc[u.project_id] = (acc[u.project_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  if (authLoading || (!user && !authLoading)) {
     return (
       <MainLayout>
-        <div className="max-w-md mx-auto text-center py-16">
-          <h2 className="text-2xl font-headline font-bold mb-2">Sign in required</h2>
-          <p className="text-muted-foreground mb-4">You must be signed in to view your dashboard.</p>
-          <Button asChild>
-            <Link href="/login">Sign In</Link>
-          </Button>
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </MainLayout>
     );
   }
 
-  const isTopDev = fullProfile?.isTopDeveloper ?? false;
-
   return (
     <MainLayout>
-      <div className="space-y-8">
+      <div className="max-w-3xl mx-auto space-y-10">
+
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-headline font-bold mb-1">My Dashboard</h1>
-            <p className="text-muted-foreground">
-              Welcome back, {user.displayName}
-            </p>
+            <h1 className="text-3xl font-bold mb-0.5">Dashboard</h1>
+            <p className="text-muted-foreground text-sm">{user?.displayName ?? user?.email}</p>
           </div>
           <Button asChild>
             <Link href="/create" className="gap-2">
               <PlusCircle className="h-4 w-4" />
-              Create NFT
+              Project Baru
             </Link>
           </Button>
         </div>
 
-        {loading ? (
-          <StatsSkeletons />
-        ) : (
+        {loading ? <DashboardSkeleton /> : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard
-                icon={<Heart className="h-5 w-5 text-red-400" />}
-                label="Total Likes"
-                value={fullProfile?.totalLikes ?? 0}
+            {/* ── 1. Ringkasan Neraca ── */}
+            <section className="space-y-3">
+              <h2 className="font-semibold text-lg">Ringkasan Neraca</h2>
+              <RingkasanNeraca
+                totalPoin={totalPoin}
+                nftDimiliki={ownedUnits.length}
+                soldNfts={soldNfts}
+                buybackCount={buybackCount}
               />
-              <StatCard
-                icon={<ShoppingBag className="h-5 w-5 text-primary" />}
-                label="NFTs Sold"
-                value={fullProfile?.soldNfts ?? 0}
-              />
-              <StatCard
-                icon={<RefreshCcw className="h-5 w-5 text-blue-400" />}
-                label="Buybacks"
-                value={fullProfile?.buybackCount ?? 0}
-              />
-              <StatCard
-                icon={<Star className="h-5 w-5 text-yellow-400" />}
-                label="Status"
-                value={
-                  isTopDev ? (
-                    <Badge className="text-xs bg-yellow-400/20 text-yellow-600 border-yellow-400/30">
-                      Top Developer
-                    </Badge>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Active User</span>
-                  )
-                }
-              />
-            </div>
+            </section>
 
-            {/* Vendor status + recommendation management side by side on lg */}
-            <div className={`grid gap-4 ${isTopDev ? 'lg:grid-cols-2' : 'lg:grid-cols-1 max-w-md'}`}>
-              {fullProfile && (
-                <VendorStatusCard profile={fullProfile} soldNfts={ownedNfts.filter(n => n.isRecommended).length} />
-              )}
-              {isTopDev && (
-                <RecommendationManagement createdNfts={createdNfts} onChanged={load} />
-              )}
-            </div>
+            {/* ── 2. NFT Dimiliki ── */}
+            <section className="space-y-3">
+              <h2 className="font-semibold text-lg">
+                NFT Dimiliki
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({ownedUnits.length} unit)
+                </span>
+              </h2>
+              <DaftarNFT
+                units={ownedUnits}
+                toggling={toggling}
+                onToggleForSale={handleToggleForSale}
+              />
+            </section>
+
+            {/* ── 3. Log Transaksi ── */}
+            <section className="space-y-3">
+              <h2 className="font-semibold text-lg">
+                Log Transaksi
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  (20 terakhir)
+                </span>
+              </h2>
+              <LogTransaksi logs={logs} />
+            </section>
+
+            {/* ── 4. Project Saya ── */}
+            {myProjects.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="font-semibold text-lg">
+                  Project Saya
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({myProjects.length} project)
+                  </span>
+                </h2>
+                <ProjectSaya
+                  projects={myProjects}
+                  ownedCountByProject={ownedCountByProject}
+                  onEditGambar={setEditProjectTarget}
+                />
+              </section>
+            )}
           </>
         )}
-
-        <Tabs defaultValue="created">
-          <TabsList>
-            <TabsTrigger value="created">
-              My NFTs {!loading && `(${createdNfts.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="owned">
-              My Collection {!loading && `(${ownedNfts.length})`}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="created" className="mt-6">
-            {loading ? (
-              <NftGridSkeleton />
-            ) : createdNfts.length > 0 ? (
-              <>
-                {deleteError && (
-                  <p className="text-sm text-destructive mb-4 px-1">{deleteError}</p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {createdNfts.map((nft) => {
-                    const withinWindow = (nft.createdAt.getTime() + 30 * 60 * 1000) > Date.now();
-                    return (
-                      <div key={nft.id} className="relative">
-                        <NftCard nft={nft} creator={user} />
-                        {withinWindow && (
-                          <button
-                            onClick={() => handleDelete(nft.id)}
-                            disabled={deleting === nft.id}
-                            title="Delete NFT (available within 30 min of creation)"
-                            className="absolute top-2 right-2 z-10 rounded-md bg-background/80 p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                          >
-                            {deleting === nft.id
-                              ? <Loader2 className="h-4 w-4 animate-spin" />
-                              : <Trash2 className="h-4 w-4" />
-                            }
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <EmptyState
-                message="You haven't created any NFTs yet."
-                action={{ href: '/create', label: 'Create your first NFT' }}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent value="owned" className="mt-6">
-            {loading ? (
-              <NftGridSkeleton />
-            ) : ownedNfts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {ownedNfts.map((nft) => (
-                  <NftCard key={nft.id} nft={nft} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                message="You don't own any NFTs yet."
-                action={{ href: '/explore', label: 'Explore NFTs' }}
-              />
-            )}
-          </TabsContent>
-        </Tabs>
       </div>
+
+      {/* Edit gambar project dialog */}
+      {editProjectTarget && (
+        <EditProjectGambarDialog
+          project={editProjectTarget}
+          onClose={() => setEditProjectTarget(null)}
+          onSaved={handleProjectGambarSaved}
+        />
+      )}
     </MainLayout>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyState({ message, action }: { message: string; action: { href: string; label: string } }) {
-  return (
-    <div className="text-center py-16 border-2 border-dashed rounded-lg">
-      <p className="text-muted-foreground mb-4">{message}</p>
-      <Button asChild variant="outline">
-        <Link href={action.href}>{action.label}</Link>
-      </Button>
-    </div>
-  );
-}
-
-function StatsSkeletons() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="pb-2">
-              <Skeleton className="h-4 w-24" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-16" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Skeleton className="h-32 w-full max-w-md" />
-    </div>
-  );
-}
-
-function NftGridSkeleton() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="space-y-4">
-          <Skeleton className="h-80 w-full" />
-          <Skeleton className="h-5 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
-      ))}
-    </div>
   );
 }
