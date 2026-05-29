@@ -110,5 +110,13 @@ service cloud.firestore {
       allow read:  if true;
       allow write: if isAdmin();
     }
+
+    // ─── community_config/{docId} ────────────────────────────────────────────
+    // Kontrak sosial komunitas — publik untuk dibaca (halaman /parameters).
+    // Write: hanya admin (ramawan@live.com) untuk inisialisasi dan update.
+    match /community_config/{docId} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
   }
 }

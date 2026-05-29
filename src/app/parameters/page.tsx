@@ -145,7 +145,7 @@ export default function ParametersPage() {
                   Detail: {error}
                 </p>
               )}
-              {user ? (
+              {user?.email === 'ramawan@live.com' ? (
                 <Button
                   size="sm"
                   onClick={handleSeed}
@@ -155,7 +155,7 @@ export default function ParametersPage() {
                   {seeding ? 'Menyimpan ke Firestore...' : 'Inisialisasi Konfigurasi'}
                 </Button>
               ) : (
-                <p className="text-xs italic">Login terlebih dahulu untuk menginisialisasi.</p>
+                <p className="text-xs italic">Hanya administrator yang dapat menginisialisasi.</p>
               )}
             </AlertDescription>
           </Alert>
