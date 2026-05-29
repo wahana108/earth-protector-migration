@@ -70,7 +70,22 @@ export default function ParametersPage() {
           setIsDefault(true);
         }
       })
-      .catch(() => setError('Gagal memuat konfigurasi dari Firestore.'))
+      .catch((err: unknown) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error('getCommunityConfig error:', detail);
+        // Firestore tidak terbaca — tampilkan nilai default + init button
+        setConfig({
+          ...DEFAULT_COMMUNITY_CONFIG,
+          updated_at: new Date(),
+          updated_by: '',
+        });
+        setIsDefault(true);
+        setError(
+          detail.toLowerCase().includes('permission')
+            ? 'Firestore security rules memblokir read. Pastikan rules mengizinkan akses publik ke community_config.'
+            : 'Tidak dapat terhubung ke Firestore. Pastikan emulator berjalan (firebase emulators:start).'
+        );
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -108,7 +123,7 @@ export default function ParametersPage() {
           </div>
           {!loading && (
             <Badge variant={isDefault ? 'outline' : 'secondary'} className="shrink-0 mt-1">
-              {isDefault ? 'Belum Aktif' : `Fase ${config?.fase_aktif}`}
+              {isDefault ? 'Belum Aktif' : `Fase ${config!.fase_aktif}`}
             </Badge>
           )}
         </div>
@@ -118,23 +133,29 @@ export default function ParametersPage() {
           <Alert className="border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30">
             <AlertTriangle className="h-4 w-4 text-yellow-600" />
             <AlertTitle className="text-yellow-800 dark:text-yellow-400">
-              Menampilkan Nilai Default
+              Dokumen Belum Ada di Firestore
             </AlertTitle>
-            <AlertDescription className="text-yellow-700 dark:text-yellow-300 flex items-center justify-between flex-wrap gap-2">
-              <span>
-                Dokumen <code className="font-mono text-xs">community_config/v1</code> belum ada di
-                Firestore. Inisialisasi diperlukan sebelum platform aktif.
-              </span>
-              {user && (
+            <AlertDescription className="text-yellow-700 dark:text-yellow-300 space-y-3">
+              <p>
+                <code className="font-mono text-xs bg-yellow-100 px-1 rounded">community_config/v1</code>{' '}
+                belum diinisialisasi. Nilai default ditampilkan di bawah.
+              </p>
+              {error && (
+                <p className="text-xs opacity-80">
+                  Detail: {error}
+                </p>
+              )}
+              {user ? (
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={handleSeed}
                   disabled={seeding}
-                  className="border-yellow-500 text-yellow-800 hover:bg-yellow-100"
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white"
                 >
-                  {seeding ? 'Menyimpan...' : 'Inisialisasi Sekarang'}
+                  {seeding ? 'Menyimpan ke Firestore...' : 'Inisialisasi Konfigurasi'}
                 </Button>
+              ) : (
+                <p className="text-xs italic">Login terlebih dahulu untuk menginisialisasi.</p>
               )}
             </AlertDescription>
           </Alert>
@@ -153,11 +174,11 @@ export default function ParametersPage() {
           </Alert>
         )}
 
-        {/* Error */}
-        {error && (
+        {/* Error saat seed gagal (bukan error load) */}
+        {!isDefault && error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
+            <AlertTitle>Gagal Menyimpan</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}

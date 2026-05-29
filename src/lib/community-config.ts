@@ -31,10 +31,6 @@ export async function getCommunityConfig(): Promise<CommunityConfig | null> {
 
 export async function seedCommunityConfig(adminUid: string): Promise<void> {
   const ref = doc(db, COLLECTION, DOC_ID);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    throw new Error('community_config sudah ada di Firestore.');
-  }
   await setDoc(ref, {
     ...DEFAULT_COMMUNITY_CONFIG,
     updated_at: serverTimestamp(),
