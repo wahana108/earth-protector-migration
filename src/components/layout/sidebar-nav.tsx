@@ -40,7 +40,7 @@ const navItems = [
   { href: '/validation', label: 'Validation', icon: ShieldCheck },
   { href: '/buyback', label: 'Buyback', icon: RefreshCcw },
   { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { href: '/top-developers', label: 'Rankings', icon: Award },
+  { href: '/top-developers', label: 'Developer Ranking', icon: Award },
   { href: '/recommendations', label: 'For You', icon: Sparkles },
 ];
 
