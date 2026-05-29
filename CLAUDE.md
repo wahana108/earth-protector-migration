@@ -1,246 +1,212 @@
-# CLAUDE.md — The Mother Earth Protocol (TMEP)
-> File ini dibaca otomatis oleh Claude CLI di setiap sesi.
-> Diperbarui: 2026-05-26 | Versi: 1.1
+# CLAUDE.md — The Mother Earth Project (TMEP)
+
+> Dokumen ini adalah instruksi konteks untuk Claude CLI.
+> Baca seluruh dokumen ini sebelum menyentuh kode apapun.
+> Jika ada konflik antara dokumen ini dan kode yang ada, tanyakan ke developer sebelum mengubah apapun.
 
 ---
 
-## 🎯 MISI PROJECT INI
+## Apa proyek ini?
 
-Migrasi platform TMEP dari Lovable (React + Supabase) ke Firebase (Next.js + Firebase Auth + Firestore).
+TMEP adalah platform komunitas untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace NFT biasa. Bukan DeFi konvensional.
 
-**Tujuan utama:**
-1. **Dual Auth** — Google OAuth + Email/Password (tanpa konfirmasi email)
-2. **Firestore** sebagai database pengganti Supabase
-3. **Siap integrasi AI** (Genkit + Gemini) untuk audit log transaksi ke depan
-
-**Status saat ini (2026-05-26):**
-- ✅ Website bisa jalan lokal (npm run dev di port 9002)
-- ✅ Firebase emulator aktif (Auth :9099, Firestore :8080)
-- ✅ Login email/password — berfungsi penuh, tanpa konfirmasi email
-- ✅ Google OAuth — signInWithGoogle() via signInWithPopup, auto-create Firestore user
-- ✅ Protected routes middleware — src/middleware.ts
-- ✅ Firestore security rules — proper rules (tidak ada expiry)
-- ✅ Firestore indexes — 19 composite indexes siap deploy
-- ✅ Seed data script — npm run seed (3 user + 7 NFT ke emulator)
-- 🔴 Seluruh logika bisnis TMEP belum diport dari mockup Lovable
+**Prinsip yang tidak boleh dilanggar dalam implementasi:**
+1. Tidak ada entitas yang memegang dana — semua nilai ada di neraca user dan pool
+2. Algoritma membaca neraca, bukan admin yang memutuskan
+3. Nilai berasal dari tindakan nyata yang bisa diverifikasi
+4. Sistem menjamin antrian likuiditas, bukan return finansial
 
 ---
 
-## 📁 STRUKTUR REPOSITORY
+## Stack teknologi saat ini
 
-| Repo | URL | Keterangan |
-|------|-----|------------|
-| Mockup referensi | https://github.com/wahana108/earth-nft-sanctuary | Lovable + Supabase. JANGAN diubah. Sumber kebenaran logika bisnis. |
-| Project aktif | https://github.com/wahana108/earth-protector-migration | Next.js 15 + Firebase. INI yang dikerjakan. Branch: feature/claude-migration |
-
----
-
-## 🔥 TECH STACK
-
-```
-Framework    : Next.js 15 (App Router)
-Language     : TypeScript
-Auth         : Firebase Authentication
-Database     : Firestore
-AI           : Genkit + Google Gemini 2.5 Flash
-Styling      : Tailwind CSS + shadcn/ui
-Dev Port     : 9002
-Firebase ID  : migration-earth-project
-```
-
-Emulator ports (development only):
-- Auth: 9099 | Firestore: 8080 | Functions: 5001 | UI: 4000
+- **Frontend:** React (Lovable.dev mockup sebagai referensi UI)
+- **Backend:** Firebase (Firestore, Auth, Functions)
+- **Status:** Fase 1 — implementasi logika dasar
 
 ---
 
-## 🔐 AUTH — SPESIFIKASI (PRIORITAS SESI INI)
+## Entitas utama dan relasinya
 
-### Dua Opsi Login yang Harus Ada
-
-**Opsi 1: Email + Password**
-- Signup dengan email + password
-- TIDAK perlu konfirmasi email — hapus sendEmailVerification() jika ada
-- Login langsung setelah signup berhasil
-- Hapus semua "check your email" redirect
-
-**Opsi 2: Google OAuth**
-- Satu klik "Sign in with Google"
-- Jika user baru: otomatis buat dokumen di Firestore users/{uid}
-- Redirect ke /explore setelah berhasil
-
-### File yang Perlu Dibuat/Diupdate
 ```
-src/lib/firebase.ts       ← gunakan env vars, emulator jika localhost
-src/lib/auth.ts           ← signInWithGoogle(), signInWithEmail(), signUpWithEmail(), signOut()
-src/hooks/use-auth.tsx    ← AuthContext + useAuth hook
-src/app/login/page.tsx    ← tambah tombol Google
-src/app/signup/page.tsx   ← hapus konfirmasi email step
-src/middleware.ts         ← protect semua routes kecuali /, /login, /signup
-```
+User
+├── level: 'developer_biasa' | 'top_developer'
+├── neraca: { total_poin, log[] }
+└── validator_aktif: [{ project_id, nft_unit_ids[], nilai_total }]
 
-### Environment Variables (.env.local — JANGAN commit)
-```
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=migration-earth-project
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-GEMINI_API_KEY=
-```
+Project (dibuat Developer)
+├── jumlah_nft = nilai_project / 100000  // default 30 NFT jika nilai Rp 3 juta
+├── status_project: 'aktif' | 'dalam_invalidasi'
+├── pool_jaminan: number
+├── jumlah_validator: number
+└── nft_units: NFTUnit[]
 
-### Firebase Console — Konfigurasi Manual oleh Owner
-```
-1. Authentication → Sign-in method → Email/Password → Enable
-2. Authentication → Sign-in method → Google → Enable
-3. Firestore → Create database → production mode
-4. Deploy rules: firebase deploy --only firestore:rules
-5. Deploy indexes: firebase deploy --only firestore:indexes
+NFTUnit (satuan yang diperjualbelikan)
+├── owner_id
+├── status: 'biasa' | 'valid' | 'invalid'
+├── harga_jual: number  // max Rp 150.000, sistem blokir jika lebih
+├── harga_beli_terakhir: number
+├── nilai_selisih: harga_beli_terakhir - 100000
+├── digunakan_validasi: boolean
+└── project_validasi_id: string | null
+
+PoolRekomendasi
+├── hanya NFT dari top_developer
+├── kapasitas aktif jika >= 30 top_developer atau 90 NFT
+└── nft_valid_list: NFTUnit[]
 ```
 
 ---
 
-## 🗄️ FIRESTORE SCHEMA
+## Aturan bisnis kritis — jangan pernah melanggar ini
 
+### Aturan harga
 ```
-users/{userId}
-  uid, email, displayName, photoURL, createdAt
-  totalLikes (number), soldNfts (number), buybackCount (number), isTopDeveloper (boolean)
-
-nfts/{nftId}
-  title, description, imageUrl, impact
-  category: 'tree_planting' | 'ocean_cleanup' | 'wildlife_protection'
-  likes (number), createdBy (userId), owner (userId|null)
-  forSale (boolean), isValid (boolean), isRecommended (boolean), createdAt
-
-nfts/{nftId}/votes/{userId}
-  voteStatus: 'approve' | 'reject', createdAt
-
-nfts/{nftId}/likes/{userId}
-  createdAt
-
-transactions/{txId}
-  nftId, buyerId, sellerId, proofLink, description
-  type: 'purchase' | 'buyback', createdAt
-
-buybackRequests/{requestId}
-  nftId, buyerId, vendorId
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed'
-  proofUrl (string|null), createdAt
-
-reports/{reportId}
-  transactionId, userId, reason, createdAt
+harga_dasar = 100000  // Rp 100.000, tidak bisa diubah
+batas_atas  = 150000  // Rp 150.000, sistem BLOKIR jika form input melebihi ini
 ```
 
----
+### Aturan neraca saat transaksi jual-beli
+```
+nilai_selisih = harga_jual - harga_dasar
 
-## 🗺️ STATUS FITUR
+PENJUAL: neraca += -(nilai_selisih)   // selalu minus atau nol
+PEMBELI: neraca += +(nilai_selisih)   // selalu plus atau nol
 
-### FASE 1 — AUTH (SEKARANG)
-- ✅ Email/Password login — berfungsi, tanpa konfirmasi email
-- ✅ Google OAuth — signInWithGoogle() via signInWithPopup
-- ✅ Protected routes middleware — src/middleware.ts (cookie-based)
-- ✅ Auto-create user di Firestore saat login pertama — createUserDocumentIfNotExists()
+Contoh jual Rp 120.000:
+  penjual: -20.000
+  pembeli: +20.000
 
-### FASE 2 — FIRESTORE SCHEMA
-- ✅ Security rules — firestore.rules proper (tidak ada expiry, berbasis auth + ownership)
-- ✅ Composite indexes — firestore.indexes.json (19 index untuk Explore, Profile, Buyback, dll.)
-- ✅ Seed data — scripts/seed-firestore.ts (3 user + 7 NFT, jalankan: npm run seed)
-
-### FASE 3 — PORT HALAMAN (setelah Fase 1&2)
-- ✅ Homepage `/` — Firestore data via useNfts hook, kategori gunakan nilai baru
-- ✅ Explore `/explore` — Firestore query + filter + sort, creator avatar dari map
-- ✅ Dashboard `/dashboard` — ringkasan akun: statistik user, tab My NFTs + My Collection
-- ✅ Create `/create` — form create NFT, tulis ke Firestore (isValid=false)
-- ✅ NFT Detail `/nft/[id]` — halaman detail baru, like toggle ke Firestore subcollection
-- ✅ Validation `/validation` — daftar NFT pending, vote approve/reject, auto-validate >= 80%
-- ✅ Top Developers `/top-developers` — ranking dari Firestore topDevelopers, medal rank 1-3, score display, admin Recalculate button
-- ✅ Buyback `/buyback` — two tabs (Sent by Me / Received), vendor confirm+reject, buyer complete
-- ✅ Profile `/profile` — avatar, inline name edit (Firestore+Auth), stats, Top Dev badge, NFT tabs
-- ✅ Recommendations `/recommendations` — grid of isRecommended NFTs from Firestore, creator enriched
-- ✅ Transaction Log `/transactions` — all user txs (buyer+seller), tabs: all/purchases/buybacks, Report Anomaly, Admin Refund
-- ✅ Validated `/validated` — grid of isValid=true NFTs, 80%+ approval required
-- ✅ Refund flow — admin-only, reverts purchase, returns NFT to seller, decrements soldNfts
-- ✅ Top Developer algorithm — Fibonacci cap, soldNfts≥30 + buybackPct≥50% criteria, auto-set isRecommended
-
-**File baru di Fase 3:**
-- `src/lib/firestore.ts` — fetchAllNfts, fetchNftById, fetchUserById, createNft, likeNft, hasUserLiked
-- `src/hooks/use-nfts.ts` — hook: { nfts, creatorsMap, loading, error }
-- `src/components/nft-card.tsx` — terima prop `creator?: User`, hapus placeholder import
-- `src/lib/placeholder-data.ts` — field: createdBy/owner, kategori: tree_planting/ocean_cleanup/wildlife_protection
-
-### FASE 4 — AI (masa depan)
-- 🔵 Anomali detector transaksi (Genkit + Gemini)
-- 🔵 Evaluasi harga tahunan
-- 🔵 Scoring developer otomatis
-
----
-
-## ⚙️ LOGIKA BISNIS INTI (port dari mockup, JANGAN modifikasi)
-
-**Fibonacci Cap untuk Top Developer:**
-```typescript
-function getFibonacciCap(activeUsers: number): number {
-  const fibs = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
-  let cap = 1;
-  for (const f of fibs) {
-    if (f <= activeUsers) cap = f;
-    else break;
-  }
-  return cap;
-}
-// Kriteria Top Developer: soldNfts>=30, buybackPercentage>=50%, pernah beli isRecommended NFT
+Contoh jual Rp 100.000 (harga dasar):
+  penjual: 0
+  pembeli: 0
 ```
 
-**Siklus NFT:**
+**PERHATIAN:** Penjual TIDAK pernah mendapat poin positif dari penjualan. Pembeli TIDAK pernah mendapat poin negatif dari pembelian. Ini fundamental — jangan dibalik.
+
+### Aturan validasi
 ```
-Buat (isValid=false) → Voting → approval>=80% → isValid=true
-→ Beli (proofLink) → owner=buyerId, forSale=false
-→ Buyback request → Vendor confirm → Buyer complete → owner=null, forSale=true
+Unit validasi = NFT Unit (bukan poin parsial)
+User memilih NFT mana (checkbox) untuk digunakan validasi project tertentu
+Setiap NFT yang dipilih = 1 validator dengan nilai = nilai_selisihnya
+
+Setelah digunakan validasi:
+  nft_unit.digunakan_validasi = true
+  nft_unit.project_validasi_id = project.id
+  nft_unit.harga_beli_terakhir = 100000  // reset ke harga dasar untuk buyback
+  project.pool_jaminan += nilai_selisih_nft
+  project.jumlah_validator += 1
+
+User bisa memvalidasi BANYAK project sekaligus dengan NFT yang berbeda-beda
 ```
 
-**Validasi:** Active User/Top Developer bisa vote, 1 vote per user (updatable), 
-auto-validate jika approve>=80%, admin override: ramawan@live.com
-
-**Pool Rekomendasi:** maks 3 NFT, 1 vendor=1 NFT, harus isValid=true
-
----
-
-## ⚠️ ATURAN WAJIB
-
-1. Baca file ini di awal setiap sesi sebelum menulis kode
-2. Cek .env.local ada sebelum npm run dev
-3. Jangan ubah logika bisnis inti
-4. Jangan commit .env.local atau secrets
-5. Gunakan env vars untuk Firebase config, jangan hardcode
-6. Referensi mockup: https://github.com/wahana108/earth-nft-sanctuary
-7. Satu sesi = satu fitur yang tuntas
-8. Update status tabel di atas setiap fitur selesai (🔴 → ✅)
-9. Firestore rules HARUS diupdate sebelum 2026-06-04
-
----
-
-## 📋 TASK SESI PERTAMA
-
-Tujuan: Auth berfungsi penuh (tanpa konfirmasi email + ada Google Login)
-
+### Aturan buyback
 ```
-[ ] 1. git status — pastikan di branch feature/claude-migration
-[ ] 2. Cek .env.local, buat dari template jika belum ada
-[ ] 3. Baca src/lib/auth.ts — identifikasi konfirmasi email yang perlu dihapus
-[ ] 4. Hapus/disable email verification flow dari signup
-[ ] 5. Tambah signInWithGoogle() di src/lib/auth.ts
-[ ] 6. Update login/page.tsx — tambah tombol "Sign in with Google"
-[ ] 7. Update signup/page.tsx — hapus konfirmasi email step
-[ ] 8. Pastikan useAuth hook handle kedua provider
-[ ] 9. Buat middleware.ts — protect routes
-[ ] 10. Test: signup email → langsung masuk tanpa cek email
-[ ] 11. Test: login Google → redirect ke /explore
-[ ] 12. Test: akses protected route tanpa login → redirect /login
-[ ] 13. Commit: "feat: dual auth (email + Google OAuth, no email verification)"
+Skenario A — buyback ke pembuat (ada history transaksi):
+  harga = harga_beli_terakhir yang tersimpan di history
+
+Skenario B — jual ke user lain atau keluar sistem:
+  harga = selalu 100.000 (harga dasar)
+
+Skenario C — NFT sudah digunakan validasi:
+  harga = 100.000 (sudah direset saat validasi)
+```
+
+### Aturan status NFT
+```
+biasa   → default saat diterbitkan
+valid   → ketika project-nya divalidasi oleh top_developer
+invalid → ketika kuota berkurang atau developer turun peringkat
+
+Transisi valid → invalid:
+  TIDAK langsung — ada jeda toleransi waktu
+  NFT masuk daftar_invalidasi = true
+  Status tetap 'valid' sampai terbeli
+  Setelah terbeli → status = 'biasa' (bukan 'valid', tidak kembali ke pool)
+```
+
+### Aturan AI monitoring
+```
+Anomali 0%    → tidak ada tindakan, posisi tidak berubah
+Anomali 1-99% → flag untuk review, dicatat di log
+Anomali 100%  → transaksi dianggap tidak ada (dihapus dari perhitungan)
+
+AI tidak memberi nilai positif — hanya mendeteksi anomali
+Parameter anomali harus transparan dan terdokumentasi
 ```
 
 ---
 
-*TMEP — The Mother Earth Protocol | Impact Indexing Protocol v1.0*
-*"Mengubah Setiap Tindakan Kebaikan Menjadi Aset Digital yang Abadi"*
+## Halaman utama yang perlu diimplementasi
+
+### 0. Community Parameters (publik, read-only)
+Halaman pertama yang di-setup administrator saat komunitas dibentuk. Menampilkan semua variabel sistem secara transparan — harga dasar, batas atas, nilai minimum project, syarat top developer, formula Fibonacci, threshold AI monitoring, dan status fase pengembangan. Semua orang bisa melihat ini sebelum bertransaksi. Hanya administrator yang bisa mengubah nilainya. Ini adalah "kontrak sosial" komunitas yang dipublikasikan.
+
+Data yang disimpan di Firestore collection `community_config` (single document):
+```
+harga_dasar: 100000
+batas_atas: 150000
+nilai_minimum_project: 3000000
+minimum_buyback_pct: 50
+fee_project_pct: { min: 2, max: 5 }
+minimum_top_developer: 30
+kapasitas_pool_minimum: 90
+fase_aktif: 1
+ai_provider: string
+ai_anomali_threshold: { flag: 1, invalid: 100 }
+```
+
+### 1. Explorer (publik)
+Semua NFT dari semua developer bisa ditemukan di sini. Tidak ada filter khusus top developer. User bebas membeli NFT berdasarkan kepercayaan mereka sendiri.
+
+### 2. Pool Rekomendasi
+Hanya NFT valid dari top developer. Ada antrian likuiditas. Hanya aktif jika kapasitas Fibonacci terpenuhi.
+
+### 3. Halaman Validasi
+Menampilkan daftar **project** (bukan NFT satuan) milik top developer. Diurutkan berdasarkan `like_count`. User memilih project yang ingin divalidasi, lalu memilih NFT mana (checkbox) dari dashboard mereka yang akan digunakan.
+
+### 4. Dashboard Neraca
+Menampilkan:
+- Total poin neraca
+- Daftar NFT yang dimiliki (dengan harga beli, nilai selisih, status validasi)
+- Status validator aktif (project mana, nilai terkunci, fee diterima)
+- Log transaksi
+
+### 5. Ranking Developer
+Semua user/developer ditampilkan. Profil dengan anomali tinggi atau neraca minus berkepanjangan ditandai merah.
+
+---
+
+## Yang BELUM diimplementasi (jangan sentuh dulu)
+
+- Fibonacci capacity calculation yang dinamis
+- Fee sharing otomatis ke validator
+- DAPP / blockchain integration
+- Lazy minting NFT
+- Personal blocklist
+- AI monitoring (implementasi penuh)
+
+Fitur-fitur ini ada di manifesto tapi masuk **Fase 2 dan Fase 3**. Fokus Fase 1 adalah logika dasar transaksi, neraca, dan struktur data.
+
+---
+
+## Cara kerja dengan codebase ini
+
+1. **Sebelum membuat fitur baru** — cek apakah logika bisnisnya ada di dokumen ini
+2. **Jika ada ambiguitas** — tanyakan ke developer, jangan asumsikan sendiri
+3. **Jangan ubah aturan harga atau neraca** tanpa konfirmasi eksplisit
+4. **Semua perubahan nilai** harus melalui log transaksi — tidak ada update nilai yang tidak tercatat
+5. **Firebase Functions** adalah tempat semua logika bisnis — jangan taruh di client side
+
+---
+
+## Referensi dokumen lain
+
+- `MANIFESTO.md` — penjelasan untuk komunitas umum
+- `TECHNICAL_MANIFESTO.md` — spesifikasi konsep lengkap
+- `CLAUDE.md` — dokumen ini, instruksi untuk Claude CLI
+
+---
+
+> Versi: 1.0 | Status project: Fase 1 — logika dasar
+> Open source — github.com/TMEP
