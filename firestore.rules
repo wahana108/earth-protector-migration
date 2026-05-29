@@ -118,5 +118,33 @@ service cloud.firestore {
       allow read:  if true;
       allow write: if isAdmin();
     }
+
+    // ─── projects/{projectId} ────────────────────────────────────────────────
+    // Daftar project charity. Publik untuk dibaca.
+    // Create: developer yang login, developer_id harus cocok dengan uid-nya.
+    // Update: developer pemilik project atau admin.
+    // Delete: tidak diizinkan (project adalah rekaman permanen).
+    match /projects/{projectId} {
+      allow read:   if true;
+      allow create: if isAuth() && request.resource.data.developer_id == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isAuth() && resource.data.developer_id == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // ─── nft_units/{nftUnitId} ───────────────────────────────────────────────
+    // Satuan NFT yang diperjualbelikan. Publik untuk dibaca.
+    // Create: hanya oleh developer yang membuat project (developer_id & owner_id = uid).
+    // Update: pemilik saat ini (owner) atau admin.
+    // Delete: tidak diizinkan (unit adalah rekaman permanen).
+    match /nft_units/{nftUnitId} {
+      allow read:   if true;
+      allow create: if isAuth() &&
+        request.resource.data.developer_id == request.auth.uid &&
+        request.resource.data.owner_id == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isAuth() && resource.data.owner_id == request.auth.uid);
+      allow delete: if false;
+    }
   }
 }

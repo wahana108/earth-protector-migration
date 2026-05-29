@@ -100,3 +100,53 @@ export type CommunityConfig = {
   updated_at: Date;
   updated_by: string;
 };
+
+export type ProjectCategory =
+  | 'lingkungan'
+  | 'sosial'
+  | 'pendidikan'
+  | 'kesehatan'
+  | 'lainnya';
+
+export type NFTStatus = 'biasa' | 'valid' | 'invalid';
+
+export type Project = {
+  id: string;
+  developer_id: string;
+  nama_project: string;
+  deskripsi_project: string;
+  gambar_url: string;
+  link_bukti: string;
+  tanggal_tindakan: string;
+  kategori: ProjectCategory;
+  lokasi_tindakan: string;
+  nilai_project: number;
+  harga_jual: number;
+  jumlah_nft: number;
+  status_project: 'aktif' | 'dalam_invalidasi';
+  daftar_invalidasi: boolean;
+  pool_jaminan: number;
+  jumlah_validator: number;
+  validator_list: string[];
+  like_count: number;
+  anomali_flag: boolean;
+  created_at: Date;
+};
+
+export type NFTUnit = {
+  id: string;
+  project_id: string;
+  developer_id: string;
+  owner_id: string;
+  nama_nft: string;
+  gambar_url: string;
+  status: NFTStatus;
+  harga_jual: number;
+  harga_beli_terakhir: number;
+  nilai_selisih: number;
+  for_sale: boolean;
+  digunakan_validasi: boolean;
+  project_validasi_id: string | null;
+  like_count: number;
+  created_at: Date;
+};

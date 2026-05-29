@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PlusCircle, Loader2, ImageOff } from 'lucide-react';
+import { PlusCircle, Loader2, ImageOff, Info } from 'lucide-react';
 import Link from 'next/link';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -28,86 +27,139 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
-import { createNft } from '@/lib/firestore';
-import type { NFTCategory } from '@/lib/types';
+import { getCommunityConfig } from '@/lib/community-config';
+import { createProject } from '@/lib/projects';
+import type { CommunityConfig, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
+const TODAY = new Date().toISOString().split('T')[0];
+
 const schema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
-  imageUrl: z.string().url('Must be a valid URL'),
-  impact: z.string().min(3, 'Impact must be at least 3 characters'),
-  price: z.coerce.number().positive('Price must be greater than 0'),
-  category: z.enum(['tree_planting', 'ocean_cleanup', 'wildlife_protection', 'renewable_energy', 'carbon_reduction', 'ecosystem_restoration']),
+  nama_project: z.string().min(10, 'Min 10 karakter').max(100, 'Max 100 karakter'),
+  deskripsi_project: z.string().min(50, 'Min 50 karakter'),
+  gambar_url: z.string().url('Harus URL yang valid'),
+  link_bukti: z.string().url('Harus URL yang valid'),
+  tanggal_tindakan: z
+    .string()
+    .min(1, 'Tanggal wajib diisi')
+    .refine((d) => new Date(d) <= new Date(), { message: 'Tidak boleh tanggal masa depan' }),
+  kategori: z.enum(['lingkungan', 'sosial', 'pendidikan', 'kesehatan', 'lainnya'] as const),
+  lokasi_tindakan: z.string().min(5, 'Min 5 karakter'),
+  nilai_project: z.coerce.number().positive('Harus lebih dari 0'),
+  harga_jual: z.coerce.number().positive('Harus lebih dari 0'),
 });
 
 type FormData = z.infer<typeof schema>;
-type PreviewStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+const KATEGORI_LABELS: Record<ProjectCategory, string> = {
+  lingkungan: 'Lingkungan',
+  sosial: 'Sosial',
+  pendidikan: 'Pendidikan',
+  kesehatan: 'Kesehatan',
+  lainnya: 'Lainnya',
+};
+
+function formatIDR(n: number) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
 
 export default function CreatePage() {
-  const router = useRouter();
   const { user } = useAuth();
+  const [config, setConfig] = useState<CommunityConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [successData, setSuccessData] = useState<{ projectId: string; jumlahNft: number } | null>(null);
 
   const [previewUrl, setPreviewUrl] = useState('');
-  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
 
   const {
     register,
     handleSubmit,
     setValue,
     watch,
+    setError,
     formState: { errors },
-    reset,
   } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
-  const selectedCategory = watch('category');
-  const imageUrlValue = watch('imageUrl');
+  const watchedNilai = watch('nilai_project');
+  const watchedHarga = watch('harga_jual');
+  const watchedKategori = watch('kategori');
+  const watchedGambar = watch('gambar_url');
 
-  // Debounced image preview — 500ms after last keystroke
   useEffect(() => {
-    if (!imageUrlValue) {
+    getCommunityConfig()
+      .then(setConfig)
+      .catch(() => setConfig(null))
+      .finally(() => setConfigLoading(false));
+  }, []);
+
+  // Debounced image preview
+  useEffect(() => {
+    if (!watchedGambar) {
       setPreviewUrl('');
       setPreviewStatus('idle');
       return;
     }
-
-    // Only attempt preview if it looks like a valid URL
-    try {
-      new URL(imageUrlValue);
-    } catch {
+    try { new URL(watchedGambar); } catch {
       setPreviewUrl('');
       setPreviewStatus('idle');
       return;
     }
-
     setPreviewStatus('loading');
-    const timer = setTimeout(() => {
-      setPreviewUrl(imageUrlValue);
-    }, 500);
+    const t = setTimeout(() => setPreviewUrl(watchedGambar), 600);
+    return () => clearTimeout(t);
+  }, [watchedGambar]);
 
-    return () => clearTimeout(timer);
-  }, [imageUrlValue]);
+  const jumlahNft =
+    config && watchedNilai > 0 ? Math.floor(watchedNilai / config.harga_dasar) : null;
+  const nilaiSelisih =
+    config && watchedHarga > 0 ? watchedHarga - config.harga_dasar : null;
 
   const onSubmit = async (data: FormData) => {
-    if (!user) return;
+    if (!user || !config) return;
+
+    // Config-dependent validation (values come from Firestore, not hardcoded)
+    if (data.nilai_project < config.nilai_minimum_project) {
+      setError('nilai_project', { message: `Minimum ${formatIDR(config.nilai_minimum_project)}` });
+      return;
+    }
+    if (data.harga_jual < config.harga_dasar) {
+      setError('harga_jual', { message: `Minimum ${formatIDR(config.harga_dasar)}` });
+      return;
+    }
+    if (data.harga_jual > config.batas_atas) {
+      setError('harga_jual', { message: `Maximum ${formatIDR(config.batas_atas)}` });
+      return;
+    }
+
     setSubmitting(true);
+    setSubmitError('');
     try {
-      const nftId = await createNft({
-        title: data.title,
-        description: data.description,
-        imageUrl: data.imageUrl,
-        impact: data.impact,
-        price: data.price,
-        category: data.category as NFTCategory,
-        createdBy: user.id,
+      const jumlah = Math.floor(data.nilai_project / config.harga_dasar);
+      const projectId = await createProject({
+        developer_id: user.id,
+        nama_project: data.nama_project,
+        deskripsi_project: data.deskripsi_project,
+        gambar_url: data.gambar_url,
+        link_bukti: data.link_bukti,
+        tanggal_tindakan: data.tanggal_tindakan,
+        kategori: data.kategori as ProjectCategory,
+        lokasi_tindakan: data.lokasi_tindakan,
+        nilai_project: data.nilai_project,
+        harga_jual: data.harga_jual,
+        harga_dasar: config.harga_dasar,
       });
-      setSuccess(true);
-      reset();
-      setTimeout(() => router.push(`/nft/${nftId}`), 1500);
+      setSuccessData({ projectId, jumlahNft: jumlah });
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Gagal membuat project. Coba lagi.');
     } finally {
       setSubmitting(false);
     }
@@ -117,11 +169,56 @@ export default function CreatePage() {
     return (
       <MainLayout>
         <div className="max-w-md mx-auto text-center py-16">
-          <h2 className="text-2xl font-headline font-bold mb-2">Sign in required</h2>
-          <p className="text-muted-foreground mb-4">You must be signed in to create an NFT.</p>
-          <Button asChild>
-            <Link href="/login">Sign In</Link>
+          <h2 className="text-2xl font-bold mb-2">Login diperlukan</h2>
+          <p className="text-muted-foreground mb-4">Kamu harus login untuk mendaftarkan project NFT.</p>
+          <Button asChild><Link href="/login">Login</Link></Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (configLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!config) {
+    return (
+      <MainLayout>
+        <div className="max-w-md mx-auto text-center py-16">
+          <p className="text-muted-foreground">
+            Konfigurasi komunitas belum tersedia. Hubungi administrator.
+          </p>
+          <Button variant="outline" className="mt-4" asChild>
+            <Link href="/parameters">Lihat Parameters</Link>
           </Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (successData) {
+    return (
+      <MainLayout>
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <div className="text-5xl">🌱</div>
+          <h2 className="text-2xl font-bold">Project berhasil didaftarkan!</h2>
+          <p className="text-muted-foreground">
+            <strong>{successData.jumlahNft} NFT unit</strong> telah dibuat otomatis dan siap dijual.
+          </p>
+          <div className="flex gap-3 justify-center pt-2">
+            <Button variant="outline" asChild>
+              <Link href="/explore">Lihat di Explorer</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/dashboard">Dashboard Saya</Link>
+            </Button>
+          </div>
         </div>
       </MainLayout>
     );
@@ -129,132 +226,270 @@ export default function CreatePage() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">Create Impact NFT</h1>
+          <h1 className="text-3xl font-bold mb-1">Daftarkan Project NFT</h1>
           <p className="text-muted-foreground">
-            Mint a new environmental impact NFT. It will be pending community validation before going live.
+            Dokumentasikan tindakan nyatamu dan jadikan NFT sebagai bukti kontribusi yang abadi.
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>NFT Details</CardTitle>
-            <CardDescription>
-              Fill in the details for your new environmental NFT.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {success ? (
-              <div className="text-center py-8 space-y-2">
-                <div className="text-4xl">🌱</div>
-                <p className="text-lg font-semibold text-primary">NFT Created!</p>
-                <p className="text-muted-foreground">Your NFT is pending validation. Redirecting to NFT page...</p>
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+          <Info className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            Harga dasar: <strong>{formatIDR(config.harga_dasar)}</strong>
+            {' · '}
+            Batas atas: <strong>{formatIDR(config.batas_atas)}</strong>
+            {' · '}
+            Nilai min project: <strong>{formatIDR(config.nilai_minimum_project)}</strong>
+          </span>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* ── Informasi Project ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informasi Project</CardTitle>
+              <CardDescription>
+                Detail tindakan nyata yang akan diabadikan sebagai NFT.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="nama_project">Nama Project *</Label>
+                <Input
+                  id="nama_project"
+                  placeholder="Contoh: Penanaman 100 Pohon Mangrove"
+                  {...register('nama_project')}
+                />
+                {errors.nama_project && (
+                  <p className="text-sm text-destructive">{errors.nama_project.message}</p>
+                )}
               </div>
-            ) : (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input id="title" placeholder="e.g. Amazon Reforestation" {...register('title')} />
-                  {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe the environmental impact of this NFT..."
-                    rows={4}
-                    {...register('description')}
-                  />
-                  {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="deskripsi_project">Deskripsi *</Label>
+                <Textarea
+                  id="deskripsi_project"
+                  placeholder="Ceritakan tindakan nyata yang kamu lakukan, dampaknya, dan siapa yang terlibat..."
+                  rows={4}
+                  {...register('deskripsi_project')}
+                />
+                {errors.deskripsi_project && (
+                  <p className="text-sm text-destructive">{errors.deskripsi_project.message}</p>
+                )}
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Image URL</Label>
-                  <Input id="imageUrl" placeholder="https://..." {...register('imageUrl')} />
-                  {errors.imageUrl && <p className="text-sm text-destructive">{errors.imageUrl.message}</p>}
-
-                  {/* Image preview */}
-                  {previewStatus !== 'idle' && (
-                    <div className="relative mt-2 aspect-video w-full overflow-hidden rounded-lg border bg-muted">
-                      {previewStatus === 'loading' && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        </div>
+                  <Label htmlFor="kategori">Kategori *</Label>
+                  <Select
+                    value={watchedKategori}
+                    onValueChange={(v) =>
+                      setValue('kategori', v as ProjectCategory, { shouldValidate: true })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.entries(KATEGORI_LABELS) as [ProjectCategory, string][]).map(
+                        ([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        )
                       )}
-                      {previewStatus === 'error' && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                          <ImageOff className="h-8 w-8" />
-                          <p className="text-sm">Could not load image. Check the URL.</p>
-                        </div>
-                      )}
-                      {previewUrl && (
-                        <img
-                          src={previewUrl}
-                          alt="Preview"
-                          className={cn(
-                            'h-full w-full object-cover transition-opacity duration-300',
-                            previewStatus === 'loaded' ? 'opacity-100' : 'opacity-0'
-                          )}
-                          onLoad={() => setPreviewStatus('loaded')}
-                          onError={() => setPreviewStatus('error')}
-                        />
-                      )}
-                    </div>
+                    </SelectContent>
+                  </Select>
+                  {errors.kategori && (
+                    <p className="text-sm text-destructive">{errors.kategori.message}</p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="impact">Impact Statement</Label>
-                  <Input id="impact" placeholder="e.g. 100 trees planted" {...register('impact')} />
-                  {errors.impact && <p className="text-sm text-destructive">{errors.impact.message}</p>}
+                  <Label htmlFor="tanggal_tindakan">Tanggal Tindakan *</Label>
+                  <Input
+                    id="tanggal_tindakan"
+                    type="date"
+                    max={TODAY}
+                    {...register('tanggal_tindakan')}
+                  />
+                  {errors.tanggal_tindakan && (
+                    <p className="text-sm text-destructive">{errors.tanggal_tindakan.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lokasi_tindakan">Lokasi Tindakan *</Label>
+                <Input
+                  id="lokasi_tindakan"
+                  placeholder="Contoh: Parangtritis, Bantul, DIY"
+                  {...register('lokasi_tindakan')}
+                />
+                {errors.lokasi_tindakan && (
+                  <p className="text-sm text-destructive">{errors.lokasi_tindakan.message}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Bukti & Dokumentasi ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Bukti &amp; Dokumentasi</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="gambar_url">URL Gambar Project *</Label>
+                <Input
+                  id="gambar_url"
+                  type="url"
+                  placeholder="https://drive.google.com/... atau https://i.imgur.com/..."
+                  {...register('gambar_url')}
+                />
+                {errors.gambar_url && (
+                  <p className="text-sm text-destructive">{errors.gambar_url.message}</p>
+                )}
+
+                {previewStatus !== 'idle' && (
+                  <div className="relative mt-2 aspect-video w-full overflow-hidden rounded-lg border bg-muted">
+                    {previewStatus === 'loading' && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                    {previewStatus === 'error' && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                        <ImageOff className="h-8 w-8" />
+                        <p className="text-sm">Gambar tidak bisa dimuat. Periksa URL.</p>
+                      </div>
+                    )}
+                    {previewUrl && (
+                      <img
+                        src={previewUrl}
+                        alt="Preview gambar project"
+                        className={cn(
+                          'h-full w-full object-cover transition-opacity duration-300',
+                          previewStatus === 'loaded' ? 'opacity-100' : 'opacity-0'
+                        )}
+                        onLoad={() => setPreviewStatus('loaded')}
+                        onError={() => setPreviewStatus('error')}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="link_bukti">Link Bukti *</Label>
+                <Input
+                  id="link_bukti"
+                  type="url"
+                  placeholder="https://drive.google.com/... (foto/video/dokumen)"
+                  {...register('link_bukti')}
+                />
+                {errors.link_bukti && (
+                  <p className="text-sm text-destructive">{errors.link_bukti.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Link ke dokumentasi tindakan nyata — Google Drive, YouTube, atau platform serupa.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Nilai & Harga NFT ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Nilai &amp; Harga NFT</CardTitle>
+              <CardDescription>
+                Jumlah NFT dihitung otomatis: nilai project ÷ harga dasar ({formatIDR(config.harga_dasar)}).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nilai_project">Nilai Project (Rp) *</Label>
+                  <Input
+                    id="nilai_project"
+                    type="number"
+                    step="100000"
+                    min={config.nilai_minimum_project}
+                    placeholder={String(config.nilai_minimum_project)}
+                    {...register('nilai_project')}
+                  />
+                  {errors.nilai_project && (
+                    <p className="text-sm text-destructive">{errors.nilai_project.message}</p>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price (ETH)</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="1.5"
-                      {...register('price')}
-                    />
-                    {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={selectedCategory}
-                      onValueChange={(v) => setValue('category', v as NFTCategory, { shouldValidate: true })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tree_planting">Tree Planting</SelectItem>
-                        <SelectItem value="ocean_cleanup">Ocean Cleanup</SelectItem>
-                        <SelectItem value="wildlife_protection">Wildlife Protection</SelectItem>
-                        <SelectItem value="renewable_energy">Renewable Energy</SelectItem>
-                        <SelectItem value="carbon_reduction">Carbon Reduction</SelectItem>
-                        <SelectItem value="ecosystem_restoration">Ecosystem Restoration</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="harga_jual">Harga Jual per NFT (Rp) *</Label>
+                  <Input
+                    id="harga_jual"
+                    type="number"
+                    step="1000"
+                    min={config.harga_dasar}
+                    max={config.batas_atas}
+                    placeholder={String(config.harga_dasar)}
+                    {...register('harga_jual')}
+                  />
+                  {errors.harga_jual && (
+                    <p className="text-sm text-destructive">{errors.harga_jual.message}</p>
+                  )}
                 </div>
+              </div>
 
-                <Button type="submit" className="w-full gap-2" disabled={submitting}>
-                  <PlusCircle className="h-5 w-5" />
-                  {submitting ? 'Creating...' : 'Create NFT'}
-                </Button>
-              </form>
+              {(jumlahNft !== null || nilaiSelisih !== null) && (
+                <div className="rounded-lg border bg-muted/50 p-4 space-y-2 text-sm">
+                  {jumlahNft !== null && jumlahNft > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Jumlah NFT yang akan dibuat</span>
+                      <span className="font-semibold">{jumlahNft} unit</span>
+                    </div>
+                  )}
+                  {nilaiSelisih !== null && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Nilai selisih per NFT</span>
+                      <span className="font-semibold">
+                        {nilaiSelisih >= 0 ? '+' : ''}
+                        {formatIDR(nilaiSelisih)}
+                      </span>
+                    </div>
+                  )}
+                  {nilaiSelisih !== null && nilaiSelisih > 0 && (
+                    <p className="text-xs text-muted-foreground pt-1 border-t">
+                      Saat NFT terjual, neracamu berkurang {formatIDR(nilaiSelisih)}{' '}
+                      dan neraca pembeli bertambah {formatIDR(nilaiSelisih)}.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {submitError && (
+            <p className="text-sm text-destructive rounded-lg bg-destructive/10 px-4 py-3">
+              {submitError}
+            </p>
+          )}
+
+          <Button type="submit" className="w-full gap-2" size="lg" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Membuat project dan NFT...
+              </>
+            ) : (
+              <>
+                <PlusCircle className="h-4 w-4" />
+                Daftarkan Project
+              </>
             )}
-          </CardContent>
-        </Card>
+          </Button>
+        </form>
       </div>
     </MainLayout>
   );
