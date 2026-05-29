@@ -20,14 +20,21 @@ service cloud.firestore {
 
     // ─── users/{userId} ───────────────────────────────────────────────────────
     // Profil publik antar user yang login. Hanya pemilik atau admin yang bisa edit.
-    // Pengecualian: field soldNfts boleh di-increment oleh buyer saat buy flow.
+    // Pengecualian: buy flow perlu update total_poin + soldNfts milik counterparty.
     match /users/{userId} {
       allow read:   if isAuth();
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
-        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['soldNfts'])) ||
-        (isAuth() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalLikes']));
+        (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin']));
       allow delete: if isAdmin();
+
+      // neraca_log/{logId} — log transaksi per user, immutable setelah dibuat
+      match /neraca_log/{logId} {
+        allow read:           if isMe(userId) || isAdmin();
+        allow create:         if isAuth();
+        allow update, delete: if isAdmin();
+      }
     }
 
     // ─── nfts/{nftId} ─────────────────────────────────────────────────────────
@@ -144,8 +151,19 @@ service cloud.firestore {
         request.resource.data.owner_id == request.auth.uid;
       allow update: if isAdmin() ||
         (isAuth() && resource.data.owner_id == request.auth.uid) ||
-        (isAuth() && resource.data.developer_id == request.auth.uid);
+        (isAuth() && resource.data.developer_id == request.auth.uid) ||
+        // Buy flow: siapapun yang auth boleh ambil NFT for_sale, tapi hanya 3 field ini
+        (isAuth() && resource.data.for_sale == true &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir']));
       allow delete: if false;
+
+      // history_kepemilikan/{historyId} — rekaman perpindahan tangan, publik & immutable
+      match /history_kepemilikan/{historyId} {
+        allow read:           if true;
+        allow create:         if isAuth();
+        allow update, delete: if isAdmin();
+      }
 
       // likes/{userId} — 1 like per user, tidak bisa diubah, hanya create/delete
       match /likes/{likerId} {

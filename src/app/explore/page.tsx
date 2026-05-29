@@ -23,7 +23,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleNftLike, updateNftUnitGambar, updateProjectGambar } from '@/lib/projects';
+import { getCommunityConfig } from '@/lib/community-config';
+import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError } from '@/lib/projects';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +69,91 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     like_count: (data.like_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
+}
+
+// ─── Buy Dialog ──────────────────────────────────────────────────────────────
+
+interface BuyDialogProps {
+  unit: NFTUnit;
+  buyerId: string;
+  hargaDasar: number;
+  batasAtas: number;
+  onClose: () => void;
+  onSuccess: (nftId: string, buyerId: string) => void;
+}
+
+function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
+  const [buying, setBuying] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setBuying(true);
+    setError('');
+    try {
+      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas);
+      onSuccess(unit.id, buyerId);
+      onClose();
+    } catch (err: unknown) {
+      setError(
+        err instanceof BuyError
+          ? err.message
+          : 'Transaksi gagal. Coba lagi.',
+      );
+    } finally {
+      setBuying(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Konfirmasi Pembelian</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
+            <div className="pt-2 border-t space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga</span>
+                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Neracamu bertambah</span>
+                <span className="font-semibold text-green-600">
+                  +{formatIDR(unit.nilai_selisih)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {unit.nilai_selisih === 0 && (
+            <p className="text-xs text-muted-foreground">
+              NFT ini dijual di harga dasar — neraca tidak berubah untuk kedua pihak.
+            </p>
+          )}
+
+          {error && (
+            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={buying}>
+            Batal
+          </Button>
+          <Button onClick={handleConfirm} disabled={buying}>
+            {buying && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Konfirmasi Beli
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Edit Gambar Dialog ───────────────────────────────────────────────────────
@@ -158,14 +244,21 @@ interface NftUnitCardProps {
   unit: NFTUnit;
   isLiked: boolean;
   likingId: string | null;
+  buyingId: string | null;
   currentUserId: string | undefined;
+  configLoaded: boolean;
   onLike: (unit: NFTUnit) => void;
+  onBuy: (unit: NFTUnit) => void;
   onEditGambar: (unit: NFTUnit) => void;
 }
 
-function NftUnitCard({ unit, isLiked, likingId, currentUserId, onLike, onEditGambar }: NftUnitCardProps) {
+function NftUnitCard({
+  unit, isLiked, likingId, buyingId, currentUserId, configLoaded, onLike, onBuy, onEditGambar,
+}: NftUnitCardProps) {
   const [imgError, setImgError] = useState(false);
   const canEdit = !!currentUserId && currentUserId === unit.developer_id;
+  const isOwn = !!currentUserId && currentUserId === unit.owner_id;
+  const canBuy = !!currentUserId && !isOwn && unit.for_sale && configLoaded;
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden group flex flex-col">
@@ -229,11 +322,20 @@ function NftUnitCard({ unit, isLiked, likingId, currentUserId, onLike, onEditGam
           <Button
             size="sm"
             className="flex-1 h-8 text-xs gap-1"
-            disabled
-            title="Fitur beli akan tersedia segera"
+            disabled={!canBuy || buyingId === unit.id}
+            onClick={canBuy ? () => onBuy(unit) : undefined}
+            title={
+              !currentUserId ? 'Login untuk membeli' :
+              isOwn ? 'Ini NFT milikmu' :
+              !unit.for_sale ? 'NFT ini sudah terjual' :
+              !configLoaded ? 'Memuat konfigurasi...' :
+              'Beli NFT ini'
+            }
           >
-            <ShoppingCart className="h-3 w-3" />
-            Beli
+            {buyingId === unit.id
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <ShoppingCart className="h-3 w-3" />}
+            {isOwn ? 'Milikmu' : !unit.for_sale ? 'Terjual' : 'Beli'}
           </Button>
           <Button
             size="sm"
@@ -269,6 +371,9 @@ function ExploreContent() {
   const [likedSet, setLikedSet] = useState<Set<string>>(new Set());
   const [likingId, setLikingId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<NFTUnit | null>(null);
+  const [buyTarget, setBuyTarget] = useState<NFTUnit | null>(null);
+  const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
 
   // Fetch nft_units — sorted by like_count desc, optionally filtered by kategori
   const loadUnits = useCallback(async (kat: ProjectCategory | 'semua') => {
@@ -287,6 +392,12 @@ function ExploreContent() {
   }, []);
 
   useEffect(() => { loadUnits(kategori); }, [kategori, loadUnits]);
+
+  useEffect(() => {
+    getCommunityConfig()
+      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas }); })
+      .catch(() => {});
+  }, []);
 
   // Setelah units dimuat, cek like status untuk user yang login
   useEffect(() => {
@@ -348,6 +459,15 @@ function ExploreContent() {
     } finally {
       setLikingId(null);
     }
+  }
+
+  function handleBuySuccess(nftId: string, newOwnerId: string) {
+    setBuyingId(null);
+    setUnits((prev) =>
+      prev.map((u) =>
+        u.id === nftId ? { ...u, owner_id: newOwnerId, for_sale: false } : u,
+      ),
+    );
   }
 
   function handleGambarSaved(nftId: string, newUrl: string, scope: 'unit' | 'project') {
@@ -421,8 +541,11 @@ function ExploreContent() {
                 unit={unit}
                 isLiked={likedSet.has(unit.id)}
                 likingId={likingId}
+                buyingId={buyingId}
                 currentUserId={user?.id}
+                configLoaded={!!config}
                 onLike={handleLike}
+                onBuy={setBuyTarget}
                 onEditGambar={setEditTarget}
               />
             ))}
@@ -442,6 +565,18 @@ function ExploreContent() {
           unit={editTarget}
           onClose={() => setEditTarget(null)}
           onSaved={handleGambarSaved}
+        />
+      )}
+
+      {/* Buy dialog */}
+      {buyTarget && user && config && (
+        <BuyDialog
+          unit={buyTarget}
+          buyerId={user.id}
+          hargaDasar={config.harga_dasar}
+          batasAtas={config.batas_atas}
+          onClose={() => setBuyTarget(null)}
+          onSuccess={handleBuySuccess}
         />
       )}
     </MainLayout>

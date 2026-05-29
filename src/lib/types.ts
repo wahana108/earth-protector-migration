@@ -12,6 +12,7 @@ export type User = {
   photoURL: string | null;
   email: string | null;
   createdAt: Date;
+  total_poin?: number;
   totalLikes?: number;
   soldNfts?: number;
   buybackCount?: number;
@@ -131,6 +132,26 @@ export type Project = {
   like_count: number;
   anomali_flag: boolean;
   created_at: Date;
+};
+
+export type NeracaLog = {
+  id: string;
+  type: 'beli' | 'jual' | 'validasi' | 'buyback';
+  nft_unit_id: string;
+  nama_nft: string;
+  harga_transaksi: number;
+  nilai_selisih: number;
+  delta: number;
+  counterparty_id: string;
+  timestamp: Date;
+};
+
+export type HistoryKepemilikan = {
+  id: string;
+  dari: string;
+  ke: string;
+  harga: number;
+  timestamp: Date;
 };
 
 export type NFTUnit = {
