@@ -177,16 +177,93 @@ Semua user/developer ditampilkan. Profil dengan anomali tinggi atau neraca minus
 
 ---
 
+## Form pendaftaran NFT project — field wajib
+
+```
+FIELD WAJIB (sistem tolak jika kosong):
+├── nama_project       : string   — untuk listing index project
+├── nama_nft           : string   — identitas satuan NFT
+├── link_bukti         : string   — URL dokumentasi nyata (foto/video/dokumen)
+├── tanggal_tindakan   : date     — AI gunakan untuk deteksi anomali waktu
+├── kategori           : enum     — lingkungan/sosial/pendidikan/kesehatan/lainnya
+├── nilai_project      : number   — min Rp 3.000.000
+└── harga_jual         : number   — Rp 100.000–150.000, sistem blokir jika lebih
+
+FIELD DISARANKAN:
+├── lokasi_tindakan    : string   — nama tempat atau koordinat
+├── deskripsi_project  : string   — narasi singkat, AI cek konsistensi dengan kategori
+└── jumlah_nft         : number   — otomatis: nilai_project / 100.000 (tidak perlu diisi user)
+```
+
+## Index halaman — Fase 1
+
+```
+Index NFT      → urut berdasarkan like_count per NFT unit
+                 filter berdasarkan kategori charity
+
+Index Project  → urut berdasarkan akumulasi like semua NFT-nya
+                 tampilkan jumlah NFT terjual vs total
+
+Index Developer→ urut berdasarkan persentase buyback (transparan dari awal)
+                 tandai merah jika anomali_score tinggi
+                 (belum ada badge Top Developer — syarat belum bisa terpenuhi Fase 1)
+```
+
+## Komentar per NFT — Fase 1
+
+Komentar ditempatkan di kartu NFT, bukan di halaman project.
+
+```
+Struktur Firestore:
+nft_units/{nftId}/comments/{commentId}
+  ├── user_id       : string
+  ├── display_name  : string
+  ├── text          : string (max 500 karakter)
+  ├── timestamp     : Timestamp
+  └── anomali_flag  : boolean (default false)
+
+Fase 1: teks + user + timestamp saja
+Fase 2: reply/thread, like komentar, report komentar, AI moderasi
+```
+
+## AI Monitoring — Fase 1 (ringan)
+
+```
+Yang diimplementasi Fase 1:
+→ HTTP check: apakah link_bukti URL masih aktif saat project didaftarkan
+→ Tandai project dengan anomali_flag jika link mati setelah diterbitkan
+→ Cek berkala (tidak real-time)
+
+Yang ditunda Fase 2:
+→ Analisis pola transaksi anomali
+→ Konsistensi deskripsi vs kategori
+→ Deteksi jual-beli sendiri untuk manipulasi poin
+```
+
+## Urutan implementasi Fase 1
+
+```
+① Form pendaftaran project NFT (dengan semua field wajib)
+② Logika transaksi beli NFT (neraca penjual minus, pembeli plus)
+③ Dashboard neraca user (total poin, daftar NFT, log transaksi)
+④ Index NFT + Project + Developer (explorer dengan sorting/filter)
+⑤ Komentar per kartu NFT (sederhana, tanpa thread)
+⑥ AI ringan — validasi link bukti (HTTP check)
+```
+
 ## Yang BELUM diimplementasi (jangan sentuh dulu)
 
 - Fibonacci capacity calculation yang dinamis
 - Fee sharing otomatis ke validator
+- Validasi bergulir otomatis
 - DAPP / blockchain integration
 - Lazy minting NFT
 - Personal blocklist
-- AI monitoring (implementasi penuh)
+- AI monitoring penuh (analisis anomali transaksi)
+- Reply/thread komentar
+- Badge Top Developer
 
-Fitur-fitur ini ada di manifesto tapi masuk **Fase 2 dan Fase 3**. Fokus Fase 1 adalah logika dasar transaksi, neraca, dan struktur data.
+Fitur-fitur ini masuk **Fase 2 dan Fase 3**. Fokus Fase 1 adalah logika dasar transaksi, neraca, struktur data, index, dan komentar sederhana.
 
 ---
 
