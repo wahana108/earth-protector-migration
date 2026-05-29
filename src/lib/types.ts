@@ -139,7 +139,9 @@ export type NFTUnit = {
   developer_id: string;
   owner_id: string;
   nama_nft: string;
+  nama_project: string;
   gambar_url: string;
+  kategori: ProjectCategory;
   status: NFTStatus;
   harga_jual: number;
   harga_beli_terakhir: number;

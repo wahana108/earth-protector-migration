@@ -135,7 +135,7 @@ service cloud.firestore {
     // ─── nft_units/{nftUnitId} ───────────────────────────────────────────────
     // Satuan NFT yang diperjualbelikan. Publik untuk dibaca.
     // Create: hanya oleh developer yang membuat project (developer_id & owner_id = uid).
-    // Update: pemilik saat ini (owner) atau admin.
+    // Update: pemilik saat ini (owner) ATAU developer asal (untuk edit gambar/metadata).
     // Delete: tidak diizinkan (unit adalah rekaman permanen).
     match /nft_units/{nftUnitId} {
       allow read:   if true;
@@ -143,8 +143,17 @@ service cloud.firestore {
         request.resource.data.developer_id == request.auth.uid &&
         request.resource.data.owner_id == request.auth.uid;
       allow update: if isAdmin() ||
-        (isAuth() && resource.data.owner_id == request.auth.uid);
+        (isAuth() && resource.data.owner_id == request.auth.uid) ||
+        (isAuth() && resource.data.developer_id == request.auth.uid);
       allow delete: if false;
+
+      // likes/{userId} — 1 like per user, tidak bisa diubah, hanya create/delete
+      match /likes/{likerId} {
+        allow read:   if true;
+        allow create: if isMe(likerId);
+        allow delete: if isMe(likerId) || isAdmin();
+        allow update: if false;
+      }
     }
   }
 }

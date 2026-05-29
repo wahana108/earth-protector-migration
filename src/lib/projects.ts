@@ -1,5 +1,8 @@
 import { db } from './firebase';
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import {
+  collection, doc, writeBatch, serverTimestamp,
+  getDocs, query, where, updateDoc, runTransaction,
+} from 'firebase/firestore';
 import type { ProjectCategory } from './types';
 
 export type CreateProjectInput = {
@@ -56,7 +59,9 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
       developer_id: input.developer_id,
       owner_id: input.developer_id,
       nama_nft: `${input.nama_project} #${paddedNum}`,
+      nama_project: input.nama_project,
       gambar_url: input.gambar_url,
+      kategori: input.kategori,
       status: 'biasa',
       harga_jual: input.harga_jual,
       harga_beli_terakhir: input.harga_jual,
@@ -71,4 +76,52 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
 
   await batch.commit();
   return projectId;
+}
+
+// Update gambar_url di project + cascade ke semua nft_units dalam project tersebut
+export async function updateProjectGambar(
+  projectId: string,
+  gambar_url: string,
+): Promise<void> {
+  const projectRef = doc(db, 'projects', projectId);
+  const unitsSnap = await getDocs(
+    query(collection(db, 'nft_units'), where('project_id', '==', projectId)),
+  );
+
+  const batch = writeBatch(db);
+  batch.update(projectRef, { gambar_url });
+  unitsSnap.docs.forEach((d) => batch.update(d.ref, { gambar_url }));
+  await batch.commit();
+}
+
+// Update gambar_url pada satu nft_unit saja (tanpa cascade)
+export async function updateNftUnitGambar(
+  nftUnitId: string,
+  gambar_url: string,
+): Promise<void> {
+  await updateDoc(doc(db, 'nft_units', nftUnitId), { gambar_url });
+}
+
+// Toggle like pada nft_unit — atomic via transaction
+export async function toggleNftLike(
+  nftUnitId: string,
+  userId: string,
+  currentlyLiked: boolean,
+): Promise<void> {
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+  const likeRef = doc(db, 'nft_units', nftUnitId, 'likes', userId);
+
+  await runTransaction(db, async (tx) => {
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) throw new Error('NFT unit tidak ditemukan.');
+    const count: number = nftSnap.data().like_count ?? 0;
+
+    if (currentlyLiked) {
+      tx.delete(likeRef);
+      tx.update(nftRef, { like_count: Math.max(0, count - 1) });
+    } else {
+      tx.set(likeRef, { user_id: userId, created_at: serverTimestamp() });
+      tx.update(nftRef, { like_count: count + 1 });
+    }
+  });
 }
