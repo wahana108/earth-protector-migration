@@ -218,6 +218,106 @@ export async function buyNftUnit(
   });
 }
 
+// ─── Buyback ──────────────────────────────────────────────────────────────────
+
+export class BuybackError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BuybackError';
+  }
+}
+
+// Kembalikan NFT dari pemilik ke developer asalnya.
+// Neraca developer += nilai_selisih, neraca pemilik -= nilai_selisih.
+export async function buybackNftUnit(
+  nftUnitId: string,
+  ownerId: string,
+): Promise<void> {
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+
+  await runTransaction(db, async (tx) => {
+    // ── Semua read sebelum write ───────────────────────────────────────────
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) throw new BuybackError('NFT tidak ditemukan.');
+
+    const nft = nftSnap.data();
+    if (nft.owner_id !== ownerId) throw new BuybackError('Kamu bukan pemilik NFT ini.');
+    if (nft.developer_id === ownerId) throw new BuybackError('NFT masih berada di tangan developer.');
+    if (nft.digunakan_validasi) throw new BuybackError('NFT sedang digunakan validasi.');
+
+    const developerId = nft.developer_id as string;
+    const nilai_selisih = nft.nilai_selisih as number;
+    const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
+    const harga_beli_terakhir = nft.harga_beli_terakhir as number;
+
+    const developerRef = doc(db, 'users', developerId);
+    const ownerRef = doc(db, 'users', ownerId);
+    const projectRef = doc(db, 'projects', project_id);
+
+    const developerSnap = await tx.get(developerRef);
+    const ownerSnap = await tx.get(ownerRef);
+    const projectSnap = await tx.get(projectRef);
+
+    if (!developerSnap.exists()) throw new BuybackError('Data developer tidak ditemukan.');
+    if (!ownerSnap.exists()) throw new BuybackError('Data pemilik tidak ditemukan.');
+
+    const developerPoin: number = (developerSnap.data().total_poin as number) ?? 0;
+    const ownerPoin: number = (ownerSnap.data().total_poin as number) ?? 0;
+    const developerBuybackCount: number = (developerSnap.data().buybackCount as number) ?? 0;
+    const link_bukti = projectSnap.exists()
+      ? (projectSnap.data().link_bukti as string) ?? ''
+      : '';
+
+    // ── Semua write setelah semua read selesai ─────────────────────────────
+
+    // 1. NFT kembali ke developer, tidak dijual
+    tx.update(nftRef, {
+      owner_id: developerId,
+      for_sale: false,
+    });
+
+    // 2. Neraca developer: +nilai_selisih, buybackCount +1
+    tx.update(developerRef, {
+      total_poin: developerPoin + nilai_selisih,
+      buybackCount: developerBuybackCount + 1,
+    });
+
+    // 3. Neraca pemilik: -nilai_selisih
+    tx.update(ownerRef, {
+      total_poin: ownerPoin - nilai_selisih,
+    });
+
+    // 4. Log neraca developer (immutable)
+    tx.set(doc(collection(db, 'users', developerId, 'neraca_log')), {
+      type: 'buyback',
+      nft_unit_id: nftUnitId,
+      nama_nft,
+      harga_transaksi: harga_beli_terakhir,
+      nilai_selisih,
+      delta: nilai_selisih,
+      counterparty_id: ownerId,
+      project_id,
+      link_bukti,
+      timestamp: serverTimestamp(),
+    });
+
+    // 5. Log neraca pemilik (immutable)
+    tx.set(doc(collection(db, 'users', ownerId, 'neraca_log')), {
+      type: 'buyback',
+      nft_unit_id: nftUnitId,
+      nama_nft,
+      harga_transaksi: harga_beli_terakhir,
+      nilai_selisih,
+      delta: -nilai_selisih,
+      counterparty_id: developerId,
+      project_id,
+      link_bukti,
+      timestamp: serverTimestamp(),
+    });
+  });
+}
+
 // Toggle like pada nft_unit — atomic via transaction
 export async function toggleNftLike(
   nftUnitId: string,

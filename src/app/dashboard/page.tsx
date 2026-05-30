@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import {
   PlusCircle, Loader2, Lock, Pencil, ImageOff,
-  RefreshCcw, TrendingDown, TrendingUp, Minus,
+  RefreshCcw, TrendingDown, TrendingUp, Minus, Upload,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError } from '@/lib/projects';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -118,6 +118,92 @@ function toProject(id: string, data: Record<string, unknown>): Project {
 const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback',
 };
+
+// ─── Buyback Dialog ───────────────────────────────────────────────────────────
+
+interface BuybackDialogProps {
+  unit: NFTUnit;
+  ownerId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await buybackNftUnit(unit.id, ownerId);
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(
+        err instanceof BuybackError
+          ? err.message
+          : 'Gagal melakukan buyback. Coba lagi.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Konfirmasi Buyback</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
+            <div className="pt-2 border-t space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga buyback</span>
+                <span className="font-bold">{formatIDR(unit.harga_beli_terakhir)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Efek neracamu</span>
+                <span className={cn(
+                  'font-semibold',
+                  unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
+                )}>
+                  {unit.nilai_selisih > 0
+                    ? `−${formatIDR(unit.nilai_selisih)}`
+                    : 'Tidak ada perubahan'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            NFT akan dikembalikan ke developer. Tindakan ini tidak dapat dibatalkan.
+          </p>
+
+          {error && (
+            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            Batal
+          </Button>
+          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Konfirmasi Buyback
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Edit Gambar Project Dialog ───────────────────────────────────────────────
 
@@ -254,9 +340,10 @@ interface DaftarNFTProps {
   units: NFTUnit[];
   toggling: string | null;
   onToggleForSale: (unit: NFTUnit) => void;
+  onBuyback: (unit: NFTUnit) => void;
 }
 
-function DaftarNFT({ units, toggling, onToggleForSale }: DaftarNFTProps) {
+function DaftarNFT({ units, toggling, onToggleForSale, onBuyback }: DaftarNFTProps) {
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
 
   if (units.length === 0) {
@@ -275,6 +362,7 @@ function DaftarNFT({ units, toggling, onToggleForSale }: DaftarNFTProps) {
       {units.map((unit) => {
         const imgErr = imgErrors.has(unit.id);
         const locked = unit.digunakan_validasi;
+        const canBuyback = !locked && unit.owner_id !== unit.developer_id;
 
         return (
           <div
@@ -341,11 +429,26 @@ function DaftarNFT({ units, toggling, onToggleForSale }: DaftarNFTProps) {
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs px-3"
-                disabled
-                title="Fitur buyback segera hadir"
+                disabled={!canBuyback}
+                onClick={() => canBuyback && onBuyback(unit)}
+                title={
+                  locked ? 'NFT sedang dipakai validasi' :
+                  !canBuyback ? 'NFT masih di tangan developer' :
+                  'Kembalikan NFT ke developer'
+                }
               >
                 <RefreshCcw className="h-3 w-3 mr-1" />
                 Buyback
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs px-3"
+                disabled
+                title="Hanya untuk top developer (segera hadir)"
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                Ke Pool
               </Button>
             </div>
           </div>
@@ -374,7 +477,6 @@ function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
 
         return (
           <div key={log.id} className="flex items-center gap-3 px-4 py-3 bg-card text-sm">
-            {/* Delta icon */}
             <div className={cn(
               'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
               isPos ? 'bg-green-50 text-green-600' : isNeg ? 'bg-red-50 text-destructive' : 'bg-muted text-muted-foreground',
@@ -382,7 +484,6 @@ function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
               {isPos ? <TrendingUp className="h-4 w-4" /> : isNeg ? <TrendingDown className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
             </div>
 
-            {/* Detail */}
             <div className="flex-1 min-w-0">
               <p className="font-medium leading-snug truncate">{log.nama_nft}</p>
               <p className="text-xs text-muted-foreground">
@@ -390,7 +491,6 @@ function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
               </p>
             </div>
 
-            {/* Delta amount */}
             <span className={cn(
               'font-bold shrink-0',
               isPos ? 'text-green-600' : isNeg ? 'text-destructive' : 'text-muted-foreground',
@@ -424,7 +524,6 @@ function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSay
 
         return (
           <div key={project.id} className="flex gap-3 rounded-xl border bg-card p-3 items-start">
-            {/* Thumbnail */}
             <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden shrink-0 relative group/img">
               {project.gambar_url && !imgErr ? (
                 <img
@@ -440,7 +539,6 @@ function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSay
               )}
             </div>
 
-            {/* Info */}
             <div className="flex-1 min-w-0 space-y-1">
               <p className="font-semibold text-sm leading-snug">{project.nama_project}</p>
               <p className="text-xs text-muted-foreground capitalize">
@@ -458,7 +556,6 @@ function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSay
               </div>
             </div>
 
-            {/* Edit button */}
             <Button
               size="sm"
               variant="outline"
@@ -512,6 +609,7 @@ export default function DashboardPage() {
   const [myProjects, setMyProjects] = useState<Project[]>([]);
   const [toggling, setToggling] = useState<string | null>(null);
   const [editProjectTarget, setEditProjectTarget] = useState<Project | null>(null);
+  const [buybackTarget, setBuybackTarget] = useState<NFTUnit | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -576,13 +674,16 @@ export default function DashboardPage() {
     setMyProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, gambar_url: newUrl } : p)),
     );
-    // Juga update gambar di ownedUnits yang project_id-nya sama
     setOwnedUnits((prev) =>
       prev.map((u) => (u.project_id === projectId ? { ...u, gambar_url: newUrl } : u)),
     );
   }
 
-  // Hitung jumlah unit per project yang masih dimiliki developer (untuk stat "terjual")
+  function handleBuybackSuccess() {
+    setBuybackTarget(null);
+    loadData();
+  }
+
   const ownedCountByProject = ownedUnits.reduce<Record<string, number>>((acc, u) => {
     acc[u.project_id] = (acc[u.project_id] ?? 0) + 1;
     return acc;
@@ -641,6 +742,7 @@ export default function DashboardPage() {
                 units={ownedUnits}
                 toggling={toggling}
                 onToggleForSale={handleToggleForSale}
+                onBuyback={setBuybackTarget}
               />
             </section>
 
@@ -681,6 +783,16 @@ export default function DashboardPage() {
           project={editProjectTarget}
           onClose={() => setEditProjectTarget(null)}
           onSaved={handleProjectGambarSaved}
+        />
+      )}
+
+      {/* Buyback dialog */}
+      {buybackTarget && user && (
+        <BuybackDialog
+          unit={buybackTarget}
+          ownerId={user.id}
+          onClose={() => setBuybackTarget(null)}
+          onSuccess={handleBuybackSuccess}
         />
       )}
     </MainLayout>
