@@ -8,7 +8,7 @@ import {
   getDocs, getDoc, doc, Timestamp,
 } from 'firebase/firestore';
 import {
-  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag, ExternalLink,
+  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag, ExternalLink, Search,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -74,6 +74,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
     nilai_selisih: (data.nilai_selisih as number) ?? 0,
     for_sale: (data.for_sale as boolean) ?? false,
+    in_pool: (data.in_pool as boolean) ?? false,
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
     like_count: (data.like_count as number) ?? 0,
@@ -659,6 +660,7 @@ function ExploreContent() {
   const paramKategori = (searchParams.get('kategori') ?? 'semua') as ProjectCategory | 'semua';
   const [kategori, setKategori] = useState<ProjectCategory | 'semua'>(paramKategori);
   const [units, setUnits] = useState<NFTUnit[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [likedSet, setLikedSet] = useState<Set<string>>(new Set());
   const [likingId, setLikingId] = useState<string | null>(null);
@@ -666,6 +668,13 @@ function ExploreContent() {
   const [buyTarget, setBuyTarget] = useState<NFTUnit | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
+
+  const filteredUnits = searchQuery
+    ? units.filter(u => {
+        const q = searchQuery.toLowerCase();
+        return u.nama_nft.toLowerCase().includes(q) || u.nama_project.toLowerCase().includes(q);
+      })
+    : units;
 
   // Derive parent chip highlight dari kategori aktif
   const effectiveParent: ProjectCategory | 'semua' =
@@ -796,6 +805,17 @@ function ExploreContent() {
           </p>
         </div>
 
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Cari nama NFT atau project..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         {/* Filter chips — row 1: kategori utama */}
         <div className="flex flex-wrap gap-2">
           <button
@@ -868,18 +888,22 @@ function ExploreContent() {
               </div>
             ))}
           </div>
-        ) : units.length === 0 ? (
+        ) : filteredUnits.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed rounded-xl">
-            <p className="text-lg font-semibold text-muted-foreground">Belum ada NFT</p>
+            <p className="text-lg font-semibold text-muted-foreground">
+              {searchQuery ? 'Tidak ada NFT yang cocok' : 'Belum ada NFT'}
+            </p>
             <p className="text-sm text-muted-foreground mt-1">
-              {kategori === 'semua'
-                ? 'Jadilah developer pertama yang mendaftarkan project.'
-                : `Belum ada project dengan kategori "${KATEGORI_LABELS[kategori as ProjectCategory]}".`}
+              {searchQuery
+                ? `Tidak ditemukan NFT dengan kata kunci "${searchQuery}".`
+                : kategori === 'semua'
+                  ? 'Jadilah developer pertama yang mendaftarkan project.'
+                  : `Belum ada project dengan kategori "${KATEGORI_LABELS[kategori as ProjectCategory]}".`}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {units.map((unit) => (
+            {filteredUnits.map((unit) => (
               <NftUnitCard
                 key={unit.id}
                 unit={unit}
@@ -897,9 +921,10 @@ function ExploreContent() {
           </div>
         )}
 
-        {!loading && units.length > 0 && (
+        {!loading && filteredUnits.length > 0 && (
           <p className="text-center text-xs text-muted-foreground">
-            Menampilkan {units.length} NFT · Diurutkan berdasarkan like terbanyak
+            Menampilkan {filteredUnits.length}{units.length !== filteredUnits.length ? ` dari ${units.length}` : ''} NFT
+            {!searchQuery && ' · Diurutkan berdasarkan like terbanyak'}
           </p>
         )}
       </div>

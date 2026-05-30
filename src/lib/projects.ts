@@ -175,7 +175,7 @@ export async function buyNftUnit(
   batas_atas: number,
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
-  let sellerIdCapture = '';
+  let developerIdCapture = '';
 
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
@@ -191,7 +191,8 @@ export async function buyNftUnit(
     }
 
     const sellerId = nft.owner_id as string;
-    sellerIdCapture = sellerId;
+    // Selalu cek level developer asli NFT — soldNfts milik developer_id
+    developerIdCapture = nft.developer_id as string;
     const harga_jual = nft.harga_jual as number;
     const nilai_selisih = nft.nilai_selisih as number;
     const nama_nft = nft.nama_nft as string;
@@ -272,9 +273,9 @@ export async function buyNftUnit(
     });
   });
 
-  // Cek dan update level developer setelah soldNfts bertambah (non-critical)
-  if (sellerIdCapture) {
-    try { await checkAndUpdateDeveloperLevel(sellerIdCapture); } catch { /* silent */ }
+  // Cek dan update level developer asli NFT setelah soldNfts bertambah (non-critical)
+  if (developerIdCapture) {
+    try { await checkAndUpdateDeveloperLevel(developerIdCapture); } catch { /* silent */ }
   }
 }
 
@@ -407,4 +408,76 @@ export async function toggleNftLike(
       tx.update(nftRef, { like_count: count + 1 });
     }
   });
+}
+
+// ─── Transfer ke Pool ─────────────────────────────────────────────────────────
+
+export class TransferPoolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TransferPoolError';
+  }
+}
+
+// Pindahkan NFT milik top developer ke pool rekomendasi komunitas.
+// Hanya bisa dilakukan oleh top_developer yang adalah owner atau developer_id NFT.
+export async function transferToPool(nftUnitId: string, userId: string): Promise<void> {
+  const nftSnap = await getDoc(doc(db, 'nft_units', nftUnitId));
+  if (!nftSnap.exists()) throw new TransferPoolError('NFT tidak ditemukan.');
+
+  const nft = nftSnap.data();
+  const isOwnerOrDeveloper =
+    nft.owner_id === userId || nft.developer_id === userId;
+  if (!isOwnerOrDeveloper) throw new TransferPoolError('Kamu bukan owner atau developer NFT ini.');
+  if (nft.digunakan_validasi) throw new TransferPoolError('NFT sedang digunakan validasi.');
+  if (nft.in_pool) throw new TransferPoolError('NFT sudah berada di pool rekomendasi.');
+
+  // Cek level user
+  const userSnap = await getDoc(doc(db, 'users', userId));
+  if (!userSnap.exists()) throw new TransferPoolError('Data user tidak ditemukan.');
+  if ((userSnap.data().level as string) !== 'top_developer') {
+    throw new TransferPoolError('Hanya Top Developer yang bisa transfer ke pool.');
+  }
+
+  const nama_nft = nft.nama_nft as string;
+  const project_id = nft.project_id as string;
+  const poolRef = doc(db, 'pool_rekomendasi', 'v1');
+
+  const batch = writeBatch(db);
+
+  // Update nft_unit: masuk pool dan otomatis dijual
+  batch.update(doc(db, 'nft_units', nftUnitId), {
+    in_pool: true,
+    for_sale: true,
+  });
+
+  // Update pool_rekomendasi metadata (upsert)
+  const poolSnap = await getDoc(poolRef);
+  if (poolSnap.exists()) {
+    const current: number = (poolSnap.data().jumlah_nft_valid as number) ?? 0;
+    batch.update(poolRef, { jumlah_nft_valid: current + 1 });
+  } else {
+    batch.set(poolRef, {
+      is_aktif: false,
+      jumlah_top_developer: 0,
+      kapasitas_aktif: 0,
+      total_jaminan: 0,
+      jumlah_nft_valid: 1,
+    });
+  }
+
+  // Log di neraca_log
+  batch.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+    type: 'transfer_pool',
+    nft_unit_id: nftUnitId,
+    nama_nft,
+    harga_transaksi: (nft.harga_jual as number) ?? 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: '',
+    project_id,
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
 }

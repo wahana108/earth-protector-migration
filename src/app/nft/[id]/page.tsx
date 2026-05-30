@@ -80,6 +80,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
     nilai_selisih: (data.nilai_selisih as number) ?? 0,
     for_sale: (data.for_sale as boolean) ?? false,
+    in_pool: (data.in_pool as boolean) ?? false,
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
     like_count: (data.like_count as number) ?? 0,

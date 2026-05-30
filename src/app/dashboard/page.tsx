@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError } from '@/lib/projects';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +68,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
     nilai_selisih: (data.nilai_selisih as number) ?? 0,
     for_sale: (data.for_sale as boolean) ?? false,
+    in_pool: (data.in_pool as boolean) ?? false,
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
     like_count: (data.like_count as number) ?? 0,
@@ -116,7 +117,8 @@ function toProject(id: string, data: Record<string, unknown>): Project {
 }
 
 const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
-  beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback', level_change: 'Level',
+  beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback',
+  level_change: 'Level', transfer_pool: 'Pool',
 };
 
 // ─── Buyback Dialog ───────────────────────────────────────────────────────────
@@ -198,6 +200,81 @@ function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps
           <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Konfirmasi Buyback
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────
+
+interface TransferPoolDialogProps {
+  unit: NFTUnit;
+  userId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function TransferPoolDialog({ unit, userId, onClose, onSuccess }: TransferPoolDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await transferToPool(unit.id, userId);
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(
+        err instanceof TransferPoolError
+          ? err.message
+          : 'Gagal transfer ke pool. Coba lagi.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Transfer ke Pool Rekomendasi</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
+            <div className="pt-2 border-t">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga jual</span>
+                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            NFT akan otomatis dipasang untuk dijual{' '}
+            <span className="font-medium text-foreground">(for_sale = true)</span>{' '}
+            dan masuk antrian pool rekomendasi komunitas.
+          </p>
+
+          {error && (
+            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Transfer ke Pool
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -339,11 +416,13 @@ function RingkasanNeraca({ totalPoin, nftDimiliki, soldNfts, buybackCount }: Rin
 interface DaftarNFTProps {
   units: NFTUnit[];
   toggling: string | null;
+  isTopDeveloper: boolean;
   onToggleForSale: (unit: NFTUnit) => void;
   onBuyback: (unit: NFTUnit) => void;
+  onTransferPool: (unit: NFTUnit) => void;
 }
 
-function DaftarNFT({ units, toggling, onToggleForSale, onBuyback }: DaftarNFTProps) {
+function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback, onTransferPool }: DaftarNFTProps) {
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
 
   if (units.length === 0) {
@@ -444,11 +523,17 @@ function DaftarNFT({ units, toggling, onToggleForSale, onBuyback }: DaftarNFTPro
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs px-3"
-                disabled
-                title="Hanya untuk top developer (segera hadir)"
+                disabled={!isTopDeveloper || locked || unit.in_pool}
+                onClick={() => isTopDeveloper && !locked && !unit.in_pool && onTransferPool(unit)}
+                title={
+                  !isTopDeveloper ? 'Hanya untuk Top Developer' :
+                  unit.in_pool ? 'NFT sudah di pool' :
+                  locked ? 'NFT sedang dipakai validasi' :
+                  'Transfer ke Pool Rekomendasi'
+                }
               >
                 <Upload className="h-3 w-3 mr-1" />
-                Ke Pool
+                {unit.in_pool ? 'Di Pool' : 'Ke Pool'}
               </Button>
             </div>
           </div>
@@ -607,9 +692,11 @@ export default function DashboardPage() {
   const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
   const [logs, setLogs] = useState<NeracaLog[]>([]);
   const [myProjects, setMyProjects] = useState<Project[]>([]);
+  const [isTopDeveloper, setIsTopDeveloper] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [editProjectTarget, setEditProjectTarget] = useState<Project | null>(null);
   const [buybackTarget, setBuybackTarget] = useState<NFTUnit | null>(null);
+  const [transferPoolTarget, setTransferPoolTarget] = useState<NFTUnit | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -635,6 +722,7 @@ export default function DashboardPage() {
         setTotalPoin((d.total_poin as number) ?? 0);
         setSoldNfts((d.soldNfts as number) ?? 0);
         setBuybackCount((d.buybackCount as number) ?? 0);
+        setIsTopDeveloper((d.level as string) === 'top_developer');
       }
 
       setOwnedUnits(
@@ -682,6 +770,13 @@ export default function DashboardPage() {
   function handleBuybackSuccess() {
     setBuybackTarget(null);
     loadData();
+  }
+
+  function handleTransferPoolSuccess(unitId: string) {
+    setTransferPoolTarget(null);
+    setOwnedUnits(prev =>
+      prev.map(u => u.id === unitId ? { ...u, in_pool: true, for_sale: true } : u),
+    );
   }
 
   const ownedCountByProject = ownedUnits.reduce<Record<string, number>>((acc, u) => {
@@ -741,8 +836,10 @@ export default function DashboardPage() {
               <DaftarNFT
                 units={ownedUnits}
                 toggling={toggling}
+                isTopDeveloper={isTopDeveloper}
                 onToggleForSale={handleToggleForSale}
                 onBuyback={setBuybackTarget}
+                onTransferPool={setTransferPoolTarget}
               />
             </section>
 
@@ -793,6 +890,16 @@ export default function DashboardPage() {
           ownerId={user.id}
           onClose={() => setBuybackTarget(null)}
           onSuccess={handleBuybackSuccess}
+        />
+      )}
+
+      {/* Transfer ke Pool dialog */}
+      {transferPoolTarget && user && (
+        <TransferPoolDialog
+          unit={transferPoolTarget}
+          userId={user.id}
+          onClose={() => setTransferPoolTarget(null)}
+          onSuccess={() => handleTransferPoolSuccess(transferPoolTarget.id)}
         />
       )}
     </MainLayout>
