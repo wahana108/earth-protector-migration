@@ -442,6 +442,27 @@ export default function ParametersPage() {
           </div>
         </div>
 
+        {/* Aturan komentar — hardcoded, selalu tampil */}
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Aturan Komentar Komunitas
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+            {[
+              'Komentar harus relevan dengan project charity yang ditampilkan',
+              'Dilarang: spam, kata kasar, informasi palsu, promosi tidak relevan',
+              'Komentar melanggar dapat dilaporkan dan akan ditinjau administrator',
+              'Pembuat komentar dapat menghapus komentarnya sendiri kapan saja',
+              'Administrator berhak menghapus komentar yang melanggar tanpa pemberitahuan',
+            ].map(rule => (
+              <div key={rule} className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span className="text-sm text-muted-foreground">{rule}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </MainLayout>
   );

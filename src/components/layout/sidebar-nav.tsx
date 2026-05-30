@@ -14,6 +14,7 @@ import {
   ArrowLeftRight,
   BadgeCheck,
   SlidersHorizontal,
+  ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -29,6 +30,9 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/logo';
+import { useAuth } from '@/hooks/use-auth';
+
+const ADMIN_EMAIL = 'ramawan@live.com';
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
@@ -45,12 +49,14 @@ const navItems = [
 ];
 
 const bottomNavItems = [
-    { href: '/settings', label: 'Settings', icon: Settings },
-    { href: '/help', label: 'Help', icon: HelpCircle },
-]
+  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/help', label: 'Help', icon: HelpCircle },
+];
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   return (
     <>
@@ -73,11 +79,25 @@ export function SidebarNav() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+          {isAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith('/admin')}
+                tooltip={{ children: 'Admin: Laporan' }}
+              >
+                <Link href="/admin/reports">
+                  <ShieldAlert />
+                  <span>Admin Reports</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="mt-auto">
         <SidebarSeparator />
-         <SidebarMenu>
+        <SidebarMenu>
           {bottomNavItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton

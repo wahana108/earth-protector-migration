@@ -140,12 +140,15 @@ export async function buyNftUnit(
     const harga_jual = nft.harga_jual as number;
     const nilai_selisih = nft.nilai_selisih as number;
     const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
 
     const sellerRef = doc(db, 'users', sellerId);
     const buyerRef = doc(db, 'users', buyerId);
+    const projectRef = doc(db, 'projects', project_id);
 
     const sellerSnap = await tx.get(sellerRef);
     const buyerSnap = await tx.get(buyerRef);
+    const projectSnap = await tx.get(projectRef);
 
     if (!sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
     if (!buyerSnap.exists()) throw new BuyError('Data pembeli tidak ditemukan.');
@@ -153,6 +156,9 @@ export async function buyNftUnit(
     const sellerPoin: number = sellerSnap.data().total_poin ?? 0;
     const buyerPoin: number = buyerSnap.data().total_poin ?? 0;
     const sellerSoldNfts: number = sellerSnap.data().soldNfts ?? 0;
+    const link_bukti = projectSnap.exists()
+      ? (projectSnap.data().link_bukti as string) ?? ''
+      : '';
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
 
@@ -183,6 +189,8 @@ export async function buyNftUnit(
       nilai_selisih,
       delta: -nilai_selisih,
       counterparty_id: buyerId,
+      project_id,
+      link_bukti,
       timestamp: serverTimestamp(),
     });
 
@@ -195,6 +203,8 @@ export async function buyNftUnit(
       nilai_selisih,
       delta: nilai_selisih,
       counterparty_id: sellerId,
+      project_id,
+      link_bukti,
       timestamp: serverTimestamp(),
     });
 

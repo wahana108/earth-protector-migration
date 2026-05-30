@@ -143,6 +143,8 @@ export type NeracaLog = {
   nilai_selisih: number;
   delta: number;
   counterparty_id: string;
+  project_id?: string;
+  link_bukti?: string;
   timestamp: Date;
 };
 
@@ -152,6 +154,15 @@ export type HistoryKepemilikan = {
   ke: string;
   harga: number;
   timestamp: Date;
+};
+
+export type Comment = {
+  id: string;
+  user_id: string;
+  display_name: string;
+  text: string;
+  timestamp: Date;
+  anomali_flag: boolean;
 };
 
 export type NFTUnit = {
@@ -171,5 +182,6 @@ export type NFTUnit = {
   digunakan_validasi: boolean;
   project_validasi_id: string | null;
   like_count: number;
+  comment_count: number;
   created_at: Date;
 };

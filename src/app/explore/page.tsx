@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   collection, query, where, orderBy, limit,
   getDocs, getDoc, doc, Timestamp,
 } from 'firebase/firestore';
-import { Heart, ImageOff, Pencil, Loader2, ShoppingCart } from 'lucide-react';
+import {
+  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag,
+} from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +29,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError } from '@/lib/projects';
-import type { NFTUnit, ProjectCategory } from '@/lib/types';
+import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
+import type { NFTUnit, ProjectCategory, Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 24;
@@ -49,6 +54,18 @@ function formatIDR(n: number) {
   }).format(n);
 }
 
+function relativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+  if (d < 30) return `${d} hari lalu`;
+  return date.toLocaleDateString('id-ID');
+}
+
 function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
   return {
     id,
@@ -67,6 +84,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
     like_count: (data.like_count as number) ?? 0,
+    comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
 }
@@ -238,6 +256,217 @@ function EditGambarDialog({ unit, onClose, onSaved }: EditGambarDialogProps) {
   );
 }
 
+// ─── Comment Panel ────────────────────────────────────────────────────────────
+
+interface CommentPanelProps {
+  nftId: string;
+  currentUserId: string | undefined;
+  currentUserDisplayName: string | null;
+  onCommentAdded: () => void;
+  onCommentDeleted: () => void;
+}
+
+function CommentPanel({
+  nftId, currentUserId, currentUserDisplayName, onCommentAdded, onCommentDeleted,
+}: CommentPanelProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reportedSet, setReportedSet] = useState<Set<string>>(new Set());
+  const reportedInitRef = useRef(false);
+
+  useEffect(() => {
+    fetchComments(nftId)
+      .then(setComments)
+      .finally(() => setLoading(false));
+  }, [nftId]);
+
+  // Inisialisasi reportedSet dari localStorage setelah komentar pertama dimuat
+  useEffect(() => {
+    if (comments.length === 0 || reportedInitRef.current) return;
+    reportedInitRef.current = true;
+    const reported = new Set<string>(
+      comments
+        .map((c) => c.id)
+        .filter((id) => localStorage.getItem(`tmep_reported_${id}`) === '1'),
+    );
+    setReportedSet(reported);
+  }, [comments]);
+
+  async function handleSubmit() {
+    if (!currentUserId || !text.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const displayName = currentUserDisplayName ?? 'User';
+      const newComment = await addComment(nftId, currentUserId, displayName, text.trim());
+      setComments((prev) => [newComment, ...prev]);
+      setText('');
+      onCommentAdded();
+    } catch {
+      setError('Gagal mengirim komentar. Coba lagi.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(commentId: string) {
+    try {
+      await deleteComment(nftId, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      onCommentDeleted();
+    } catch {
+      // silent fail
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleReport(commentId: string) {
+    try {
+      await reportComment(nftId, commentId);
+      localStorage.setItem(`tmep_reported_${commentId}`, '1');
+      setReportedSet((prev) => new Set(prev).add(commentId));
+    } catch {
+      // silent fail
+    }
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-3 pt-3 pb-3 space-y-3">
+      {/* Daftar komentar */}
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex gap-2 items-start">
+              <Skeleton className="h-6 w-6 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : comments.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-1">
+          Belum ada komentar. Jadilah yang pertama!
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {comments.map((c) => (
+            <div key={c.id} className="flex gap-2 text-xs">
+              <div className="h-6 w-6 rounded-full bg-muted border flex items-center justify-center shrink-0 text-[10px] font-semibold text-muted-foreground uppercase">
+                {c.display_name.charAt(0)}
+              </div>
+
+              {deletingId === c.id ? (
+                <div className="flex-1 min-w-0 py-0.5">
+                  <p className="text-muted-foreground mb-1.5">Hapus komentar ini?</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-6 text-xs px-2"
+                      onClick={() => handleDelete(c.id)}
+                    >
+                      Ya, hapus
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-xs px-2"
+                      onClick={() => setDeletingId(null)}
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0 flex items-start gap-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <span className="font-semibold text-foreground">{c.display_name}</span>
+                      <span className="text-[10px] text-muted-foreground">{relativeTime(c.timestamp)}</span>
+                    </div>
+                    <p className="text-foreground/80 leading-snug break-words mt-0.5">{c.text}</p>
+                  </div>
+                  <div className="shrink-0">
+                    {c.user_id === currentUserId ? (
+                      <button
+                        onClick={() => setDeletingId(c.id)}
+                        className="p-0.5 rounded text-destructive/50 hover:text-destructive transition-colors"
+                        title="Hapus komentar"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    ) : currentUserId ? (
+                      <button
+                        onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
+                        disabled={reportedSet.has(c.id)}
+                        className={cn(
+                          'p-0.5 rounded transition-colors',
+                          reportedSet.has(c.id)
+                            ? 'text-yellow-500 cursor-default'
+                            : 'text-muted-foreground/40 hover:text-yellow-500',
+                        )}
+                        title={reportedSet.has(c.id) ? 'Sudah dilaporkan' : 'Laporkan komentar'}
+                      >
+                        <Flag className="h-3 w-3" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Policy text */}
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        Komentar harus sopan dan relevan dengan project charity ini. Gunakan{' '}
+        <Flag className="h-3 w-3 inline align-text-bottom" />{' '}
+        untuk melaporkan komentar yang melanggar aturan.
+      </p>
+
+      {/* Form input atau prompt login */}
+      {currentUserId ? (
+        <div className="space-y-1.5">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Tulis komentar..."
+            maxLength={500}
+            rows={2}
+            className="text-xs resize-none"
+            disabled={submitting}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">{text.length}/500</span>
+            <Button
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={handleSubmit}
+              disabled={submitting || !text.trim()}
+            >
+              {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Kirim'}
+            </Button>
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground text-center py-1">
+          <Link href="/login" className="underline underline-offset-2">Login</Link>{' '}
+          untuk berkomentar
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── NFT Card ────────────────────────────────────────────────────────────────
 
 interface NftUnitCardProps {
@@ -246,6 +475,7 @@ interface NftUnitCardProps {
   likingId: string | null;
   buyingId: string | null;
   currentUserId: string | undefined;
+  currentUserDisplayName: string | null;
   configLoaded: boolean;
   onLike: (unit: NFTUnit) => void;
   onBuy: (unit: NFTUnit) => void;
@@ -253,12 +483,22 @@ interface NftUnitCardProps {
 }
 
 function NftUnitCard({
-  unit, isLiked, likingId, buyingId, currentUserId, configLoaded, onLike, onBuy, onEditGambar,
+  unit, isLiked, likingId, buyingId, currentUserId, currentUserDisplayName,
+  configLoaded, onLike, onBuy, onEditGambar,
 }: NftUnitCardProps) {
   const [imgError, setImgError] = useState(false);
+  const [isCommentOpen, setIsCommentOpen] = useState(false);
+  const [hasCommentPanelMounted, setHasCommentPanelMounted] = useState(false);
+  const [localCount, setLocalCount] = useState(unit.comment_count);
+
   const canEdit = !!currentUserId && currentUserId === unit.developer_id;
   const isOwn = !!currentUserId && currentUserId === unit.owner_id;
   const canBuy = !!currentUserId && !isOwn && unit.for_sale && configLoaded;
+
+  function handleToggleComment() {
+    setIsCommentOpen((prev) => !prev);
+    setHasCommentPanelMounted(true);
+  }
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden group flex flex-col">
@@ -351,8 +591,31 @@ function NftUnitCard({
               <Heart className={cn('h-3.5 w-3.5', isLiked && 'fill-current')} />
             )}
           </Button>
+          <Button
+            size="sm"
+            variant={isCommentOpen ? 'secondary' : 'outline'}
+            className="h-8 px-2 shrink-0 gap-1 text-xs"
+            onClick={handleToggleComment}
+            title="Lihat komentar"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            {localCount}
+          </Button>
         </div>
       </div>
+
+      {/* Comment panel — lazy mount, stays in DOM once opened to preserve state */}
+      {hasCommentPanelMounted && (
+        <div className={cn(!isCommentOpen && 'hidden')}>
+          <CommentPanel
+            nftId={unit.id}
+            currentUserId={currentUserId}
+            currentUserDisplayName={currentUserDisplayName}
+            onCommentAdded={() => setLocalCount((prev) => prev + 1)}
+            onCommentDeleted={() => setLocalCount((prev) => Math.max(0, prev - 1))}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -484,6 +747,8 @@ function ExploreContent() {
     );
   }
 
+  const currentUserDisplayName = user?.displayName ?? user?.email ?? null;
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -543,6 +808,7 @@ function ExploreContent() {
                 likingId={likingId}
                 buyingId={buyingId}
                 currentUserId={user?.id}
+                currentUserDisplayName={currentUserDisplayName}
                 configLoaded={!!config}
                 onLike={handleLike}
                 onBuy={setBuyTarget}

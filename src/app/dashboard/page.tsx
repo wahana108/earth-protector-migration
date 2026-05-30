@@ -71,6 +71,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
     like_count: (data.like_count as number) ?? 0,
+    comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
 }
