@@ -3,6 +3,7 @@
 import {
   Home,
   Compass,
+  FolderOpen,
   Award,
   Sparkles,
   Settings,
@@ -37,6 +38,7 @@ const ADMIN_EMAIL = 'ramawan@live.com';
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/explore', label: 'Explore', icon: Compass },
+  { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
   { href: '/validated', label: 'Validated', icon: BadgeCheck },
   { href: '/create', label: 'Create', icon: PlusCircle },
