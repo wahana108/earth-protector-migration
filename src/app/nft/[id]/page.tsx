@@ -1,348 +1,741 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Heart, ArrowLeft, Tag, Leaf, User as UserIcon, ShoppingBag, Loader2, RefreshCcw, BadgeCheck } from 'lucide-react';
+import { notFound } from 'next/navigation';
+import {
+  ArrowLeft, ExternalLink, ImageOff, Heart, Loader2, ShoppingCart, Flag, Trash2,
+} from 'lucide-react';
+import {
+  collection, doc, getDoc, getDocs, query, orderBy, limit, Timestamp,
+} from 'firebase/firestore';
 
 import { MainLayout } from '@/components/layout/main-layout';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  fetchNftById,
-  fetchUserById,
-  likeNft,
-  hasUserLiked,
-  buyNft,
-  createBuybackRequest,
-  CATEGORY_LABELS,
-} from '@/lib/firestore';
-import type { NFT, User } from '@/lib/types';
+import { getCommunityConfig } from '@/lib/community-config';
+import { buyNftUnit, BuyError, toggleNftLike } from '@/lib/projects';
+import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
+import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-export default function NftDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router = useRouter();
-  const { user: authUser } = useAuth();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  const [nft, setNft] = useState<NFT | null>(null);
-  const [creator, setCreator] = useState<User | null>(null);
-  const [owner, setOwner] = useState<User | null>(null);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [liking, setLiking] = useState(false);
+function formatIDR(n: number) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
+  }).format(n);
+}
 
-  // Buy dialog state
-  const [buyOpen, setBuyOpen] = useState(false);
-  const [proofLink, setProofLink] = useState('');
-  const [description, setDescription] = useState('');
+function relativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+  if (d < 30) return `${d} hari lalu`;
+  return date.toLocaleDateString('id-ID');
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type PageData = {
+  unit: NFTUnit;
+  projectNama: string;
+  projectLinkBukti: string;
+  ownerName: string;
+};
+
+type HistoryItem = {
+  id: string;
+  dari_name: string;
+  ke_name: string;
+  harga: number;
+  timestamp: Date;
+};
+
+// ─── Converter ────────────────────────────────────────────────────────────────
+
+function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
+  return {
+    id,
+    project_id: data.project_id as string,
+    developer_id: data.developer_id as string,
+    owner_id: data.owner_id as string,
+    nama_nft: (data.nama_nft as string) ?? '',
+    nama_project: (data.nama_project as string) ?? '',
+    gambar_url: (data.gambar_url as string) ?? '',
+    kategori: (data.kategori as ProjectCategory) ?? 'lainnya',
+    status: (data.status as NFTUnit['status']) ?? 'biasa',
+    harga_jual: (data.harga_jual as number) ?? 0,
+    harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
+    nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    for_sale: (data.for_sale as boolean) ?? false,
+    digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
+    project_validasi_id: (data.project_validasi_id as string | null) ?? null,
+    like_count: (data.like_count as number) ?? 0,
+    comment_count: (data.comment_count as number) ?? 0,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+  };
+}
+
+// ─── Buy Dialog ───────────────────────────────────────────────────────────────
+
+interface BuyDialogProps {
+  unit: NFTUnit;
+  linkBukti: string;
+  buyerId: string;
+  hargaDasar: number;
+  batasAtas: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function BuyDialog({
+  unit, linkBukti, buyerId, hargaDasar, batasAtas, onClose, onSuccess,
+}: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
+  const [error, setError] = useState('');
 
-  // Buyback request state
-  const [requestingBuyback, setRequestingBuyback] = useState(false);
-  const [buybackDone, setBuybackDone] = useState(false);
+  async function handleConfirm() {
+    setBuying(true);
+    setError('');
+    try {
+      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas);
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof BuyError ? err.message : 'Transaksi gagal. Coba lagi.');
+    } finally {
+      setBuying(false);
+    }
+  }
 
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Konfirmasi Pembelian</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
+            <div className="pt-2 border-t space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga</span>
+                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Neracamu bertambah</span>
+                <span className="font-semibold text-green-600">
+                  +{formatIDR(unit.nilai_selisih)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {linkBukti && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40 p-3">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">
+                Verifikasi project sebelum membeli:
+              </p>
+              <a
+                href={linkBukti}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                Lihat Bukti Project
+              </a>
+            </div>
+          )}
+
+          {unit.nilai_selisih === 0 && (
+            <p className="text-xs text-muted-foreground">
+              NFT ini dijual di harga dasar — neraca tidak berubah untuk kedua pihak.
+            </p>
+          )}
+
+          {error && (
+            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={buying}>Batal</Button>
+          <Button onClick={handleConfirm} disabled={buying}>
+            {buying && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Konfirmasi Beli
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Comment Section ──────────────────────────────────────────────────────────
+
+interface CommentSectionProps {
+  nftId: string;
+  currentUserId: string | undefined;
+  currentUserDisplayName: string | null;
+}
+
+function CommentSection({ nftId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reportedSet, setReportedSet] = useState<Set<string>>(new Set());
+  const reportedInitRef = useRef(false);
+
+  useEffect(() => {
+    fetchComments(nftId).then(setComments).finally(() => setLoading(false));
+  }, [nftId]);
+
+  useEffect(() => {
+    if (comments.length === 0 || reportedInitRef.current) return;
+    reportedInitRef.current = true;
+    const reported = new Set<string>(
+      comments
+        .map(c => c.id)
+        .filter(id => localStorage.getItem(`tmep_reported_${id}`) === '1'),
+    );
+    setReportedSet(reported);
+  }, [comments]);
+
+  async function handleSubmit() {
+    if (!currentUserId || !text.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const name = currentUserDisplayName ?? 'User';
+      const newComment = await addComment(nftId, currentUserId, name, text.trim());
+      setComments(prev => [newComment, ...prev]);
+      setText('');
+    } catch {
+      setError('Gagal mengirim komentar. Coba lagi.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(commentId: string) {
+    try {
+      await deleteComment(nftId, commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleReport(commentId: string) {
+    try {
+      await reportComment(nftId, commentId);
+      localStorage.setItem(`tmep_reported_${commentId}`, '1');
+      setReportedSet(prev => new Set(prev).add(commentId));
+    } catch { /* silent */ }
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        Komentar{!loading && ` (${comments.length})`}
+      </h2>
+
+      {/* Input form */}
+      {currentUserId ? (
+        <div className="space-y-2">
+          <Textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Tulis komentar..."
+            maxLength={500}
+            rows={3}
+            disabled={submitting}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{text.length}/500</span>
+            <Button size="sm" onClick={handleSubmit} disabled={submitting || !text.trim()}>
+              {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Kirim'}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          <Link href="/login" className="underline underline-offset-2">Login</Link>{' '}
+          untuk berkomentar
+        </p>
+      )}
+
+      {/* Policy */}
+      <p className="text-xs text-muted-foreground leading-snug">
+        Komentar harus sopan dan relevan dengan project charity ini. Gunakan{' '}
+        <Flag className="h-3 w-3 inline align-text-bottom" />{' '}
+        untuk melaporkan komentar yang melanggar aturan.
+      </p>
+
+      {/* List */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex gap-3">
+              <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : comments.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6 border-2 border-dashed rounded-lg">
+          Belum ada komentar. Jadilah yang pertama!
+        </p>
+      ) : (
+        <div className="space-y-5">
+          {comments.map(c => (
+            <div key={c.id} className="flex gap-3 text-sm">
+              <div className="h-8 w-8 rounded-full bg-muted border flex items-center justify-center shrink-0 text-xs font-semibold text-muted-foreground uppercase">
+                {c.display_name.charAt(0)}
+              </div>
+
+              {deletingId === c.id ? (
+                <div className="flex-1 py-1">
+                  <p className="text-muted-foreground mb-2">Hapus komentar ini?</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-7 text-xs px-2"
+                      onClick={() => handleDelete(c.id)}
+                    >
+                      Ya, hapus
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2"
+                      onClick={() => setDeletingId(null)}
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-semibold">{c.display_name}</span>
+                    <span className="text-xs text-muted-foreground">{relativeTime(c.timestamp)}</span>
+                    <div className="ml-auto shrink-0">
+                      {c.user_id === currentUserId ? (
+                        <button
+                          onClick={() => setDeletingId(c.id)}
+                          className="p-0.5 text-destructive/50 hover:text-destructive transition-colors"
+                          title="Hapus komentar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : currentUserId ? (
+                        <button
+                          onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
+                          disabled={reportedSet.has(c.id)}
+                          className={cn(
+                            'p-0.5 transition-colors',
+                            reportedSet.has(c.id)
+                              ? 'text-yellow-500 cursor-default'
+                              : 'text-muted-foreground/40 hover:text-yellow-500',
+                          )}
+                          title={reportedSet.has(c.id) ? 'Sudah dilaporkan' : 'Laporkan komentar'}
+                        >
+                          <Flag className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground/80 leading-snug break-words mt-0.5">
+                    {c.text}
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Page Skeleton ─────────────────────────────────────────────────────────────
+
+function PageSkeleton() {
+  return (
+    <MainLayout>
+      <div className="max-w-2xl mx-auto space-y-6">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="aspect-video w-full rounded-xl" />
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+        <Skeleton className="h-28 rounded-lg" />
+        <Skeleton className="h-32 rounded-lg" />
+      </div>
+    </MainLayout>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function NftDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const { user } = useAuth();
+
+  const [data, setData] = useState<PageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [missing, setMissing] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const [isLiked, setIsLiked] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
+
+  // Main data
   useEffect(() => {
     async function load() {
       try {
-        const nftData = await fetchNftById(id);
-        if (!nftData) {
-          router.push('/explore');
-          return;
-        }
-        setNft(nftData);
-        setLikeCount(nftData.likes);
+        const unitSnap = await getDoc(doc(db, 'nft_units', id));
+        if (!unitSnap.exists()) { setMissing(true); return; }
+        const unit = toNFTUnit(unitSnap.id, unitSnap.data() as Record<string, unknown>);
 
-        const [creatorData, ownerData] = await Promise.all([
-          fetchUserById(nftData.createdBy),
-          nftData.owner ? fetchUserById(nftData.owner) : Promise.resolve(null),
+        const [projectSnap, ownerSnap] = await Promise.all([
+          getDoc(doc(db, 'projects', unit.project_id)),
+          getDoc(doc(db, 'users', unit.owner_id)),
         ]);
-        setCreator(creatorData);
-        setOwner(ownerData);
 
-        if (authUser) {
-          const liked = await hasUserLiked(id, authUser.id);
-          setIsLiked(liked);
-        }
+        const projectData = projectSnap.exists() ? projectSnap.data() : {};
+        const ownerData = ownerSnap.exists() ? ownerSnap.data() : {};
+
+        setData({
+          unit,
+          projectNama: (projectData.nama_project as string) || unit.nama_project,
+          projectLinkBukti: (projectData.link_bukti as string) || '',
+          ownerName: (ownerData.displayName as string) || 'User',
+        });
+        setLikeCount(unit.like_count);
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [id, authUser, router]);
+  }, [id]);
 
-  const handleLike = async () => {
-    if (!authUser || !nft || liking) return;
+  // Like status
+  useEffect(() => {
+    if (!user || !data) return;
+    getDoc(doc(db, 'nft_units', id, 'likes', user.id))
+      .then(snap => setIsLiked(snap.exists()))
+      .catch(() => {});
+  }, [id, user, data]);
+
+  // History kepemilikan
+  useEffect(() => {
+    getDocs(
+      query(
+        collection(db, 'nft_units', id, 'history_kepemilikan'),
+        orderBy('timestamp', 'desc'),
+        limit(10),
+      ),
+    )
+      .then(async snap => {
+        if (snap.empty) return;
+
+        const raw = snap.docs.map(d => ({
+          id: d.id,
+          dari: d.data().dari as string,
+          ke: d.data().ke as string,
+          harga: (d.data().harga as number) ?? 0,
+          timestamp: (d.data().timestamp as Timestamp)?.toDate() ?? new Date(),
+        }));
+
+        const uniqueIds = [...new Set(raw.flatMap(h => [h.dari, h.ke]))];
+        const userSnaps = await Promise.all(
+          uniqueIds.map(uid => getDoc(doc(db, 'users', uid))),
+        );
+        const nameMap: Record<string, string> = {};
+        userSnaps.forEach(s => {
+          if (s.exists()) {
+            nameMap[s.id] = (s.data().displayName as string) || s.id.slice(0, 8) + '…';
+          }
+        });
+
+        setHistory(
+          raw.map(h => ({
+            id: h.id,
+            dari_name: nameMap[h.dari] ?? h.dari.slice(0, 8) + '…',
+            ke_name: nameMap[h.ke] ?? h.ke.slice(0, 8) + '…',
+            harga: h.harga,
+            timestamp: h.timestamp,
+          })),
+        );
+      })
+      .finally(() => setHistoryLoading(false));
+  }, [id]);
+
+  // Community config
+  useEffect(() => {
+    getCommunityConfig()
+      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas }); })
+      .catch(() => {});
+  }, []);
+
+  async function handleLike() {
+    if (!user || !data || liking) return;
+    const wasLiked = isLiked;
     setLiking(true);
+    setIsLiked(!wasLiked);
+    setLikeCount(n => wasLiked ? Math.max(0, n - 1) : n + 1);
     try {
-      await likeNft(nft.id, authUser.id);
-      const nowLiked = !isLiked;
-      setIsLiked(nowLiked);
-      setLikeCount(c => nowLiked ? c + 1 : c - 1);
+      await toggleNftLike(id, user.id, wasLiked);
+    } catch {
+      setIsLiked(wasLiked);
+      setLikeCount(n => wasLiked ? n + 1 : Math.max(0, n - 1));
     } finally {
       setLiking(false);
     }
-  };
-
-  const handleBuy = async () => {
-    if (!authUser || !nft || !proofLink.trim() || buying) return;
-    setBuying(true);
-    try {
-      const sellerId = nft.owner ?? nft.createdBy;
-      await buyNft(nft.id, authUser.id, sellerId, proofLink.trim(), description.trim());
-      setNft(prev => prev ? { ...prev, owner: authUser.id, forSale: false } : prev);
-      setOwner({ id: authUser.id, displayName: authUser.displayName, photoURL: authUser.photoURL, email: authUser.email, createdAt: new Date() });
-      setBuyOpen(false);
-      setProofLink('');
-      setDescription('');
-    } finally {
-      setBuying(false);
-    }
-  };
-
-  const canBuy = !!nft?.forSale && !!authUser && nft.owner !== authUser.id && nft.createdBy !== authUser.id;
-  // Current owner who bought from someone else can request creator buyback
-  const canRequestBuyback = !!nft && !nft.forSale && !!authUser &&
-    nft.owner === authUser.id && nft.createdBy !== authUser.id && !buybackDone;
-
-  const handleRequestBuyback = async () => {
-    if (!authUser || !nft || requestingBuyback) return;
-    setRequestingBuyback(true);
-    try {
-      await createBuybackRequest(nft.id, nft.createdBy, authUser.id);
-      setBuybackDone(true);
-    } finally {
-      setRequestingBuyback(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <MainLayout>
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10">
-          <Skeleton className="aspect-square rounded-xl" />
-          <div className="space-y-4">
-            <Skeleton className="h-10 w-3/4" />
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-10 w-1/2" />
-          </div>
-        </div>
-      </MainLayout>
-    );
   }
 
-  if (!nft) return null;
+  if (loading) return <PageSkeleton />;
+  if (missing) return notFound();
+  if (!data) return null;
 
-  const categoryLabel = CATEGORY_LABELS[nft.category] ?? nft.category;
+  const { unit, projectNama, projectLinkBukti, ownerName } = data;
+  const isOwn = !!user && user.id === unit.owner_id;
+  const canBuy = !!user && !isOwn && unit.for_sale && !!config;
+  const kategoriLabel = KATEGORI_LABELS[unit.kategori] ?? unit.kategori;
+  const currentUserDisplayName = user?.displayName ?? user?.email ?? null;
 
   return (
     <MainLayout>
-      <div className="max-w-5xl mx-auto space-y-8">
-        <Button variant="ghost" asChild className="gap-2">
-          <Link href="/explore">
+      <div className="max-w-2xl mx-auto space-y-8">
+
+        {/* Back ke project */}
+        <Button variant="ghost" asChild className="gap-2 -ml-2 h-8">
+          <Link href={`/projects/${unit.project_id}`}>
             <ArrowLeft className="h-4 w-4" />
-            Back to Explore
+            <span className="line-clamp-1">{projectNama}</span>
           </Link>
         </Button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <div className="rounded-xl overflow-hidden bg-zinc-900 flex items-center justify-center max-h-[520px]">
+        {/* Gambar */}
+        <div className="aspect-video rounded-xl overflow-hidden bg-muted">
+          {unit.gambar_url && !imgError ? (
             <img
-              src={nft.imageUrl}
-              alt={nft.title}
-              className="max-h-[520px] w-full object-contain"
+              src={unit.gambar_url}
+              alt={unit.nama_nft}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
             />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              <ImageOff className="h-16 w-16" />
+            </div>
+          )}
+        </div>
+
+        {/* Info utama */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge
+              variant={unit.status === 'valid' ? 'default' : 'secondary'}
+              className="capitalize"
+            >
+              {unit.status}
+            </Badge>
+            <Badge variant="outline">{kategoriLabel}</Badge>
           </div>
 
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <Badge variant="outline" className="gap-1">
-                  <Leaf className="h-3 w-3" />
-                  {categoryLabel}
-                </Badge>
-                {nft.isValid ? (
-                  <Badge className="gap-1 bg-green-600/20 text-green-600 dark:text-green-400 border-green-600/30">
-                    <BadgeCheck className="h-3 w-3" />
-                    Community Validated
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Awaiting Community Endorsement
-                  </Badge>
+          <h1 className="text-2xl font-bold leading-snug">{unit.nama_nft}</h1>
+
+          <p className="text-sm text-muted-foreground">
+            Project:{' '}
+            <Link
+              href={`/projects/${unit.project_id}`}
+              className="font-medium text-foreground hover:underline"
+            >
+              {projectNama}
+            </Link>
+          </p>
+
+          {/* Harga, selisih, owner */}
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Harga Jual</span>
+              <span className="font-bold text-base">{formatIDR(unit.harga_jual)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Neracamu bertambah jika beli</span>
+              <span
+                className={cn(
+                  'font-semibold',
+                  unit.nilai_selisih > 0 ? 'text-green-600' : 'text-muted-foreground',
                 )}
-              </div>
-              <h1 className="text-3xl font-headline font-bold">{nft.title}</h1>
-            </div>
-
-            <p className="text-muted-foreground leading-relaxed">{nft.description}</p>
-
-            <div className="p-4 bg-secondary/50 rounded-lg space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Impact</p>
-              <p className="font-semibold text-primary">{nft.impact}</p>
-            </div>
-
-            <div className="flex items-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  {creator?.photoURL && <AvatarImage src={creator.photoURL} alt={creator.displayName || 'Creator'} />}
-                  <AvatarFallback>
-                    {creator?.displayName ? creator.displayName.charAt(0) : <UserIcon className="w-4 h-4" />}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-xs text-muted-foreground">Creator</p>
-                  <p className="font-medium">{creator?.displayName || 'Unknown'}</p>
-                </div>
-              </div>
-
-              {owner && (
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    {owner.photoURL && <AvatarImage src={owner.photoURL} alt={owner.displayName || 'Owner'} />}
-                    <AvatarFallback>
-                      {owner.displayName ? owner.displayName.charAt(0) : <UserIcon className="w-4 h-4" />}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Owner</p>
-                    <p className="font-medium">{owner.displayName || 'Unknown'}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4 pt-2">
-              {nft.forSale && (
-                <div className="flex items-center gap-2">
-                  <Tag className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold text-primary">{nft.price} ETH</span>
-                </div>
-              )}
-              {!nft.forSale && (
-                <Badge variant="outline" className="text-sm px-3 py-1">Not for sale</Badge>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {canBuy && (
-                <Button size="lg" className="flex-1 gap-2" onClick={() => setBuyOpen(true)}>
-                  <ShoppingBag className="h-5 w-5" />
-                  Buy Now
-                </Button>
-              )}
-              {canRequestBuyback && (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={requestingBuyback}
-                  onClick={handleRequestBuyback}
-                >
-                  {requestingBuyback
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <RefreshCcw className="h-4 w-4" />
-                  }
-                  Request Buyback
-                </Button>
-              )}
-              {buybackDone && (
-                <Badge variant="outline" className="text-sm px-3 py-1 self-center text-green-600 border-green-500/40">
-                  Buyback requested — check /buyback
-                </Badge>
-              )}
-              {!nft.forSale && authUser && nft.owner === authUser.id && nft.createdBy === authUser.id && (
-                <Badge variant="outline" className="text-sm px-3 py-1 self-center">You own this NFT</Badge>
-              )}
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={handleLike}
-                disabled={!authUser || liking}
-                className="gap-2"
               >
-                <Heart
-                  className={cn(
-                    'h-5 w-5',
-                    isLiked ? 'text-red-500 fill-current' : 'text-muted-foreground'
-                  )}
-                />
-                {likeCount}
-              </Button>
+                {unit.nilai_selisih > 0 ? '+' : ''}{formatIDR(unit.nilai_selisih)}
+              </span>
             </div>
+            <div className="flex justify-between pt-1.5 border-t">
+              <span className="text-muted-foreground">Dimiliki</span>
+              <span className="font-medium">{isOwn ? 'Kamu' : ownerName}</span>
+            </div>
+          </div>
 
-            {!authUser && (
-              <p className="text-sm text-muted-foreground">
-                <Link href="/login" className="text-primary hover:underline">Sign in</Link> to like or buy this NFT.
-              </p>
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className="gap-1.5"
+              disabled={!canBuy}
+              onClick={canBuy ? () => setBuyOpen(true) : undefined}
+              title={
+                !user ? 'Login untuk membeli' :
+                isOwn ? 'Ini NFT milikmu' :
+                !unit.for_sale ? 'NFT ini sudah terjual' :
+                !config ? 'Memuat konfigurasi...' : 'Beli NFT ini'
+              }
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {isOwn ? 'Milikmu' : !unit.for_sale ? 'Sudah Terjual' : 'Beli NFT Ini'}
+            </Button>
+
+            <Button
+              variant={isLiked ? 'default' : 'outline'}
+              className="gap-1.5"
+              onClick={handleLike}
+              disabled={!user || isOwn || liking}
+              title={
+                !user ? 'Login untuk like' :
+                isOwn ? 'Tidak bisa like NFT milikmu sendiri' :
+                isLiked ? 'Batal like' : 'Like NFT ini'
+              }
+            >
+              {liking
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Heart className={cn('h-4 w-4', isLiked && 'fill-current')} />}
+              {likeCount}
+            </Button>
+
+            {projectLinkBukti && (
+              <Button variant="outline" className="gap-1.5" asChild>
+                <a href={projectLinkBukti} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  Bukti Project
+                </a>
+              </Button>
             )}
           </div>
         </div>
+
+        {/* History Kepemilikan */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            History Kepemilikan
+          </h2>
+          {historyLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+            </div>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada riwayat transaksi.</p>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Dari</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Ke</th>
+                    <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Harga</th>
+                    <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Waktu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, i) => (
+                    <tr
+                      key={h.id}
+                      className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
+                    >
+                      <td className="px-3 py-2 font-medium">{h.dari_name}</td>
+                      <td className="px-3 py-2 font-medium">{h.ke_name}</td>
+                      <td className="px-3 py-2 text-right">{formatIDR(h.harga)}</td>
+                      <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                        {relativeTime(h.timestamp)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Komentar */}
+        <CommentSection
+          nftId={id}
+          currentUserId={user?.id}
+          currentUserDisplayName={currentUserDisplayName}
+        />
+
       </div>
 
       {/* Buy Dialog */}
-      <Dialog open={buyOpen} onOpenChange={open => { if (!buying) setBuyOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Buy &ldquo;{nft.title}&rdquo;</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Complete your purchase on an external marketplace, then submit the proof link below to record the transaction.
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="proof-link">Proof URL <span className="text-destructive">*</span></Label>
-              <Input
-                id="proof-link"
-                placeholder="https://opensea.io/..."
-                value={proofLink}
-                onChange={e => setProofLink(e.target.value)}
-                disabled={buying}
-              />
-              <p className="text-xs text-muted-foreground">Link to the transaction on an external marketplace.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="buy-description">Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Textarea
-                id="buy-description"
-                placeholder="e.g. Purchased via OpenSea auction on 2026-05-27"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                disabled={buying}
-                rows={3}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setBuyOpen(false)} disabled={buying}>
-              Cancel
-            </Button>
-            <Button onClick={handleBuy} disabled={!proofLink.trim() || buying} className="gap-2">
-              {buying && <Loader2 className="h-4 w-4 animate-spin" />}
-              Confirm Purchase
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {buyOpen && user && config && (
+        <BuyDialog
+          unit={unit}
+          linkBukti={projectLinkBukti}
+          buyerId={user.id}
+          hargaDasar={config.harga_dasar}
+          batasAtas={config.batas_atas}
+          onClose={() => setBuyOpen(false)}
+          onSuccess={() => {
+            setData(prev =>
+              prev
+                ? { ...prev, unit: { ...prev.unit, owner_id: user.id, for_sale: false }, ownerName: user.displayName ?? 'Kamu' }
+                : prev,
+            );
+          }}
+        />
+      )}
     </MainLayout>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   collection, query, where, orderBy, limit,
   getDocs, getDoc, doc, Timestamp,
@@ -118,13 +119,13 @@ function ProjectCard({ project }: { project: ProjectWithMeta }) {
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
-      {/* Gambar */}
-      <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
+      {/* Gambar — link ke detail */}
+      <Link href={`/projects/${project.id}`} className="aspect-video bg-muted relative overflow-hidden block shrink-0 group">
         {project.gambar_url && !imgError ? (
           <img
             src={project.gambar_url}
             alt={project.nama_project}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={() => setImgError(true)}
           />
         ) : (
@@ -140,14 +141,18 @@ function ProjectCard({ project }: { project: ProjectWithMeta }) {
             {isInvalidasi ? 'Dalam Invalidasi' : 'Aktif'}
           </Badge>
         </div>
-      </div>
+      </Link>
 
       {/* Konten */}
       <div className="p-3 flex flex-col gap-2 flex-1">
         <div className="min-w-0">
-          <p className="font-semibold text-sm leading-snug line-clamp-2" title={project.nama_project}>
+          <Link
+            href={`/projects/${project.id}`}
+            className="font-semibold text-sm leading-snug line-clamp-2 hover:underline"
+            title={project.nama_project}
+          >
             {project.nama_project}
-          </p>
+          </Link>
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
             <span className="capitalize">{KATEGORI_LABELS[project.kategori]}</span>
             {project.lokasi_tindakan && <> · {project.lokasi_tindakan}</>}

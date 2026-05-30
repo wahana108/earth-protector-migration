@@ -524,6 +524,7 @@ function NftUnitCard({
     <div className="rounded-xl border bg-card overflow-hidden group flex flex-col">
       {/* Gambar */}
       <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
+        <Link href={`/nft/${unit.id}`} className="absolute inset-0 z-0" aria-label={unit.nama_nft} />
         {unit.gambar_url && !imgError ? (
           <img
             src={unit.gambar_url}
@@ -538,7 +539,7 @@ function NftUnitCard({
         )}
 
         {/* Status badge */}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 z-10">
           <Badge
             variant={unit.status === 'valid' ? 'default' : 'secondary'}
             className="text-xs capitalize"
@@ -551,7 +552,7 @@ function NftUnitCard({
         {canEdit && (
           <button
             onClick={() => onEditGambar(unit)}
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 text-white rounded-md p-1.5"
+            className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 text-white rounded-md p-1.5"
             title="Edit gambar"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -562,9 +563,13 @@ function NftUnitCard({
       {/* Konten */}
       <div className="p-3 flex flex-col gap-2 flex-1">
         <div className="min-w-0">
-          <p className="font-semibold text-sm leading-snug line-clamp-1" title={unit.nama_nft}>
+          <Link
+            href={`/nft/${unit.id}`}
+            className="font-semibold text-sm leading-snug line-clamp-1 hover:underline"
+            title={unit.nama_nft}
+          >
             {unit.nama_nft}
-          </p>
+          </Link>
           <p className="text-xs text-muted-foreground line-clamp-1" title={unit.nama_project}>
             {unit.nama_project}
           </p>
@@ -602,8 +607,12 @@ function NftUnitCard({
             variant={isLiked ? 'default' : 'outline'}
             className="h-8 w-9 p-0 shrink-0"
             onClick={() => onLike(unit)}
-            disabled={!currentUserId || likingId === unit.id}
-            title={currentUserId ? (isLiked ? 'Batal like' : 'Like NFT ini') : 'Login untuk like'}
+            disabled={!currentUserId || isOwn || likingId === unit.id}
+            title={
+              !currentUserId ? 'Login untuk like' :
+              isOwn ? 'Tidak bisa like NFT milikmu sendiri' :
+              isLiked ? 'Batal like' : 'Like NFT ini'
+            }
           >
             {likingId === unit.id ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
