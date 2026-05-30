@@ -8,7 +8,7 @@ import {
   getDocs, getDoc, doc, Timestamp,
 } from 'firebase/firestore';
 import {
-  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag,
+  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag, ExternalLink,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -30,21 +30,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
-import type { NFTUnit, ProjectCategory, Comment } from '@/lib/types';
+import {
+  KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
+  type NFTUnit, type ProjectCategory, type Comment,
+} from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 24;
 
-const KATEGORI_LABELS: Record<ProjectCategory | 'semua', string> = {
-  semua: 'Semua',
-  lingkungan: 'Lingkungan',
-  sosial: 'Sosial',
-  pendidikan: 'Pendidikan',
-  kesehatan: 'Kesehatan',
-  lainnya: 'Lainnya',
-};
-
-const KATEGORI_LIST = Object.keys(KATEGORI_LABELS) as (ProjectCategory | 'semua')[];
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -103,6 +96,16 @@ interface BuyDialogProps {
 function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
+  const [linkBukti, setLinkBukti] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!unit.project_id) return;
+    getDoc(doc(db, 'projects', unit.project_id))
+      .then((snap) => {
+        if (snap.exists()) setLinkBukti((snap.data().link_bukti as string) || null);
+      })
+      .catch(() => {});
+  }, [unit.project_id]);
 
   async function handleConfirm() {
     setBuying(true);
@@ -146,6 +149,23 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
               </div>
             </div>
           </div>
+
+          {linkBukti && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40 p-3">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">
+                Verifikasi project sebelum membeli:
+              </p>
+              <a
+                href={linkBukti}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                Lihat Bukti Project
+              </a>
+            </div>
+          )}
 
           {unit.nilai_selisih === 0 && (
             <p className="text-xs text-muted-foreground">
@@ -638,14 +658,22 @@ function ExploreContent() {
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
 
+  // Derive parent chip highlight dari kategori aktif
+  const effectiveParent: ProjectCategory | 'semua' =
+    kategori === 'semua' ? 'semua' :
+    (KATEGORI_PARENT[kategori as ProjectCategory] ?? kategori as ProjectCategory);
+
   // Fetch nft_units — sorted by like_count desc, optionally filtered by kategori
   const loadUnits = useCallback(async (kat: ProjectCategory | 'semua') => {
     setLoading(true);
     try {
       const baseRef = collection(db, 'nft_units');
+      const children = kat !== 'semua' ? KATEGORI_CHILDREN[kat as ProjectCategory] : undefined;
       const q = kat === 'semua'
         ? query(baseRef, orderBy('like_count', 'desc'), limit(PAGE_SIZE))
-        : query(baseRef, where('kategori', '==', kat), orderBy('like_count', 'desc'), limit(PAGE_SIZE));
+        : children && children.length > 0
+          ? query(baseRef, where('kategori', 'in', [kat, ...children]), orderBy('like_count', 'desc'), limit(PAGE_SIZE))
+          : query(baseRef, where('kategori', '==', kat), orderBy('like_count', 'desc'), limit(PAGE_SIZE));
 
       const snap = await getDocs(q);
       setUnits(snap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>)));
@@ -759,15 +787,26 @@ function ExploreContent() {
           </p>
         </div>
 
-        {/* Filter chips */}
+        {/* Filter chips — row 1: kategori utama */}
         <div className="flex flex-wrap gap-2">
-          {KATEGORI_LIST.map((kat) => (
+          <button
+            onClick={() => handleKategori('semua')}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors',
+              kategori === 'semua'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-foreground border-border hover:bg-muted',
+            )}
+          >
+            Semua
+          </button>
+          {KATEGORI_UTAMA.map((kat) => (
             <button
               key={kat}
               onClick={() => handleKategori(kat)}
               className={cn(
                 'px-3 py-1.5 rounded-full text-sm font-medium border transition-colors',
-                kategori === kat
+                effectiveParent === kat
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background text-foreground border-border hover:bg-muted',
               )}
@@ -776,6 +815,37 @@ function ExploreContent() {
             </button>
           ))}
         </div>
+
+        {/* Filter chips — row 2: subkategori (hanya tampil jika parent punya anak) */}
+        {effectiveParent !== 'semua' && KATEGORI_CHILDREN[effectiveParent as ProjectCategory] && (
+          <div className="flex flex-wrap gap-2 pl-1 border-l-2 border-primary/30">
+            <button
+              onClick={() => handleKategori(effectiveParent as ProjectCategory)}
+              className={cn(
+                'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                !KATEGORI_PARENT[kategori as ProjectCategory]
+                  ? 'bg-primary/15 text-primary border-primary/40'
+                  : 'bg-background text-foreground border-border hover:bg-muted',
+              )}
+            >
+              Semua {KATEGORI_LABELS[effectiveParent as ProjectCategory]}
+            </button>
+            {KATEGORI_CHILDREN[effectiveParent as ProjectCategory]!.map((sub) => (
+              <button
+                key={sub}
+                onClick={() => handleKategori(sub)}
+                className={cn(
+                  'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  kategori === sub
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-foreground border-border hover:bg-muted',
+                )}
+              >
+                {KATEGORI_LABELS[sub]}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Grid */}
         {loading ? (
@@ -795,7 +865,7 @@ function ExploreContent() {
             <p className="text-sm text-muted-foreground mt-1">
               {kategori === 'semua'
                 ? 'Jadilah developer pertama yang mendaftarkan project.'
-                : `Belum ada project dengan kategori "${KATEGORI_LABELS[kategori]}".`}
+                : `Belum ada project dengan kategori "${KATEGORI_LABELS[kategori as ProjectCategory]}".`}
             </p>
           </div>
         ) : (

@@ -104,10 +104,50 @@ export type CommunityConfig = {
 
 export type ProjectCategory =
   | 'lingkungan'
+  | 'tree_planting'
+  | 'ocean_cleanup'
+  | 'wildlife_protection'
+  | 'ecosystem_restoration'
+  | 'energi'
+  | 'renewable_energy'
+  | 'carbon_reduction'
   | 'sosial'
   | 'pendidikan'
   | 'kesehatan'
   | 'lainnya';
+
+export const KATEGORI_LABELS: Record<ProjectCategory, string> = {
+  lingkungan: 'Lingkungan',
+  tree_planting: 'Penanaman Pohon',
+  ocean_cleanup: 'Kebersihan Laut',
+  wildlife_protection: 'Perlindungan Satwa',
+  ecosystem_restoration: 'Restorasi Ekosistem',
+  energi: 'Energi',
+  renewable_energy: 'Energi Terbarukan',
+  carbon_reduction: 'Pengurangan Karbon',
+  sosial: 'Sosial',
+  pendidikan: 'Pendidikan',
+  kesehatan: 'Kesehatan',
+  lainnya: 'Lainnya',
+};
+
+export const KATEGORI_UTAMA: ProjectCategory[] = [
+  'lingkungan', 'energi', 'sosial', 'pendidikan', 'kesehatan', 'lainnya',
+];
+
+export const KATEGORI_CHILDREN: Partial<Record<ProjectCategory, ProjectCategory[]>> = {
+  lingkungan: ['tree_planting', 'ocean_cleanup', 'wildlife_protection', 'ecosystem_restoration'],
+  energi: ['renewable_energy', 'carbon_reduction'],
+};
+
+export const KATEGORI_PARENT: Partial<Record<ProjectCategory, ProjectCategory>> = {
+  tree_planting: 'lingkungan',
+  ocean_cleanup: 'lingkungan',
+  wildlife_protection: 'lingkungan',
+  ecosystem_restoration: 'lingkungan',
+  renewable_energy: 'energi',
+  carbon_reduction: 'energi',
+};
 
 export type NFTStatus = 'biasa' | 'valid' | 'invalid';
 

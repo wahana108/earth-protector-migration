@@ -29,7 +29,10 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { createProject } from '@/lib/projects';
-import type { CommunityConfig, ProjectCategory } from '@/lib/types';
+import {
+  KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
+  type CommunityConfig, type ProjectCategory,
+} from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -43,7 +46,11 @@ const schema = z.object({
     .string()
     .min(1, 'Tanggal wajib diisi')
     .refine((d) => new Date(d) <= new Date(), { message: 'Tidak boleh tanggal masa depan' }),
-  kategori: z.enum(['lingkungan', 'sosial', 'pendidikan', 'kesehatan', 'lainnya'] as const),
+  kategori: z.enum([
+    'lingkungan', 'tree_planting', 'ocean_cleanup', 'wildlife_protection', 'ecosystem_restoration',
+    'energi', 'renewable_energy', 'carbon_reduction',
+    'sosial', 'pendidikan', 'kesehatan', 'lainnya',
+  ] as const),
   lokasi_tindakan: z.string().min(5, 'Min 5 karakter'),
   nilai_project: z.coerce.number().positive('Harus lebih dari 0'),
   harga_jual: z.coerce.number().positive('Harus lebih dari 0'),
@@ -51,13 +58,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const KATEGORI_LABELS: Record<ProjectCategory, string> = {
-  lingkungan: 'Lingkungan',
-  sosial: 'Sosial',
-  pendidikan: 'Pendidikan',
-  kesehatan: 'Kesehatan',
-  lainnya: 'Lainnya',
-};
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -77,6 +77,7 @@ export default function CreatePage() {
 
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [parentKat, setParentKat] = useState<ProjectCategory | ''>('');
 
   const {
     register,
@@ -282,27 +283,27 @@ export default function CreatePage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="kategori">Kategori *</Label>
+                  <Label>Kategori Utama *</Label>
                   <Select
-                    value={watchedKategori}
-                    onValueChange={(v) =>
-                      setValue('kategori', v as ProjectCategory, { shouldValidate: true })
-                    }
+                    value={parentKat}
+                    onValueChange={(v) => {
+                      const kat = v as ProjectCategory;
+                      setParentKat(kat);
+                      setValue('kategori', kat, { shouldValidate: true });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih kategori" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(Object.entries(KATEGORI_LABELS) as [ProjectCategory, string][]).map(
-                        ([val, label]) => (
-                          <SelectItem key={val} value={val}>
-                            {label}
-                          </SelectItem>
-                        )
-                      )}
+                      {KATEGORI_UTAMA.map((kat) => (
+                        <SelectItem key={kat} value={kat}>
+                          {KATEGORI_LABELS[kat]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  {errors.kategori && (
+                  {errors.kategori && !KATEGORI_PARENT[watchedKategori as ProjectCategory] && (
                     <p className="text-sm text-destructive">{errors.kategori.message}</p>
                   )}
                 </div>
@@ -320,6 +321,32 @@ export default function CreatePage() {
                   )}
                 </div>
               </div>
+
+              {parentKat && KATEGORI_CHILDREN[parentKat] && (
+                <div className="space-y-2">
+                  <Label>
+                    Subkategori{' '}
+                    <span className="text-muted-foreground text-xs font-normal">(opsional — lebih spesifik)</span>
+                  </Label>
+                  <Select
+                    value={KATEGORI_PARENT[watchedKategori as ProjectCategory] ? watchedKategori : ''}
+                    onValueChange={(v) =>
+                      setValue('kategori', v as ProjectCategory, { shouldValidate: true })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={`Semua ${KATEGORI_LABELS[parentKat]} (tidak spesifik)`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {KATEGORI_CHILDREN[parentKat]!.map((sub) => (
+                        <SelectItem key={sub} value={sub}>
+                          {KATEGORI_LABELS[sub]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="lokasi_tindakan">Lokasi Tindakan *</Label>
