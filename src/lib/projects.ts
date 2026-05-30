@@ -1,8 +1,9 @@
 import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
-  getDocs, query, where, updateDoc, runTransaction,
+  getDocs, getDoc, query, where, updateDoc, runTransaction,
 } from 'firebase/firestore';
+import { getCommunityConfig } from './community-config';
 import type { ProjectCategory } from './types';
 
 export class BuyError extends Error {
@@ -114,6 +115,58 @@ export async function updateNftUnitGambar(
   await updateDoc(doc(db, 'nft_units', nftUnitId), { gambar_url });
 }
 
+// ─── Level Check ─────────────────────────────────────────────────────────────
+
+// Evaluasi syarat Top Developer dan update level jika berubah.
+// Dipanggil setelah buyNftUnit (soldNfts +1) dan buybackNftUnit (buybackCount +1).
+export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void> {
+  const [config, userSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(doc(db, 'users', userId)),
+  ]);
+  if (!config || !userSnap.exists()) return;
+
+  const userData = userSnap.data();
+  const soldNfts: number = (userData.soldNfts as number) ?? 0;
+  const buybackCount: number = (userData.buybackCount as number) ?? 0;
+  const currentLevel: string = (userData.level as string) ?? 'developer_biasa';
+
+  const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
+  const meetsBuybackRate =
+    soldNfts >= 1 &&
+    buybackCount >= soldNfts * (config.minimum_buyback_pct / 100);
+
+  const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
+
+  if (currentLevel === newLevel) return;
+
+  const batch = writeBatch(db);
+
+  batch.update(doc(db, 'users', userId), { level: newLevel });
+
+  // Downgrade: semua project developer ditandai daftar_invalidasi = true
+  if (currentLevel === 'top_developer' && newLevel === 'developer_biasa') {
+    const projectsSnap = await getDocs(
+      query(collection(db, 'projects'), where('developer_id', '==', userId)),
+    );
+    projectsSnap.docs.forEach(d => batch.update(d.ref, { daftar_invalidasi: true }));
+  }
+
+  // Log perubahan level di neraca_log
+  batch.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+    type: 'level_change',
+    nft_unit_id: '',
+    nama_nft: `Level ${currentLevel} → ${newLevel}`,
+    harga_transaksi: 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: '',
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+}
+
 // Beli NFT — satu Firestore transaction yang mengupdate semua dokumen terkait atomik
 export async function buyNftUnit(
   nftUnitId: string,
@@ -122,6 +175,7 @@ export async function buyNftUnit(
   batas_atas: number,
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
+  let sellerIdCapture = '';
 
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
@@ -137,6 +191,7 @@ export async function buyNftUnit(
     }
 
     const sellerId = nft.owner_id as string;
+    sellerIdCapture = sellerId;
     const harga_jual = nft.harga_jual as number;
     const nilai_selisih = nft.nilai_selisih as number;
     const nama_nft = nft.nama_nft as string;
@@ -216,6 +271,11 @@ export async function buyNftUnit(
       timestamp: serverTimestamp(),
     });
   });
+
+  // Cek dan update level developer setelah soldNfts bertambah (non-critical)
+  if (sellerIdCapture) {
+    try { await checkAndUpdateDeveloperLevel(sellerIdCapture); } catch { /* silent */ }
+  }
 }
 
 // ─── Buyback ──────────────────────────────────────────────────────────────────
@@ -234,6 +294,7 @@ export async function buybackNftUnit(
   ownerId: string,
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
+  let developerIdCapture = '';
 
   await runTransaction(db, async (tx) => {
     // ── Semua read sebelum write ───────────────────────────────────────────
@@ -246,6 +307,7 @@ export async function buybackNftUnit(
     if (nft.digunakan_validasi) throw new BuybackError('NFT sedang digunakan validasi.');
 
     const developerId = nft.developer_id as string;
+    developerIdCapture = developerId;
     const nilai_selisih = nft.nilai_selisih as number;
     const nama_nft = nft.nama_nft as string;
     const project_id = nft.project_id as string;
@@ -316,6 +378,11 @@ export async function buybackNftUnit(
       timestamp: serverTimestamp(),
     });
   });
+
+  // Cek dan update level developer setelah buybackCount bertambah (non-critical)
+  if (developerIdCapture) {
+    try { await checkAndUpdateDeveloperLevel(developerIdCapture); } catch { /* silent */ }
+  }
 }
 
 // Toggle like pada nft_unit — atomic via transaction

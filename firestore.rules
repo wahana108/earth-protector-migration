@@ -26,7 +26,7 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount']));
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level']));
       allow delete: if isAdmin();
 
       // neraca_log/{logId} — log transaksi per user, immutable setelah dibuat

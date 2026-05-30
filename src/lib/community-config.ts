@@ -12,6 +12,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   minimum_buyback_pct: 50,
   fee_project_pct: { min: 2, max: 5 },
   minimum_top_developer: 30,
+  minimum_soldNfts_top_developer: 24,
   kapasitas_pool_minimum: 90,
   fase_aktif: 1,
   ai_provider: 'gemini',

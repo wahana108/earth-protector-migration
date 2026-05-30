@@ -116,7 +116,7 @@ function toProject(id: string, data: Record<string, unknown>): Project {
 }
 
 const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
-  beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback',
+  beli: 'Beli', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback', level_change: 'Level',
 };
 
 // ─── Buyback Dialog ───────────────────────────────────────────────────────────

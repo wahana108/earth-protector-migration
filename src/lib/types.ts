@@ -94,6 +94,7 @@ export type CommunityConfig = {
   minimum_buyback_pct: number;
   fee_project_pct: { min: number; max: number };
   minimum_top_developer: number;
+  minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
   fase_aktif: number;
   ai_provider: string;
@@ -183,7 +184,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'jual' | 'validasi' | 'buyback';
+  type: 'beli' | 'jual' | 'validasi' | 'buyback' | 'level_change';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;

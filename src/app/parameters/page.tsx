@@ -29,6 +29,7 @@ type EditValues = {
   fee_min: number;
   fee_max: number;
   minimum_top_developer: number;
+  minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
   fase_aktif: number;
   ai_provider: string;
@@ -45,6 +46,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     fee_min: c.fee_project_pct.min,
     fee_max: c.fee_project_pct.max,
     minimum_top_developer: c.minimum_top_developer,
+    minimum_soldNfts_top_developer: c.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
@@ -61,6 +63,7 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     minimum_buyback_pct: e.minimum_buyback_pct,
     fee_project_pct: { min: e.fee_min, max: e.fee_max },
     minimum_top_developer: e.minimum_top_developer,
+    minimum_soldNfts_top_developer: e.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
@@ -366,6 +369,20 @@ export default function ParametersPage() {
                     onChange={v => setField('anomali_invalid', v as number)} />
                 </CardContent>
               </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Syarat Top Developer
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Min. NFT Terjual" value={editValues.minimum_soldNfts_top_developer}
+                    onChange={v => setField('minimum_soldNfts_top_developer', v as number)} />
+                  <EditRow label="Min. Buyback (%)" value={editValues.minimum_buyback_pct}
+                    onChange={v => setField('minimum_buyback_pct', v as number)} />
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
             // ── READ-ONLY MODE ──────────────────────────────────────────────
@@ -414,6 +431,26 @@ export default function ParametersPage() {
                     value={`≥ ${config.ai_anomali_threshold.flag}% anomali`} />
                   <ParamRow label="Threshold Invalid"
                     value={`= ${config.ai_anomali_threshold.invalid}% anomali`} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Syarat Top Developer
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Min. NFT Terjual"
+                    value={`${config.minimum_soldNfts_top_developer} NFT`} />
+                  <ParamRow label="Min. Buyback"
+                    value={`${config.minimum_buyback_pct}%`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Dievaluasi otomatis setiap kali terjadi penjualan atau buyback.
+                      Semua syarat harus terpenuhi sekaligus.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </>
