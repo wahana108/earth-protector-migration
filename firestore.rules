@@ -158,7 +158,10 @@ service cloud.firestore {
             .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir'])) ||
         // Comment flow: siapapun yang auth boleh update comment_count saja
         (isAuth() && request.resource.data.diff(resource.data)
-          .affectedKeys().hasOnly(['comment_count']));
+          .affectedKeys().hasOnly(['comment_count'])) ||
+        // Like flow: siapapun yang auth boleh update like_count saja
+        (isAuth() && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['like_count']));
       allow delete: if false;
 
       // history_kepemilikan/{historyId} — rekaman perpindahan tangan, publik & immutable
@@ -168,11 +171,11 @@ service cloud.firestore {
         allow update, delete: if isAdmin();
       }
 
-      // likes/{userId} — 1 like per user, tidak bisa diubah, hanya create/delete
-      match /likes/{likerId} {
-        allow read:   if true;
-        allow create: if isMe(likerId);
-        allow delete: if isMe(likerId) || isAdmin();
+      // likes/{likeId} — 1 like per user, tidak bisa diubah, hanya create/delete
+      match /likes/{likeId} {
+        allow read: if true;
+        allow create: if isAuth() && request.resource.data.user_id == request.auth.uid;
+        allow delete: if isAuth() && resource.data.user_id == request.auth.uid;
         allow update: if false;
       }
 

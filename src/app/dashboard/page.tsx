@@ -108,7 +108,7 @@ function toProject(id: string, data: Record<string, unknown>): Project {
     daftar_invalidasi: (data.daftar_invalidasi as boolean) ?? false,
     pool_jaminan: (data.pool_jaminan as number) ?? 0,
     jumlah_validator: (data.jumlah_validator as number) ?? 0,
-    validator_list: (data.validator_list as string[]) ?? [],
+    validator_list: [],
     like_count: (data.like_count as number) ?? 0,
     anomali_flag: (data.anomali_flag as boolean) ?? false,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),

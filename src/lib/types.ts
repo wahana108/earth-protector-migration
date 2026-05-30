@@ -151,6 +151,13 @@ export const KATEGORI_PARENT: Partial<Record<ProjectCategory, ProjectCategory>> 
 
 export type NFTStatus = 'biasa' | 'valid' | 'invalid';
 
+export type ValidatorEntry = {
+  user_id: string;
+  nft_unit_id: string;
+  nilai: number;
+  timestamp: Date | null;
+};
+
 export type Project = {
   id: string;
   developer_id: string;
@@ -168,7 +175,7 @@ export type Project = {
   daftar_invalidasi: boolean;
   pool_jaminan: number;
   jumlah_validator: number;
-  validator_list: string[];
+  validator_list: ValidatorEntry[];
   like_count: number;
   anomali_flag: boolean;
   created_at: Date;

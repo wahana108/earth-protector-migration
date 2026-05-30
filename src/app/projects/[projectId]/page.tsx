@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
 import {
   KATEGORI_LABELS,
-  type Project, type NFTUnit, type ProjectCategory,
+  type Project, type NFTUnit, type ProjectCategory, type ValidatorEntry,
 } from '@/lib/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,7 +59,12 @@ function toProject(id: string, data: Record<string, unknown>): Project {
     daftar_invalidasi: (data.daftar_invalidasi as boolean) ?? false,
     pool_jaminan: (data.pool_jaminan as number) ?? 0,
     jumlah_validator: (data.jumlah_validator as number) ?? 0,
-    validator_list: (data.validator_list as string[]) ?? [],
+    validator_list: ((data.validator_list as Record<string, unknown>[]) ?? []).map(v => ({
+      user_id: v.user_id as string,
+      nft_unit_id: (v.nft_unit_id as string) ?? '',
+      nilai: (v.nilai as number) ?? 0,
+      timestamp: (v.timestamp as Timestamp)?.toDate?.() ?? null,
+    })),
     like_count: (data.like_count as number) ?? 0,
     anomali_flag: (data.anomali_flag as boolean) ?? false,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
@@ -103,6 +108,7 @@ type PageData = {
   units: NFTUnit[];
   terjual: number;
   developer: DeveloperInfo;
+  validatorNames: Record<string, string>;
 };
 
 // ─── Mini NFT Card ────────────────────────────────────────────────────────────
@@ -213,7 +219,21 @@ export default function ProjectDetailPage({
           buybackCount: (devData.buybackCount as number) ?? 0,
         };
 
-        setData({ project, units, terjual, developer });
+        // Resolve display name untuk setiap validator
+        const validatorNames: Record<string, string> = {};
+        if (project.validator_list.length > 0) {
+          const uniqueIds = [...new Set(project.validator_list.map(v => v.user_id))];
+          const validatorSnaps = await Promise.all(
+            uniqueIds.map(uid => getDoc(doc(db, 'users', uid))),
+          );
+          validatorSnaps.forEach(s => {
+            if (s.exists()) {
+              validatorNames[s.id] = (s.data().displayName as string) || s.id.slice(0, 8) + '…';
+            }
+          });
+        }
+
+        setData({ project, units, terjual, developer, validatorNames });
       } finally {
         setLoading(false);
       }
@@ -225,7 +245,7 @@ export default function ProjectDetailPage({
   if (missing) return notFound();
   if (!data) return null;
 
-  const { project, units, terjual, developer } = data;
+  const { project, units, terjual, developer, validatorNames } = data;
 
   const isInvalidasi = project.status_project === 'dalam_invalidasi';
   const progressPct = project.jumlah_nft > 0
@@ -343,23 +363,72 @@ export default function ProjectDetailPage({
         </section>
 
         {/* Validator */}
-        {(project.jumlah_validator > 0 || project.pool_jaminan > 0) && (
-          <section className="rounded-xl border p-4 space-y-2">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Validator &amp; Pool Jaminan
-            </h2>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              <span className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                {project.jumlah_validator} validator
-              </span>
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                Pool: {formatIDR(project.pool_jaminan)}
-              </span>
-            </div>
-          </section>
-        )}
+        <section className="rounded-xl border p-4 space-y-3">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Validator Project
+          </h2>
+
+          {project.validator_list.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Belum ada validator untuk project ini.
+            </p>
+          ) : (
+            <>
+              {/* Ringkasan */}
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                <span className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  {project.jumlah_validator} validator
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  Pool: {formatIDR(project.pool_jaminan)}
+                </span>
+              </div>
+
+              {/* Daftar validator */}
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                        Validator
+                      </th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">
+                        Nilai Kontribusi
+                      </th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">
+                        Tanggal
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {project.validator_list.map((v, i) => (
+                      <tr
+                        key={`${v.user_id}-${v.nft_unit_id}`}
+                        className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
+                      >
+                        <td className="px-3 py-2 font-medium border-t">
+                          {validatorNames[v.user_id] ?? v.user_id.slice(0, 8) + '…'}
+                        </td>
+                        <td className="px-3 py-2 text-right border-t">
+                          {formatIDR(v.nilai)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-muted-foreground border-t">
+                          {v.timestamp
+                            ? v.timestamp.toLocaleDateString('id-ID', {
+                                day: 'numeric', month: 'short', year: 'numeric',
+                              })
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
 
         {/* NFT Grid */}
         <section className="space-y-3">
