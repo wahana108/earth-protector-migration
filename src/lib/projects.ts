@@ -476,3 +476,60 @@ export async function transferToPool(nftUnitId: string, userId: string): Promise
 
   await batch.commit();
 }
+
+// ─── Admin: Recalculate all developer levels ──────────────────────────────────
+
+export type RecalcStats = {
+  total: number;
+  upgraded: number;
+  downgraded: number;
+  unchanged: number;
+};
+
+// Evaluasi ulang level semua user sesuai parameter komunitas saat ini.
+// Hanya user yang levelnya perlu berubah yang ditulis ke Firestore.
+// onProgress dipanggil setelah tiap user agar UI bisa menampilkan live progress.
+export async function recalculateAllDeveloperLevels(
+  onProgress?: (processed: number, total: number) => void,
+): Promise<RecalcStats> {
+  const [config, usersSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDocs(collection(db, 'users')),
+  ]);
+  if (!config) throw new Error('Community config tidak ditemukan.');
+
+  const stats: RecalcStats = {
+    total: usersSnap.size,
+    upgraded: 0,
+    downgraded: 0,
+    unchanged: 0,
+  };
+  let processed = 0;
+
+  for (const userDoc of usersSnap.docs) {
+    const d = userDoc.data();
+    const soldNfts: number = (d.soldNfts as number) ?? 0;
+    const buybackCount: number = (d.buybackCount as number) ?? 0;
+    const currentLevel: string = (d.level as string) ?? 'developer_biasa';
+
+    const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
+    const meetsBuybackRate =
+      soldNfts >= 1 &&
+      Math.floor((buybackCount / soldNfts) * 100) >= config.minimum_buyback_pct;
+
+    const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
+
+    if (currentLevel !== newLevel) {
+      await checkAndUpdateDeveloperLevel(userDoc.id);
+      if (newLevel === 'top_developer') stats.upgraded++;
+      else stats.downgraded++;
+    } else {
+      stats.unchanged++;
+    }
+
+    processed++;
+    onProgress?.(processed, stats.total);
+  }
+
+  return stats;
+}

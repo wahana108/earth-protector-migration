@@ -86,11 +86,11 @@ export function SidebarNav() {
               <SidebarMenuButton
                 asChild
                 isActive={pathname.startsWith('/admin')}
-                tooltip={{ children: 'Admin: Laporan' }}
+                tooltip={{ children: 'Admin Tools' }}
               >
-                <Link href="/admin/reports">
+                <Link href="/admin">
                   <ShieldAlert />
-                  <span>Admin Reports</span>
+                  <span>Admin</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
