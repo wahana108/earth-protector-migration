@@ -446,10 +446,11 @@ export async function transferToPool(nftUnitId: string, userId: string): Promise
 
   const batch = writeBatch(db);
 
-  // Update nft_unit: masuk pool dan otomatis dijual
+  // Update nft_unit: masuk pool, otomatis dijual, catat waktu masuk
   batch.update(doc(db, 'nft_units', nftUnitId), {
     in_pool: true,
     for_sale: true,
+    transferred_at: serverTimestamp(),
   });
 
   // Update pool_rekomendasi metadata (upsert — setDoc merge:true creates doc if missing)
@@ -583,6 +584,66 @@ export async function validateProject(
       }),
     });
   });
+}
+
+// ─── FIFO Skip ────────────────────────────────────────────────────────────────
+
+export class SkipFifoError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SkipFifoError';
+  }
+}
+
+// Catat bahwa top developer melewati NFT teratas antrian FIFO.
+// NFT tetap di posisi teratas (tidak digeser) — keluar hanya setelah terbeli.
+export async function skipFifoNft(
+  nftUnitId: string,
+  userId: string,
+  alasan: string,
+  detail: string,
+): Promise<void> {
+  const [userSnap, nftSnap] = await Promise.all([
+    getDoc(doc(db, 'users', userId)),
+    getDoc(doc(db, 'nft_units', nftUnitId)),
+  ]);
+
+  if (!userSnap.exists()) throw new SkipFifoError('Data user tidak ditemukan.');
+  if ((userSnap.data().level as string) !== 'top_developer') {
+    throw new SkipFifoError('Hanya Top Developer yang bisa melewati antrian FIFO.');
+  }
+  if (!nftSnap.exists()) throw new SkipFifoError('NFT tidak ditemukan.');
+  if (!nftSnap.data().in_pool) throw new SkipFifoError('NFT ini tidak berada dalam pool.');
+
+  const nama_nft = nftSnap.data().nama_nft as string;
+  const project_id = nftSnap.data().project_id as string;
+  const owner_id = nftSnap.data().owner_id as string;
+
+  const batch = writeBatch(db);
+
+  // transferred_at di-reset ke sekarang agar NFT geser ke belakang antrian FIFO
+  batch.update(doc(db, 'nft_units', nftUnitId), {
+    fifo_skip_count: increment(1),
+    last_skipped_by: userId,
+    last_skip_reason: alasan,
+    transferred_at: serverTimestamp(),
+  });
+
+  batch.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+    type: 'lewati_fifo',
+    nft_unit_id: nftUnitId,
+    nama_nft,
+    harga_transaksi: 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: owner_id,
+    project_id,
+    alasan,
+    detail,
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
 }
 
 // ─── Admin: Recalculate all developer levels ──────────────────────────────────

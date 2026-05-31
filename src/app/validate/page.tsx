@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import {
   ChevronDown, ChevronUp, ImageOff, Loader2,
-  ShieldCheck, CheckSquare, Square,
+  ShieldCheck, CheckSquare, Square, AlertTriangle,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -85,6 +85,24 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
 // ─── Data Fetch ───────────────────────────────────────────────────────────────
 
 type ProjectWithDev = Project & { developer_name: string };
+
+type PoolStatus = {
+  jumlahNftValid: number;
+  minPool: number;
+  poolCukup: boolean;
+};
+
+async function fetchPoolStatus(): Promise<PoolStatus> {
+  const [poolSnap, config] = await Promise.all([
+    getDoc(doc(db, 'pool_rekomendasi', 'v1')),
+    getCommunityConfig(),
+  ]);
+  const jumlahNftValid = poolSnap.exists()
+    ? ((poolSnap.data().jumlah_nft_valid as number) ?? 0)
+    : 0;
+  const minPool = config?.minimum_nft_pool_untuk_validasi ?? 90;
+  return { jumlahNftValid, minPool, poolCukup: jumlahNftValid >= minPool };
+}
 
 async function fetchTopDeveloperProjects(): Promise<ProjectWithDev[]> {
   // Fetch semua user top_developer
@@ -320,10 +338,11 @@ function ValidationPanel({ project, userId, onValidated }: ValidationPanelProps)
 interface ProjectValidasiCardProps {
   project: ProjectWithDev;
   userId: string;
+  poolCukup: boolean;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
-function ProjectValidasiCard({ project, userId, onValidated }: ProjectValidasiCardProps) {
+function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: ProjectValidasiCardProps) {
   const [imgError, setImgError] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [validated, setValidated] = useState(false);
@@ -404,7 +423,9 @@ function ProjectValidasiCard({ project, userId, onValidated }: ProjectValidasiCa
               size="sm"
               variant={expanded ? 'secondary' : 'default'}
               className="h-7 text-xs gap-1.5 mt-1"
-              onClick={() => setExpanded(v => !v)}
+              disabled={!poolCukup}
+              onClick={() => poolCukup && setExpanded(v => !v)}
+              title={!poolCukup ? 'Pool belum mencapai kapasitas minimum' : undefined}
             >
               <ShieldCheck className="h-3.5 w-3.5" />
               Validasi Project ini
@@ -437,6 +458,7 @@ export default function ValidatePage() {
 
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectWithDev[]>([]);
+  const [poolStatus, setPoolStatus] = useState<PoolStatus>({ jumlahNftValid: 0, minPool: 90, poolCukup: false });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -445,8 +467,12 @@ export default function ValidatePage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchTopDeveloperProjects();
+      const [data, status] = await Promise.all([
+        fetchTopDeveloperProjects(),
+        fetchPoolStatus(),
+      ]);
       setProjects(data);
+      setPoolStatus(status);
     } finally {
       setLoading(false);
     }
@@ -489,6 +515,21 @@ export default function ValidatePage() {
           </p>
         </div>
 
+        {/* Banner pool belum cukup */}
+        {!loading && !poolStatus.poolCukup && (
+          <div className="flex items-start gap-3 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-400">
+                Pool belum mencapai kapasitas minimum untuk validasi.
+              </p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                Saat ini: {poolStatus.jumlahNftValid} NFT · Dibutuhkan: {poolStatus.minPool} NFT
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Konten */}
         {loading ? (
           <PageSkeleton />
@@ -509,6 +550,7 @@ export default function ValidatePage() {
                 key={p.id}
                 project={p}
                 userId={user!.id}
+                poolCukup={poolStatus.poolCukup}
                 onValidated={handleValidated}
               />
             ))}

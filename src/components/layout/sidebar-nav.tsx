@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   ShieldAlert,
   CheckSquare,
+  Layers,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -41,6 +42,7 @@ const navItems = [
   { href: '/explore', label: 'Explore', icon: Compass },
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/validate', label: 'Validate', icon: CheckSquare },
+  { href: '/pool', label: 'Pool', icon: Layers },
   { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
   { href: '/validated', label: 'Validated', icon: BadgeCheck },
   { href: '/create', label: 'Create', icon: PlusCircle },

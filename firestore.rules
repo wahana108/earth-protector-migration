@@ -184,6 +184,21 @@ service cloud.firestore {
               'harga_beli_terakhir',
               'nilai_selisih',
               'for_sale'
+            ])) ||
+        // Transfer pool flow: tambah transferred_at saat masuk pool
+        (isAuth() &&
+          request.auth.uid == resource.data.owner_id &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['in_pool', 'for_sale', 'transferred_at'])) ||
+        // FIFO skip: top developer melewati antrian, transferred_at di-reset agar geser ke belakang
+        (isAuth() &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.level == 'top_developer' &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'fifo_skip_count',
+              'last_skipped_by',
+              'last_skip_reason',
+              'transferred_at'
             ]));
       allow delete: if false;
 

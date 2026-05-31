@@ -31,6 +31,7 @@ type EditValues = {
   minimum_top_developer: number;
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
+  minimum_nft_pool_untuk_validasi: number;
   fase_aktif: number;
   ai_provider: string;
   anomali_flag: number;
@@ -48,6 +49,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_top_developer: c.minimum_top_developer,
     minimum_soldNfts_top_developer: c.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
+    minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
@@ -65,6 +67,7 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     minimum_top_developer: e.minimum_top_developer,
     minimum_soldNfts_top_developer: e.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
+    minimum_nft_pool_untuk_validasi: e.minimum_nft_pool_untuk_validasi,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
@@ -383,6 +386,18 @@ export default function ParametersPage() {
                     onChange={v => setField('minimum_buyback_pct', v as number)} />
                 </CardContent>
               </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Syarat Validasi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Min. NFT di Pool" value={editValues.minimum_nft_pool_untuk_validasi}
+                    onChange={v => setField('minimum_nft_pool_untuk_validasi', v as number)} />
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
             // ── READ-ONLY MODE ──────────────────────────────────────────────
@@ -449,6 +464,24 @@ export default function ParametersPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Dievaluasi otomatis setiap kali terjadi penjualan atau buyback.
                       Semua syarat harus terpenuhi sekaligus.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Syarat Validasi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Min. NFT di Pool"
+                    value={`${config.minimum_nft_pool_untuk_validasi ?? 90} NFT`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Validasi bergulir hanya bisa dimulai jika pool rekomendasi
+                      sudah terisi minimal sejumlah NFT ini.
                     </p>
                   </div>
                 </CardContent>

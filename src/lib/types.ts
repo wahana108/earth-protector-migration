@@ -104,6 +104,7 @@ export type CommunityConfig = {
   minimum_top_developer: number;
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
+  minimum_nft_pool_untuk_validasi: number;
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
@@ -192,7 +193,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool';
+  type: 'beli' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;
@@ -241,4 +242,8 @@ export type NFTUnit = {
   like_count: number;
   comment_count: number;
   created_at: Date;
+  transferred_at?: Date;
+  fifo_skip_count?: number;
+  last_skipped_by?: string;
+  last_skip_reason?: string;
 };
