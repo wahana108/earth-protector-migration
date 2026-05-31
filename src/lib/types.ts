@@ -191,6 +191,8 @@ export type Project = {
   jumlah_nft: number;
   fee_project_pct?: number;
   jumlah_nft_terjual?: number;
+  link_bukti_status?: 'aktif' | 'tidak_aktif' | 'belum_dicek';
+  link_bukti_last_checked?: Date | null;
   status_project: 'aktif' | 'dalam_invalidasi';
   daftar_invalidasi: boolean;
   pool_jaminan: number;

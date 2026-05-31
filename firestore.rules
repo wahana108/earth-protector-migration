@@ -147,6 +147,13 @@ service cloud.firestore {
               'pool_jaminan',
               'jumlah_validator',
               'validator_list'
+            ])) ||
+        // Link checker: siapapun yang login bisa update status link bukti
+        (isAuth() &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'link_bukti_status',
+              'link_bukti_last_checked'
             ]));
       allow delete: if false;
     }

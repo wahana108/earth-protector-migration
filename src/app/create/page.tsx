@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { PlusCircle, Loader2, ImageOff, Info } from 'lucide-react';
+import { PlusCircle, Loader2, ImageOff, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -29,6 +29,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { createProject } from '@/lib/projects';
+import { checkLinkBukti } from '@/lib/link-checker';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
   type CommunityConfig, type ProjectCategory,
@@ -79,6 +80,7 @@ export default function CreatePage() {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [parentKat, setParentKat] = useState<ProjectCategory | ''>('');
+  const [linkCheckStatus, setLinkCheckStatus] = useState<'idle' | 'checking' | 'aktif' | 'tidak_aktif'>('idle');
 
   const {
     register,
@@ -130,6 +132,13 @@ export default function CreatePage() {
     config && watchedNilai > 0 ? Math.floor(watchedNilai / config.harga_dasar) : null;
   const nilaiSelisih =
     config && watchedHarga > 0 ? watchedHarga - config.harga_dasar : null;
+
+  async function handleLinkBuktiBlur(url: string) {
+    try { new URL(url); } catch { return; }
+    setLinkCheckStatus('checking');
+    const result = await checkLinkBukti(url);
+    setLinkCheckStatus(result);
+  }
 
   const onSubmit = async (data: FormData) => {
     if (!user || !config) return;
@@ -424,13 +433,37 @@ export default function CreatePage() {
                   type="url"
                   placeholder="https://drive.google.com/... (foto/video/dokumen)"
                   {...register('link_bukti')}
+                  onBlur={(e) => handleLinkBuktiBlur(e.target.value)}
                 />
                 {errors.link_bukti && (
                   <p className="text-sm text-destructive">{errors.link_bukti.message}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Link ke dokumentasi tindakan nyata — Google Drive, YouTube, atau platform serupa.
-                </p>
+                {linkCheckStatus === 'checking' && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Memeriksa link...
+                  </div>
+                )}
+                {linkCheckStatus === 'aktif' && (
+                  <div className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Link dapat diakses
+                  </div>
+                )}
+                {linkCheckStatus === 'tidak_aktif' && (
+                  <div className="flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-400">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Link tidak dapat diakses saat ini.
+                      Anda tetap bisa melanjutkan pendaftaran.
+                    </span>
+                  </div>
+                )}
+                {linkCheckStatus === 'idle' && (
+                  <p className="text-xs text-muted-foreground">
+                    Link ke dokumentasi tindakan nyata — Google Drive, YouTube, atau platform serupa.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

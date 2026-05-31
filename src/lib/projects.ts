@@ -5,6 +5,7 @@ import {
   setDoc, increment, arrayUnion, Timestamp,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
+import { checkLinkBukti } from './link-checker';
 import type { ProjectCategory } from './types';
 
 export class BuyError extends Error {
@@ -33,6 +34,8 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   const jumlah_nft = Math.floor(input.nilai_project / input.harga_dasar);
   const nilai_selisih = input.harga_jual - input.harga_dasar;
 
+  const link_bukti_status = await checkLinkBukti(input.link_bukti);
+
   const batch = writeBatch(db);
 
   const projectRef = doc(collection(db, 'projects'));
@@ -52,6 +55,8 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     jumlah_nft,
     fee_project_pct: input.fee_project_pct ?? null,
     jumlah_nft_terjual: 0,
+    link_bukti_status,
+    link_bukti_last_checked: serverTimestamp(),
     status_project: 'aktif',
     daftar_invalidasi: false,
     pool_jaminan: 0,

@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   ArrowLeft, ExternalLink, ImageOff, Heart, MapPin, Calendar, Users, ShieldCheck,
+  CheckCircle2, XCircle, HelpCircle,
 } from 'lucide-react';
 import {
-  collection, doc, getDoc, getDocs, query, where, Timestamp,
+  collection, doc, getDoc, getDocs, query, where, updateDoc, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { db } from '@/lib/firebase';
+import { checkLinkBukti } from '@/lib/link-checker';
 import {
   KATEGORI_LABELS,
   type Project, type NFTUnit, type ProjectCategory, type ValidatorEntry,
@@ -67,6 +69,8 @@ function toProject(id: string, data: Record<string, unknown>): Project {
     })),
     like_count: (data.like_count as number) ?? 0,
     anomali_flag: (data.anomali_flag as boolean) ?? false,
+    link_bukti_status: (data.link_bukti_status as Project['link_bukti_status']) ?? 'belum_dicek',
+    link_bukti_last_checked: (data.link_bukti_last_checked as Timestamp)?.toDate?.() ?? null,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
 }
@@ -193,6 +197,7 @@ export default function ProjectDetailPage({
   const [data, setData] = useState<PageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [linkStatus, setLinkStatus] = useState<Project['link_bukti_status']>('belum_dicek');
 
   useEffect(() => {
     async function load() {
@@ -235,6 +240,27 @@ export default function ProjectDetailPage({
         }
 
         setData({ project, units, terjual, developer, validatorNames });
+        setLinkStatus(project.link_bukti_status ?? 'belum_dicek');
+
+        // Re-check jika belum pernah dicek atau sudah lebih dari 7 hari
+        if (project.link_bukti) {
+          const TUJUH_HARI_MS = 7 * 24 * 60 * 60 * 1000;
+          const perluRecheck =
+            !project.link_bukti_last_checked ||
+            Date.now() - project.link_bukti_last_checked.getTime() > TUJUH_HARI_MS;
+
+          if (perluRecheck) {
+            checkLinkBukti(project.link_bukti).then(async (status) => {
+              setLinkStatus(status);
+              try {
+                await updateDoc(doc(db, 'projects', projectId), {
+                  link_bukti_status: status,
+                  link_bukti_last_checked: serverTimestamp(),
+                });
+              } catch { /* non-critical */ }
+            });
+          }
+        }
       } finally {
         setLoading(false);
       }
@@ -316,12 +342,32 @@ export default function ProjectDetailPage({
           </div>
 
           {project.link_bukti && (
-            <Button variant="outline" size="sm" asChild className="gap-1.5 mt-1">
-              <a href={project.link_bukti} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-3.5 w-3.5" />
-                Lihat Bukti Project
-              </a>
-            </Button>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <Button variant="outline" size="sm" asChild className="gap-1.5">
+                <a href={project.link_bukti} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Lihat Bukti Project
+                </a>
+              </Button>
+              {linkStatus === 'aktif' && (
+                <span className="inline-flex items-center gap-1 text-xs text-green-700 dark:text-green-400 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Link Aktif
+                </span>
+              )}
+              {linkStatus === 'tidak_aktif' && (
+                <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Link Tidak Aktif
+                </span>
+              )}
+              {linkStatus === 'belum_dicek' && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <HelpCircle className="h-3.5 w-3.5" />
+                  Belum Dicek
+                </span>
+              )}
+            </div>
           )}
         </div>
 
