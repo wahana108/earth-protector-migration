@@ -26,7 +26,11 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level']));
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level'])) ||
+        // Validasi flow: pemilik akun mencatat partisipasi validasi
+        (isMe(userId) &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['validator_aktif']));
       allow delete: if isAdmin();
 
       // neraca_log/{logId} — log transaksi per user, immutable setelah dibuat
@@ -135,7 +139,15 @@ service cloud.firestore {
       allow read:   if true;
       allow create: if isAuth() && request.resource.data.developer_id == request.auth.uid;
       allow update: if isAdmin() ||
-        (isAuth() && resource.data.developer_id == request.auth.uid);
+        (isAuth() && resource.data.developer_id == request.auth.uid) ||
+        // Validasi flow: siapapun yang login bisa tambah jaminan ke project
+        (isAuth() &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'pool_jaminan',
+              'jumlah_validator',
+              'validator_list'
+            ]));
       allow delete: if false;
     }
 
@@ -161,7 +173,18 @@ service cloud.firestore {
           .affectedKeys().hasOnly(['comment_count'])) ||
         // Like flow: siapapun yang auth boleh update like_count saja
         (isAuth() && request.resource.data.diff(resource.data)
-          .affectedKeys().hasOnly(['like_count']));
+          .affectedKeys().hasOnly(['like_count'])) ||
+        // Validasi flow: owner menyerahkan NFT ke pool jaminan project
+        (isAuth() &&
+          request.auth.uid == resource.data.owner_id &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'digunakan_validasi',
+              'project_validasi_id',
+              'harga_beli_terakhir',
+              'nilai_selisih',
+              'for_sale'
+            ]));
       allow delete: if false;
 
       // history_kepemilikan/{historyId} — rekaman perpindahan tangan, publik & immutable

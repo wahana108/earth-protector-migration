@@ -6,6 +6,13 @@ export type NFTCategory =
   | 'carbon_reduction'
   | 'ecosystem_restoration';
 
+export type ValidatorAktif = {
+  project_id: string;
+  nft_unit_ids: string[];
+  nilai_total: number;
+  fee_diterima: number;
+};
+
 export type User = {
   id: string;
   displayName: string | null;
@@ -17,6 +24,7 @@ export type User = {
   soldNfts?: number;
   buybackCount?: number;
   isTopDeveloper?: boolean;
+  validator_aktif?: ValidatorAktif[];
 };
 
 export type NFT = {

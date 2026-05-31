@@ -2,7 +2,7 @@ import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
   getDocs, getDoc, query, where, updateDoc, runTransaction,
-  setDoc, increment,
+  setDoc, increment, arrayUnion, Timestamp,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 import type { ProjectCategory } from './types';
@@ -475,6 +475,114 @@ export async function transferToPool(nftUnitId: string, userId: string): Promise
   });
 
   await batch.commit();
+}
+
+// ─── Validasi Bergulir ────────────────────────────────────────────────────────
+
+export class ValidasiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidasiError';
+  }
+}
+
+// Validasi project: serahkan nilai selisih NFT yang dipilih ke pool jaminan project.
+// Setiap NFT terpilih di-lock (digunakan_validasi=true) dan nilai selisihnya direset ke 0.
+export async function validateProject(
+  projectId: string,
+  userId: string,
+  selectedNftIds: string[],
+  harga_dasar: number,
+): Promise<void> {
+  if (selectedNftIds.length === 0) throw new ValidasiError('Pilih minimal 1 NFT untuk validasi.');
+
+  const projectRef = doc(db, 'projects', projectId);
+  const userRef = doc(db, 'users', userId);
+
+  await runTransaction(db, async (tx) => {
+    // ── Baca semua dokumen sebelum ada write ──────────────────────────────
+
+    const projectSnap = await tx.get(projectRef);
+    const userSnap = await tx.get(userRef);
+    const nftSnaps = await Promise.all(
+      selectedNftIds.map(id => tx.get(doc(db, 'nft_units', id))),
+    );
+
+    if (!projectSnap.exists()) throw new ValidasiError('Project tidak ditemukan.');
+    if (!userSnap.exists()) throw new ValidasiError('Data user tidak ditemukan.');
+
+    // Validasi eligibility setiap NFT
+    for (const snap of nftSnaps) {
+      if (!snap.exists()) throw new ValidasiError('NFT tidak ditemukan.');
+      const nft = snap.data();
+      if (nft.owner_id !== userId) throw new ValidasiError(`NFT ${nft.nama_nft} bukan milikmu.`);
+      if (nft.for_sale) throw new ValidasiError(`NFT ${nft.nama_nft} sedang dalam status dijual.`);
+      if (nft.digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah dipakai validasi.`);
+      if ((nft.nilai_selisih as number) <= 0) throw new ValidasiError(`NFT ${nft.nama_nft} tidak memiliki nilai selisih.`);
+    }
+
+    // Hitung total nilai yang diserahkan ke pool
+    const totalSelisih = nftSnaps.reduce(
+      (sum, snap) => sum + ((snap.data()!.nilai_selisih as number) ?? 0),
+      0,
+    );
+
+    const now = Timestamp.now();
+
+    // ── Semua write setelah semua read selesai ─────────────────────────────
+
+    for (const snap of nftSnaps) {
+      const nft = snap.data()!;
+      const nilai = nft.nilai_selisih as number;
+      const nama_nft = nft.nama_nft as string;
+
+      // Lock NFT dan reset nilai selisih
+      tx.update(snap.ref, {
+        digunakan_validasi: true,
+        project_validasi_id: projectId,
+        harga_beli_terakhir: harga_dasar,
+        nilai_selisih: 0,
+        for_sale: false,
+      });
+
+      // Neraca log — delta negatif karena selisih diserahkan ke pool
+      tx.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+        type: 'validasi',
+        nft_unit_id: snap.id,
+        nama_nft,
+        harga_transaksi: harga_dasar,
+        nilai_selisih: nilai,
+        delta: -nilai,
+        counterparty_id: projectId,
+        project_id: projectId,
+        timestamp: now,
+      });
+    }
+
+    // Update project: tambah ke pool jaminan dan daftar validator
+    const newValidatorEntries = nftSnaps.map(snap => ({
+      user_id: userId,
+      nft_unit_id: snap.id,
+      nilai: snap.data()!.nilai_selisih as number,
+      timestamp: now,
+    }));
+
+    tx.update(projectRef, {
+      pool_jaminan: increment(totalSelisih),
+      jumlah_validator: increment(nftSnaps.length),
+      validator_list: arrayUnion(...newValidatorEntries),
+    });
+
+    // Update user: catat partisipasi validasi
+    tx.update(userRef, {
+      validator_aktif: arrayUnion({
+        project_id: projectId,
+        nft_unit_ids: selectedNftIds,
+        nilai_total: totalSelisih,
+        fee_diterima: 0,
+      }),
+    });
+  });
 }
 
 // ─── Admin: Recalculate all developer levels ──────────────────────────────────
