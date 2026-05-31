@@ -26,6 +26,7 @@ export type CreateProjectInput = {
   nilai_project: number;
   harga_jual: number;
   harga_dasar: number;
+  fee_project_pct?: number;
 };
 
 export async function createProject(input: CreateProjectInput): Promise<string> {
@@ -49,6 +50,8 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     nilai_project: input.nilai_project,
     harga_jual: input.harga_jual,
     jumlah_nft,
+    fee_project_pct: input.fee_project_pct ?? null,
+    jumlah_nft_terjual: 0,
     status_project: 'aktif',
     daftar_invalidasi: false,
     pool_jaminan: 0,
@@ -121,9 +124,12 @@ export async function updateNftUnitGambar(
 // Evaluasi syarat Top Developer dan update level jika berubah.
 // Dipanggil setelah buyNftUnit (soldNfts +1) dan buybackNftUnit (buybackCount +1).
 export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void> {
-  const [config, userSnap] = await Promise.all([
+  const poolRef = doc(db, 'pool_rekomendasi', 'v1');
+
+  const [config, userSnap, poolSnap] = await Promise.all([
     getCommunityConfig(),
     getDoc(doc(db, 'users', userId)),
+    getDoc(poolRef),
   ]);
   if (!config || !userSnap.exists()) return;
 
@@ -141,9 +147,25 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
 
   if (currentLevel === newLevel) return;
 
+  // Hitung kapasitas pool baru berdasarkan perubahan jumlah top developer
+  const currentTopCount: number = poolSnap.exists()
+    ? ((poolSnap.data().jumlah_top_developer as number) ?? 0)
+    : 0;
+  const levelDelta = newLevel === 'top_developer' ? 1 : -1;
+  const newTopCount = Math.max(0, currentTopCount + levelDelta);
+  const newKapasitas = newTopCount * 3;
+  const newIsAktif = newKapasitas >= config.kapasitas_pool_minimum;
+
   const batch = writeBatch(db);
 
   batch.update(doc(db, 'users', userId), { level: newLevel });
+
+  // Sync pool metadata
+  batch.set(poolRef, {
+    jumlah_top_developer: newTopCount,
+    kapasitas_aktif: newKapasitas,
+    is_aktif: newIsAktif,
+  }, { merge: true });
 
   // Downgrade: semua project developer ditandai daftar_invalidasi = true
   if (currentLevel === 'top_developer' && newLevel === 'developer_biasa') {
@@ -179,6 +201,9 @@ export async function buyNftUnit(
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
   let developerIdCapture = '';
   let isPoolPurchaseCapture = false;
+  let nftStatusCapture: string = '';
+  let projectIdCapture = '';
+  let hargaJualCapture = 0;
 
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
@@ -202,6 +227,9 @@ export async function buyNftUnit(
     const project_id = nft.project_id as string;
     const isPoolPurchase = (nft.in_pool as boolean) ?? false;
     isPoolPurchaseCapture = isPoolPurchase;
+    nftStatusCapture = (nft.status as string) ?? 'biasa';
+    projectIdCapture = project_id;
+    hargaJualCapture = harga_jual;
 
     const sellerRef = doc(db, 'users', sellerId);
     const buyerRef = doc(db, 'users', buyerId);
@@ -293,6 +321,10 @@ export async function buyNftUnit(
   // Beli dari pool: cek juga level buyer karena buybackCount bertambah (non-critical)
   if (isPoolPurchaseCapture) {
     try { await checkAndUpdateDeveloperLevel(buyerId); } catch { /* silent */ }
+  }
+  // Fee sharing: trigger jika NFT berstatus valid (non-critical)
+  if (nftStatusCapture === 'valid' && projectIdCapture) {
+    try { await maybeTriggerFee(projectIdCapture, hargaJualCapture); } catch { /* silent */ }
   }
 }
 
@@ -662,6 +694,116 @@ export async function skipFifoNft(
   await batch.commit();
 }
 
+// ─── Fee Sharing ─────────────────────────────────────────────────────────────
+
+// Dipanggil setelah beli NFT valid. Increment jumlah_nft_terjual project,
+// dan jika sudah kelipatan fee_trigger_per_nft distribusikan fee ke validator.
+export async function maybeTriggerFee(projectId: string, hargaJual: number): Promise<void> {
+  const config = await getCommunityConfig();
+  if (!config) return;
+
+  const projectRef = doc(db, 'projects', projectId);
+
+  // Atomik: baca counter, increment, cek modulo
+  let shouldDistribute = false;
+  let projectData: Record<string, unknown> | null = null;
+
+  await runTransaction(db, async (tx) => {
+    const projectSnap = await tx.get(projectRef);
+    if (!projectSnap.exists()) return;
+    const p = projectSnap.data();
+    const newTerjual = ((p.jumlah_nft_terjual as number) ?? 0) + 1;
+    shouldDistribute = config.fee_trigger_per_nft > 0 && newTerjual % config.fee_trigger_per_nft === 0;
+    projectData = p;
+    tx.update(projectRef, { jumlah_nft_terjual: newTerjual });
+  });
+
+  if (!shouldDistribute || !projectData) return;
+
+  const p = projectData as Record<string, unknown>;
+  const feeProjectPct: number = (p.fee_project_pct as number) ?? config.fee_project_pct.min;
+  const feeTotal = hargaJual * (feeProjectPct / 100);
+  const feeInfrastruktur = feeTotal * (config.fee_infrastruktur_pct / 100);
+  const feeValidator = feeTotal - feeInfrastruktur;
+
+  const developerIdFee = p.developer_id as string;
+  const namaProject = (p.nama_project as string) ?? '';
+  const validatorList: Array<{ user_id: string; nilai: number }> =
+    (p.validator_list as Array<{ user_id: string; nilai: number }>) ?? [];
+
+  // Baca neraca developer
+  const developerRef = doc(db, 'users', developerIdFee);
+  const developerSnap = await getDoc(developerRef);
+  if (!developerSnap.exists()) return;
+  const developerPoin: number = (developerSnap.data().total_poin as number) ?? 0;
+
+  // Hitung total nilai validator untuk distribusi proporsional
+  const totalNilai = validatorList.reduce((sum, v) => sum + (v.nilai ?? 0), 0);
+
+  // Kumpulkan bagian per validator (gabungkan jika validator sama)
+  const validatorShares = new Map<string, number>();
+  if (totalNilai > 0 && feeValidator > 0) {
+    for (const entry of validatorList) {
+      const share = (entry.nilai / totalNilai) * feeValidator;
+      validatorShares.set(entry.user_id, (validatorShares.get(entry.user_id) ?? 0) + share);
+    }
+  }
+
+  // Baca semua neraca validator sebelum batch
+  const validatorSnapshots = new Map<string, number>();
+  await Promise.all(
+    Array.from(validatorShares.keys()).map(async (vid) => {
+      const vSnap = await getDoc(doc(db, 'users', vid));
+      if (vSnap.exists()) {
+        validatorSnapshots.set(vid, (vSnap.data().total_poin as number) ?? 0);
+      }
+    }),
+  );
+
+  const feePoolRef = doc(db, 'fee_pool', 'v1');
+  const batch = writeBatch(db);
+
+  // Developer neraca -= feeTotal
+  batch.update(developerRef, { total_poin: developerPoin - feeTotal });
+  batch.set(doc(collection(db, 'users', developerIdFee, 'neraca_log')), {
+    type: 'fee_keluar',
+    nft_unit_id: '',
+    nama_nft: namaProject,
+    harga_transaksi: hargaJual,
+    nilai_selisih: 0,
+    delta: -feeTotal,
+    counterparty_id: projectId,
+    project_id: projectId,
+    timestamp: serverTimestamp(),
+  });
+
+  // fee_pool metadata
+  batch.set(feePoolRef, {
+    total_terkumpul: increment(feeTotal),
+    total_terdistribusi: increment(feeValidator),
+  }, { merge: true });
+
+  // Setiap validator neraca += bagian proporsional
+  for (const [validatorId, share] of validatorShares.entries()) {
+    const currentPoin = validatorSnapshots.get(validatorId);
+    if (currentPoin === undefined) continue;
+    batch.update(doc(db, 'users', validatorId), { total_poin: currentPoin + share });
+    batch.set(doc(collection(db, 'users', validatorId, 'neraca_log')), {
+      type: 'fee_validator',
+      nft_unit_id: '',
+      nama_nft: namaProject,
+      harga_transaksi: hargaJual,
+      nilai_selisih: 0,
+      delta: share,
+      counterparty_id: projectId,
+      project_id: projectId,
+      timestamp: serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+}
+
 // ─── Admin: Recalculate all developer levels ──────────────────────────────────
 
 export type RecalcStats = {
@@ -715,6 +857,21 @@ export async function recalculateAllDeveloperLevels(
     processed++;
     onProgress?.(processed, stats.total);
   }
+
+  // Sync pool metadata setelah semua level terupdate — hitung ulang dari data aktual
+  const finalUsersSnap = await getDocs(collection(db, 'users'));
+  const topCount = finalUsersSnap.docs.filter(
+    d => (d.data().level as string) === 'top_developer',
+  ).length;
+  const finalKapasitas = topCount * 3;
+  const finalIsAktif = finalKapasitas >= config.kapasitas_pool_minimum;
+
+  const poolRef = doc(db, 'pool_rekomendasi', 'v1');
+  await setDoc(poolRef, {
+    jumlah_top_developer: topCount,
+    kapasitas_aktif: finalKapasitas,
+    is_aktif: finalIsAktif,
+  }, { merge: true });
 
   return stats;
 }

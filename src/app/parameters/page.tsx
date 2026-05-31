@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +18,7 @@ import {
   DEFAULT_COMMUNITY_CONFIG,
 } from '@/lib/community-config';
 import { useAuth } from '@/hooks/use-auth';
-import type { CommunityConfig } from '@/lib/types';
+import type { CommunityConfig, FeePool } from '@/lib/types';
 
 const ADMIN_EMAIL = 'ramawan@live.com';
 
@@ -28,6 +30,8 @@ type EditValues = {
   minimum_buyback_pct: number;
   fee_min: number;
   fee_max: number;
+  fee_trigger_per_nft: number;
+  fee_infrastruktur_pct: number;
   minimum_top_developer: number;
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
@@ -46,6 +50,8 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_buyback_pct: c.minimum_buyback_pct,
     fee_min: c.fee_project_pct.min,
     fee_max: c.fee_project_pct.max,
+    fee_trigger_per_nft: c.fee_trigger_per_nft ?? 10,
+    fee_infrastruktur_pct: c.fee_infrastruktur_pct ?? 50,
     minimum_top_developer: c.minimum_top_developer,
     minimum_soldNfts_top_developer: c.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
@@ -64,6 +70,8 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     nilai_minimum_project: e.nilai_minimum_project,
     minimum_buyback_pct: e.minimum_buyback_pct,
     fee_project_pct: { min: e.fee_min, max: e.fee_max },
+    fee_trigger_per_nft: e.fee_trigger_per_nft,
+    fee_infrastruktur_pct: e.fee_infrastruktur_pct,
     minimum_top_developer: e.minimum_top_developer,
     minimum_soldNfts_top_developer: e.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
@@ -131,6 +139,7 @@ export default function ParametersPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feePool, setFeePool] = useState<FeePool | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValues, setEditValues] = useState<EditValues | null>(null);
@@ -142,13 +151,24 @@ export default function ParametersPage() {
   }
 
   useEffect(() => {
-    getCommunityConfig()
-      .then((data) => {
+    Promise.all([
+      getCommunityConfig(),
+      getDoc(doc(db, 'fee_pool', 'v1')),
+    ])
+      .then(([data, feeSnap]) => {
         if (data) {
           setConfig(data);
         } else {
           setConfig({ ...DEFAULT_COMMUNITY_CONFIG, updated_at: new Date(), updated_by: '' });
           setIsDefault(true);
+        }
+        if (feeSnap.exists()) {
+          const fd = feeSnap.data();
+          setFeePool({
+            total_terkumpul: (fd.total_terkumpul as number) ?? 0,
+            total_terdistribusi: (fd.total_terdistribusi as number) ?? 0,
+            updated_at: (fd.updated_at as Timestamp)?.toDate?.() ?? new Date(),
+          });
         }
       })
       .catch((err: unknown) => {
@@ -398,6 +418,20 @@ export default function ParametersPage() {
                     onChange={v => setField('minimum_nft_pool_untuk_validasi', v as number)} />
                 </CardContent>
               </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Fee Sharing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Trigger per NFT terjual" value={editValues.fee_trigger_per_nft}
+                    onChange={v => setField('fee_trigger_per_nft', v as number)} />
+                  <EditRow label="Porsi infrastruktur (%)" value={editValues.fee_infrastruktur_pct}
+                    onChange={v => setField('fee_infrastruktur_pct', v as number)} />
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
             // ── READ-ONLY MODE ──────────────────────────────────────────────
@@ -482,6 +516,36 @@ export default function ParametersPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Validasi bergulir hanya bisa dimulai jika pool rekomendasi
                       sudah terisi minimal sejumlah NFT ini.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Fee Sharing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Trigger fee"
+                    value={`Setiap ${config.fee_trigger_per_nft ?? 10} NFT terjual`} />
+                  <ParamRow label="Porsi infrastruktur"
+                    value={`${config.fee_infrastruktur_pct ?? 50}%`} />
+                  <ParamRow label="Porsi validator"
+                    value={`${100 - (config.fee_infrastruktur_pct ?? 50)}%`} />
+                  {feePool && (
+                    <>
+                      <ParamRow label="Total fee terkumpul"
+                        value={formatRupiah(feePool.total_terkumpul)} />
+                      <ParamRow label="Total terdistribusi ke validator"
+                        value={formatRupiah(feePool.total_terdistribusi)} />
+                    </>
+                  )}
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Fee diambil dari neraca developer dan dibagikan proporsional
+                      ke semua validator aktif project.
                     </p>
                   </div>
                 </CardContent>

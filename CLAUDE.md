@@ -10,12 +10,13 @@
 
 TMEP adalah platform komunitas untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace NFT biasa. Bukan DeFi konvensional.
 
-**Prinsip yang tidak boleh dilanggar dalam implementasi:**
+**Prinsip yang tidak boleh dilanggar:**
 1. Tidak ada entitas yang memegang dana — semua nilai ada di neraca user dan pool
 2. Algoritma membaca neraca, bukan admin yang memutuskan
 3. Nilai berasal dari tindakan nyata yang bisa diverifikasi
 4. Sistem menjamin antrian likuiditas, bukan return finansial
 5. Neraca positif = buffer penjualan, BUKAN uang yang bisa dicairkan langsung
+6. Tidak ada transfer dana — semua diatur konsep neraca
 
 ---
 
@@ -23,7 +24,7 @@ TMEP adalah platform komunitas untuk mengabadikan tindakan nyata charity melalui
 
 - **Frontend:** React / Next.js
 - **Backend:** Firebase (Firestore, Auth, Functions)
-- **Status:** Fase 2 — fitur lanjutan di atas fondasi Fase 1
+- **Status:** Fase 2 — hampir selesai
 
 ---
 
@@ -37,9 +38,37 @@ TMEP adalah platform komunitas untuk mengabadikan tindakan nyata charity melalui
 ✓ Dashboard neraca user (/dashboard)
 ✓ Developer Ranking berdasarkan % buyback (/top-developers)
 ✓ Komentar per kartu NFT (hapus, report, policy)
-✓ Admin panel report komentar terflag (/admin/reports)
+✓ Admin panel + recalculate developer levels (/admin)
 ✓ Email verification + admin role (ramawan@live.com)
 ✓ link_bukti + project_id di neraca_log
+```
+
+## Yang sudah selesai di Fase 2
+
+```
+✓ ① Buyback logic — satu arah
+✓ ② Index Project halaman publik (/projects)
+✓ ③ Kategori hierarkis (lingkungan, energi, sosial, dll)
+✓ ④ Link bukti di dialog pembelian NFT
+✓ ⑤ Halaman detail NFT (/nft/[id]) + Project (/projects/[id])
+✓ ⑥ Top Developer otomatis:
+     - minimum_soldNfts_top_developer (default 5 untuk testing)
+     - minimum_buyback_pct (default 30% untuk testing)
+     - checkAndUpdateDeveloperLevel() setelah buy dan buyback
+✓ ⑦ Validasi bergulir (/validate) — checkbox NFT, atomik
+✓ ⑧ Pool Rekomendasi (/pool):
+     - FIFO antrian untuk top developer
+     - Skip otomatis NFT milik sendiri
+     - transferred_at reset saat dilewati (NFT geser ke belakang)
+     - Beli di pool = buybackCount bertambah (antisipasi top developer)
+     - Kapasitas pool otomatis = jumlah_top_developer × 3
+✓ ⑨ Fee Sharing Opsi A (sedang diimplementasi):
+     - fee_trigger_per_nft: setiap kelipatan X NFT terjual
+     - fee_infrastruktur_pct: % fee untuk infrastruktur sistem
+     - fee_project_pct per project (diset developer saat buat project)
+     - maybeTriggerFee() dipanggil setelah buyNftUnit() jika NFT valid
+     - Distribusi: developer neraca -=fee, fee_pool terkumpul,
+       validator neraca += bagian proporsional
 ```
 
 ---
@@ -49,36 +78,48 @@ TMEP adalah platform komunitas untuk mengabadikan tindakan nyata charity melalui
 ```
 User
 ├── level: 'developer_biasa' | 'top_developer'
-├── total_poin: number          // running total, update setiap transaksi
-├── soldNfts: number            // jumlah NFT terjual
-├── buybackCount: number        // jumlah NFT yang sudah dibuyback
-└── validator_aktif: [{ project_id, nft_unit_ids[], nilai_total, fee_diterima }]
+├── total_poin: number
+├── soldNfts: number
+├── buybackCount: number
+└── validator_aktif: ValidatorAktif[]
 
-Project (dibuat Developer)
-├── jumlah_nft = nilai_project / 100000
+Project
+├── jumlah_nft = nilai_project / harga_dasar
 ├── status_project: 'aktif' | 'dalam_invalidasi'
-├── pool_jaminan: number        // total nilai validator terkunci
+├── pool_jaminan: number
 ├── jumlah_validator: number
+├── jumlah_nft_terjual: number      ← untuk trigger fee
+├── fee_project_pct: number         ← ditetapkan developer (range dari config)
 ├── like_count: number
-└── validator_list: [{ user_id, nft_unit_id, nilai, timestamp }]
+└── validator_list: ValidatorEntry[]
 
-NFTUnit (satuan yang diperjualbelikan)
-├── owner_id
+NFTUnit
+├── owner_id, developer_id
 ├── status: 'biasa' | 'valid' | 'invalid'
-├── harga_jual: number          // max batas_atas dari community_config
-├── harga_beli_terakhir: number // dasar perhitungan buyback
-├── nilai_selisih: number       // harga_beli_terakhir - harga_dasar
+├── harga_jual: number
+├── harga_beli_terakhir: number
+├── nilai_selisih: number
 ├── digunakan_validasi: boolean
 ├── project_validasi_id: string | null
 ├── for_sale: boolean
-├── nama_project: string        // denormalized
-└── kategori: ProjectCategory   // denormalized
+├── in_pool: boolean
+├── transferred_at: Timestamp       ← untuk FIFO ordering
+├── fifo_skip_count: number
+├── last_skipped_by: string
+└── last_skip_reason: string
 
-PoolRekomendasi (metadata saja, tidak duplikasi NFT)
+PoolRekomendasi (pool_rekomendasi/v1)
 ├── is_aktif: boolean
 ├── jumlah_top_developer: number
-├── kapasitas_aktif: number     // dari Fibonacci
+├── jumlah_nft_valid: number
+├── kapasitas_aktif: number         ← jumlah_top_developer × 3
 └── total_jaminan: number
+
+FeePool (fee_pool/v1)
+├── total_terkumpul: number
+├── total_infrastruktur: number     ← dicatat, tidak dicairkan
+├── total_validator: number
+└── last_distributed_at: Timestamp
 ```
 
 ---
@@ -87,124 +128,145 @@ PoolRekomendasi (metadata saja, tidak duplikasi NFT)
 
 ### Aturan harga
 ```
-harga_dasar = dari community_config.harga_dasar (default 100000)
-batas_atas  = dari community_config.batas_atas (default 150000)
-BLOKIR input jika harga_jual > batas_atas
-JANGAN pernah hardcode nilai ini — selalu baca dari community_config
+Semua nilai parameter dari community_config — JANGAN hardcode
+harga_dasar, batas_atas, minimum_buyback_pct, dll
 ```
 
-### Aturan neraca saat transaksi jual-beli
+### Aturan neraca
 ```
-nilai_selisih = harga_jual - harga_dasar
-
 PENJUAL: neraca += -(nilai_selisih)   // selalu minus atau nol
 PEMBELI: neraca += +(nilai_selisih)   // selalu plus atau nol
-
-PENTING: neraca positif adalah BUFFER, bukan saldo yang bisa dicairkan
-Neraca positif mengurangi efek minus saat penjual menjual NFT berikutnya
-```
-
-### Aturan buyback
-```
-Buyback = user mengembalikan NFT ke developer dengan harga beli semula
-
-Skenario A — buyback ke developer (history ada):
-  harga = harga_beli_terakhir dari nft_unit
-  developer.neraca += +(nilai_selisih)   // developer dapat kembali poinnya
-  user.neraca -= +(nilai_selisih)        // user kehilangan poin yang pernah didapat
-  developer.buybackCount += 1
-  owner_id kembali ke developer_id
-
-Skenario B — NFT sudah digunakan validasi:
-  harga = harga_dasar (100000) — sudah direset saat validasi
-  sama seperti Skenario A tapi nilai_selisih = 0
-
-Top Developer tambahan:
-  Tombol "Transfer ke Pool" — aktif HANYA jika level == 'top_developer'
-  NFT masuk antrian pool rekomendasi, bukan kembali ke developer
-```
-
-### Aturan validasi bergulir
-```
-User memilih NFT (checkbox) dari dashboard untuk memvalidasi project
-
-Saat validasi:
-  nft_unit.digunakan_validasi = true
-  nft_unit.project_validasi_id = project.id
-  nft_unit.harga_beli_terakhir = harga_dasar  // reset
-  nft_unit.nilai_selisih = 0
-  project.pool_jaminan += nilai_selisih_sebelum_reset
-  project.jumlah_validator += 1
-  project.validator_list.push({ user_id, nft_unit_id, nilai, timestamp })
-  user.validator_aktif.push({ project_id, nft_unit_ids, nilai_total })
-
-User bisa validasi BANYAK project dengan NFT berbeda sekaligus
-NFT yang digunakan validasi: for_sale = false, tidak bisa dijual
+Neraca positif = buffer, BUKAN saldo yang bisa dicairkan
 ```
 
 ### Aturan Top Developer
 ```
-Syarat otomatis (dari community_config.minimum_buyback_pct):
-  buybackCount / soldNfts * 100 >= minimum_buyback_pct (default 50%)
-  DAN soldNfts >= 1
+Syarat SEMUA harus terpenuhi:
+① soldNfts >= config.minimum_soldNfts_top_developer
+② Math.floor(buybackCount/soldNfts*100) >= config.minimum_buyback_pct
 
-Ketika syarat terpenuhi:
-  user.level = 'top_developer' (otomatis oleh sistem)
-  Akses: tombol "Transfer ke Pool" aktif
-  Akses: bisa taruh NFT di pool rekomendasi
-  Kewajiban: sisihkan fee_project_pct dari setiap project
+checkAndUpdateDeveloperLevel() dipanggil setelah:
+- buyNftUnit() → cek developer_id NFT (BUKAN owner_id)
+- buybackNftUnit() → cek developer_id
 
-Ketika syarat tidak lagi terpenuhi:
-  user.level = 'developer_biasa'
-  NFT valid miliknya masuk daftar_invalidasi = true
+Kapasitas pool update setelah level berubah:
+kapasitas_aktif = jumlah_top_developer × 3
+is_aktif = kapasitas_aktif >= config.kapasitas_pool_minimum
 ```
 
-### Aturan status NFT
+### Aturan Beli di Pool
 ```
-biasa   → default saat diterbitkan
-valid   → project-nya sudah tervalidasi penuh
-invalid → developer turun peringkat atau kuota berkurang
-
-Transisi valid → invalid:
-  TIDAK langsung — ada jeda toleransi
-  NFT masuk daftar_invalidasi = true, status tetap 'valid'
-  Setelah terbeli → status = 'biasa', tidak kembali ke pool
-  Dana validator tetap terkunci sebagai antrian likuiditas
+Jika nft.in_pool == true saat dibeli:
+- buyer.buybackCount += 1
+- nft.in_pool = false
+- pool.jumlah_nft_valid -= 1
+- neraca_log tipe 'beli_pool'
+- checkAndUpdateDeveloperLevel(buyerId) dipanggil
 ```
 
-### Aturan fee sharing
+### Aturan Fee Sharing
 ```
-Sumber fee: developer top_developer menyisihkan fee_project_pct dari project
-Distribusi: proporsional berdasarkan nilai validator di project tersebut
-  validator_fee = (nilai_validator / total_pool_jaminan) * total_fee
-Cara distribusi: tambahkan langsung ke neraca validator (tidak transfer uang)
-Tercatat di: neraca_log dengan tipe 'fee_validator'
+Trigger: setiap jumlah_nft_terjual % fee_trigger_per_nft == 0
+         DAN nft.status == 'valid'
+
+feeTotal = hargaJual × (project.fee_project_pct / 100)
+  fallback: config.fee_project_pct.min jika project belum punya field ini
+
+feeInfrastruktur = feeTotal × (config.fee_infrastruktur_pct / 100)
+feeValidator = feeTotal × (1 - fee_infrastruktur_pct/100)
+
+Distribusi (writeBatch):
+- developer.neraca -= feeTotal (neraca_log: 'fee_keluar')
+- fee_pool/v1: total_terkumpul += feeTotal (setDoc merge:true)
+- Setiap validator: neraca += (nilai/pool_jaminan) × feeValidator
+  (neraca_log: 'fee_validator')
+```
+
+### Aturan FIFO Pool
+```
+Top developer: hanya bisa beli NFT urutan pertama (orderBy transferred_at asc)
+User biasa: bebas beli NFT manapun di pool
+
+Skip FIFO:
+- transferred_at direset ke serverTimestamp() → NFT geser ke belakang
+- fifo_skip_count bertambah (audit trail)
+- NFT milik sendiri: skip otomatis tanpa dialog
+
+Antrian FIFO: fetchNextFifoNft() loop max 20x
+```
+
+### Aturan Validasi Bergulir
+```
+Syarat pool untuk mulai validasi:
+jumlah_nft_valid >= config.minimum_nft_pool_untuk_validasi
+
+User pilih NFT (checkbox) → nilai = nilai_selisih NFT tersebut
+Setelah validasi: nft.digunakan_validasi=true, nilai_selisih=0,
+harga_beli_terakhir=harga_dasar, project.pool_jaminan += nilai
 ```
 
 ---
 
-## Urutan implementasi Fase 2
+## Community Config — semua parameter
 
 ```
-① Buyback logic (semua user + tombol Transfer ke Pool untuk top developer)
-② Index Project — halaman publik /projects
-   (urut akumulasi like, tampilkan NFT terjual, link bukti)
-③ Sinkronisasi kategori dengan mockup
-   (Tree Planting, Ocean Cleanup, Wildlife Protection, dll)
-④ Link bukti di dialog pembelian NFT
-⑤ Halaman detail NFT + Project
-⑥ Syarat Top Developer — upgrade otomatis oleh sistem
-⑦ Validasi bergulir — halaman /validate + checkbox NFT
-⑧ Pool rekomendasi — aktif jika kapasitas Fibonacci terpenuhi
-⑨ Fee sharing otomatis ke neraca validator
-⑩ AI monitoring ringan — HTTP check link bukti berkala
+harga_dasar: 100000
+batas_atas: 150000
+nilai_minimum_project: 1000000        // testing: 1 juta
+minimum_buyback_pct: 30               // testing: 30%
+minimum_soldNfts_top_developer: 5     // testing: 5
+kapasitas_pool_minimum: 5             // testing: 5
+minimum_nft_pool_untuk_validasi: 5    // testing: 5
+fee_project_pct: { min: 2, max: 5 }
+fee_trigger_per_nft: 10
+fee_infrastruktur_pct: 50
+fase_aktif: 1
+ai_provider: 'gemini'
+ai_anomali_threshold: { flag: 1, invalid: 100 }
+```
+
+---
+
+## Halaman yang sudah ada
+
+```
+/          → Home
+/explore   → Explorer NFT (semua user)
+/projects  → Index Project publik
+/projects/[id] → Detail project
+/nft/[id]  → Detail NFT
+/validate  → Validasi bergulir (login required)
+/pool      → Pool Rekomendasi
+/create    → Buat project NFT (login required)
+/dashboard → Neraca user (login required)
+/parameters → Community parameters (publik, edit: admin only)
+/top-developers → Developer ranking
+/admin     → Admin hub (admin only)
+/admin/reports → Komentar terflag
+/buyback   → Halaman buyback (ada di sidebar)
+/validation → Ada di sidebar
+/validated → Ada di sidebar
+/transactions → Ada di sidebar
+```
+
+---
+
+## Urutan implementasi Fase 2 — status
+
+```
+✓ ①–⑨ Selesai
+  ✓ ⑧ Pool capacity auto-sync: kapasitas_aktif = jumlah_top_developer × 3
+  ✓ ⑨ Fee sharing Opsi A: per project, proporsional ke validator
+○ ⑩ AI monitoring ringan — HTTP check link bukti
+○ Buyback 2 arah (two-way handshake) — Fase 2B
+○ FIFO report system — Fase 2B
 ```
 
 ---
 
 ## Yang BELUM diimplementasi (Fase 3)
 
-- Fibonacci capacity calculation yang dinamis
+- Fibonacci capacity calculation dinamis
 - DAPP / blockchain integration
 - Lazy minting NFT di platform eksternal
 - Personal blocklist
@@ -217,13 +279,15 @@ Tercatat di: neraca_log dengan tipe 'fee_validator'
 
 ## Cara kerja dengan codebase ini
 
-1. **Baca dokumen ini penuh** sebelum menyentuh kode apapun
-2. **Jika ada ambiguitas** — tanyakan ke developer, jangan asumsikan
-3. **Jangan ubah aturan neraca** tanpa konfirmasi eksplisit
-4. **Semua operasi write** harus atomic (Firestore transaction atau batch)
-5. **Semua perubahan nilai** harus tercatat di neraca_log
-6. **Jangan hardcode** harga_dasar atau batas_atas — selalu baca dari community_config
-7. **Tombol top developer** (Transfer ke Pool, dll) — render tapi disabled untuk non-top-developer
+1. Baca dokumen ini penuh sebelum menyentuh kode
+2. Jika ada ambiguitas — tanyakan ke developer
+3. Jangan ubah aturan neraca tanpa konfirmasi eksplisit
+4. Semua operasi write harus atomic (transaction atau batch)
+5. Semua perubahan nilai harus tercatat di neraca_log
+6. JANGAN hardcode nilai dari community_config
+7. Tombol top developer — render tapi disabled untuk non-top-developer
+8. Pool metadata: pool_rekomendasi/v1
+9. Fee pool: fee_pool/v1
 
 ---
 
@@ -231,9 +295,9 @@ Tercatat di: neraca_log dengan tipe 'fee_validator'
 
 - `MANIFESTO.md` — penjelasan untuk komunitas umum
 - `TECHNICAL_MANIFESTO.md` — spesifikasi konsep lengkap
-- `CLAUDE.md` — dokumen ini, instruksi untuk Claude CLI
+- `CLAUDE.md` — dokumen ini
 
 ---
 
-> Versi: 2.0 | Status project: Fase 2 — fitur lanjutan
+> Versi: 2.2 | Status: Fase 2 hampir selesai
 > Open source — github.com/TMEP

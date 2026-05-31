@@ -240,6 +240,14 @@ service cloud.firestore {
       allow write: if isAuth();
     }
 
+    // ─── fee_pool/{docId} ─────────────────────────────────────────────────────
+    // Akumulasi fee sharing komunitas. Publik untuk dibaca (halaman /parameters).
+    // Write: semua user yang login (maybeTriggerFee melakukan upsert).
+    match /fee_pool/{docId} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
     // ─── collectionGroup: comments ───────────────────────────────────────────
     // Rule path spesifik di nft_units/.../comments tidak mencakup collectionGroup
     // query. Wildcard ini diperlukan agar /admin/reports bisa fetch semua

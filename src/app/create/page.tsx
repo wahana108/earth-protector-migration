@@ -54,6 +54,7 @@ const schema = z.object({
   lokasi_tindakan: z.string().min(5, 'Min 5 karakter'),
   nilai_project: z.coerce.number().positive('Harus lebih dari 0'),
   harga_jual: z.coerce.number().positive('Harus lebih dari 0'),
+  fee_project_pct: z.coerce.number(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -94,13 +95,19 @@ export default function CreatePage() {
   const watchedHarga = watch('harga_jual');
   const watchedKategori = watch('kategori');
   const watchedGambar = watch('gambar_url');
+  const watchedFee = watch('fee_project_pct');
 
   useEffect(() => {
     getCommunityConfig()
-      .then(setConfig)
+      .then((cfg) => {
+        setConfig(cfg);
+        if (cfg) {
+          setValue('fee_project_pct', cfg.fee_project_pct.min);
+        }
+      })
       .catch(() => setConfig(null))
       .finally(() => setConfigLoading(false));
-  }, []);
+  }, [setValue]);
 
   // Debounced image preview
   useEffect(() => {
@@ -157,6 +164,7 @@ export default function CreatePage() {
         nilai_project: data.nilai_project,
         harga_jual: data.harga_jual,
         harga_dasar: config.harga_dasar,
+        fee_project_pct: data.fee_project_pct,
       });
       setSuccessData({ projectId, jumlahNft: jumlah });
     } catch (err: unknown) {
@@ -494,6 +502,35 @@ export default function CreatePage() {
                   )}
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="fee_project_pct">
+                  Fee kontribusi validator (%)
+                  <span className="ml-1 text-muted-foreground font-normal text-xs">
+                    — dibagikan ke validator setiap {config.fee_trigger_per_nft ?? 10} NFT terjual
+                  </span>
+                </Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="fee_project_pct"
+                    type="range"
+                    min={config.fee_project_pct.min}
+                    max={config.fee_project_pct.max}
+                    step="0.5"
+                    className="flex-1 accent-primary"
+                    {...register('fee_project_pct')}
+                  />
+                  <span className="w-12 text-right font-mono text-sm font-semibold">
+                    {watchedFee ?? config.fee_project_pct.min}%
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Rentang: {config.fee_project_pct.min}% – {config.fee_project_pct.max}%
+                </p>
+                {errors.fee_project_pct && (
+                  <p className="text-sm text-destructive">{errors.fee_project_pct.message}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 

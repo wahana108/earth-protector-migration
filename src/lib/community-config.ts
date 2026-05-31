@@ -11,6 +11,8 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   nilai_minimum_project: 3000000,
   minimum_buyback_pct: 50,
   fee_project_pct: { min: 2, max: 5 },
+  fee_trigger_per_nft: 10,
+  fee_infrastruktur_pct: 50,
   minimum_top_developer: 30,
   minimum_soldNfts_top_developer: 24,
   kapasitas_pool_minimum: 90,
