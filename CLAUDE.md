@@ -254,10 +254,11 @@ ai_anomali_threshold: { flag: 1, invalid: 100 }
 ## Urutan implementasi Fase 2 — status
 
 ```
-✓ ①–⑨ Selesai
+✓ ①–⑩ Selesai — Fase 2 lengkap
   ✓ ⑧ Pool capacity auto-sync: kapasitas_aktif = jumlah_top_developer × 3
   ✓ ⑨ Fee sharing Opsi A: per project, proporsional ke validator
-○ ⑩ AI monitoring ringan — HTTP check link bukti
+  ✓ ⑩ AI monitoring ringan: checkLinkBukti() di /create (onBlur) +
+       re-check otomatis di /projects/[id] jika > 7 hari
 ○ Buyback 2 arah (two-way handshake) — Fase 2B
 ○ FIFO report system — Fase 2B
 ```
