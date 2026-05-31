@@ -1,7 +1,6 @@
 'use client';
 import {
   Bell,
-  Search,
   PlusCircle,
   LogIn,
   UserPlus,
@@ -13,7 +12,6 @@ import {
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,14 +53,7 @@ export function AppHeader() {
         </Button>
       </div>
 
-      <div className="relative flex-1">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Search NFTs..."
-          className="w-full rounded-lg bg-secondary pl-8 md:w-[200px] lg:w-[320px]"
-        />
-      </div>
+      <div className="flex-1" />
 
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="sm">

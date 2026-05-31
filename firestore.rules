@@ -194,6 +194,14 @@ service cloud.firestore {
       }
     }
 
+    // ─── pool_rekomendasi/{docId} ─────────────────────────────────────────────
+    // Metadata pool rekomendasi komunitas. Publik untuk dibaca.
+    // Write: semua user yang login (top developer melakukan upsert via transferToPool).
+    match /pool_rekomendasi/{docId} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+
     // ─── collectionGroup: comments ───────────────────────────────────────────
     // Rule path spesifik di nft_units/.../comments tidak mencakup collectionGroup
     // query. Wildcard ini diperlukan agar /admin/reports bisa fetch semua

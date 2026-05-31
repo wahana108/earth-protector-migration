@@ -2,6 +2,7 @@ import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
   getDocs, getDoc, query, where, updateDoc, runTransaction,
+  setDoc, increment,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 import type { ProjectCategory } from './types';
@@ -134,7 +135,7 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
   const meetsBuybackRate =
     soldNfts >= 1 &&
-    buybackCount >= soldNfts * (config.minimum_buyback_pct / 100);
+    Math.floor((buybackCount / soldNfts) * 100) >= config.minimum_buyback_pct;
 
   const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
 
@@ -451,20 +452,14 @@ export async function transferToPool(nftUnitId: string, userId: string): Promise
     for_sale: true,
   });
 
-  // Update pool_rekomendasi metadata (upsert)
-  const poolSnap = await getDoc(poolRef);
-  if (poolSnap.exists()) {
-    const current: number = (poolSnap.data().jumlah_nft_valid as number) ?? 0;
-    batch.update(poolRef, { jumlah_nft_valid: current + 1 });
-  } else {
-    batch.set(poolRef, {
-      is_aktif: false,
-      jumlah_top_developer: 0,
-      kapasitas_aktif: 0,
-      total_jaminan: 0,
-      jumlah_nft_valid: 1,
-    });
-  }
+  // Update pool_rekomendasi metadata (upsert — setDoc merge:true creates doc if missing)
+  batch.set(poolRef, {
+    is_aktif: false,
+    jumlah_top_developer: 0,
+    kapasitas_aktif: 0,
+    total_jaminan: 0,
+    jumlah_nft_valid: increment(1),
+  }, { merge: true });
 
   // Log di neraca_log
   batch.set(doc(collection(db, 'users', userId, 'neraca_log')), {
