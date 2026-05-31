@@ -193,7 +193,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo';
+  type: 'beli' | 'beli_pool' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;

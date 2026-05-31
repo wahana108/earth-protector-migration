@@ -176,7 +176,9 @@ export async function buyNftUnit(
   batas_atas: number,
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
+  const poolRef = doc(db, 'pool_rekomendasi', 'v1');
   let developerIdCapture = '';
+  let isPoolPurchaseCapture = false;
 
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
@@ -198,6 +200,8 @@ export async function buyNftUnit(
     const nilai_selisih = nft.nilai_selisih as number;
     const nama_nft = nft.nama_nft as string;
     const project_id = nft.project_id as string;
+    const isPoolPurchase = (nft.in_pool as boolean) ?? false;
+    isPoolPurchaseCapture = isPoolPurchase;
 
     const sellerRef = doc(db, 'users', sellerId);
     const buyerRef = doc(db, 'users', buyerId);
@@ -212,6 +216,7 @@ export async function buyNftUnit(
 
     const sellerPoin: number = sellerSnap.data().total_poin ?? 0;
     const buyerPoin: number = buyerSnap.data().total_poin ?? 0;
+    const buyerBuybackCount: number = buyerSnap.data().buybackCount ?? 0;
     const sellerSoldNfts: number = sellerSnap.data().soldNfts ?? 0;
     const link_bukti = projectSnap.exists()
       ? (projectSnap.data().link_bukti as string) ?? ''
@@ -219,11 +224,12 @@ export async function buyNftUnit(
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
 
-    // 4. Update nft_unit — pindah kepemilikan
+    // 4. Update nft_unit — pindah kepemilikan; keluarkan dari pool jika beli_pool
     tx.update(nftRef, {
       owner_id: buyerId,
       for_sale: false,
       harga_beli_terakhir: harga_jual,
+      ...(isPoolPurchase ? { in_pool: false } : {}),
     });
 
     // 5. Neraca penjual: -= nilai_selisih (PENJUAL selalu minus atau nol)
@@ -232,12 +238,18 @@ export async function buyNftUnit(
       soldNfts: sellerSoldNfts + 1,
     });
 
-    // 6. Neraca pembeli: += nilai_selisih (PEMBELI selalu plus atau nol)
+    // 6. Neraca pembeli: += nilai_selisih; beli_pool juga tambah buybackCount
     tx.update(buyerRef, {
       total_poin: buyerPoin + nilai_selisih,
+      ...(isPoolPurchase ? { buybackCount: buyerBuybackCount + 1 } : {}),
     });
 
-    // 7. Log neraca penjual (immutable)
+    // 7. Pool rekomendasi: kurangi counter NFT saat terbeli dari pool
+    if (isPoolPurchase) {
+      tx.update(poolRef, { jumlah_nft_valid: increment(-1) });
+    }
+
+    // 8. Log neraca penjual (immutable)
     tx.set(doc(collection(db, 'users', sellerId, 'neraca_log')), {
       type: 'jual',
       nft_unit_id: nftUnitId,
@@ -251,9 +263,9 @@ export async function buyNftUnit(
       timestamp: serverTimestamp(),
     });
 
-    // 8. Log neraca pembeli (immutable)
+    // 9. Log neraca pembeli — tipe berbeda untuk pembelian dari pool
     tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
-      type: 'beli',
+      type: isPoolPurchase ? 'beli_pool' : 'beli',
       nft_unit_id: nftUnitId,
       nama_nft,
       harga_transaksi: harga_jual,
@@ -265,7 +277,7 @@ export async function buyNftUnit(
       timestamp: serverTimestamp(),
     });
 
-    // 9. History kepemilikan nft_unit (immutable)
+    // 10. History kepemilikan nft_unit (immutable)
     tx.set(doc(collection(db, 'nft_units', nftUnitId, 'history_kepemilikan')), {
       dari: sellerId,
       ke: buyerId,
@@ -277,6 +289,10 @@ export async function buyNftUnit(
   // Cek dan update level developer asli NFT setelah soldNfts bertambah (non-critical)
   if (developerIdCapture) {
     try { await checkAndUpdateDeveloperLevel(developerIdCapture); } catch { /* silent */ }
+  }
+  // Beli dari pool: cek juga level buyer karena buybackCount bertambah (non-critical)
+  if (isPoolPurchaseCapture) {
+    try { await checkAndUpdateDeveloperLevel(buyerId); } catch { /* silent */ }
   }
 }
 
