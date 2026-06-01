@@ -1,469 +1,349 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { ArrowLeftRight, ShoppingBag, RefreshCcw, ExternalLink, Receipt, TriangleAlert, Loader2, Undo2 } from 'lucide-react';
+import {
+  collectionGroup, query, orderBy, limit, getDocs,
+  addDoc, collection, Timestamp,
+} from 'firebase/firestore';
+import { ArrowLeftRight, Flag } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  fetchTransactionsByUser,
-  fetchNftById,
-  fetchTransactionById,
-  fetchUserById,
-  createReport,
-  refundTransaction,
-  fetchAllReports,
-  resolveReport,
-} from '@/lib/firestore';
-import type { Transaction, NFT, Report, User } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import type { NeracaLog } from '@/lib/types';
 
-type TransactionWithNft = {
-  tx: Transaction;
-  nft: NFT | null;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type LogEntry = NeracaLog & { userId: string };
+type FilterTab = 'semua' | 'beli' | 'jual' | 'validasi' | 'buyback' | 'fee';
+
+const FILTER_TYPES: Record<FilterTab, string[]> = {
+  semua:    [],
+  beli:     ['beli', 'beli_pool'],
+  jual:     ['jual'],
+  validasi: ['validasi'],
+  buyback:  ['buyback'],
+  fee:      ['fee_keluar', 'fee_validator'],
 };
 
-type ReportWithMeta = {
-  report: Report;
-  tx: Transaction | null;
-  nft: NFT | null;
-  reporter: User | null;
+const TYPE_LABELS: Record<string, string> = {
+  beli: 'Beli', beli_pool: 'Beli Pool', jual: 'Jual',
+  validasi: 'Validasi', buyback: 'Buyback', level_change: 'Level',
+  transfer_pool: 'Pool', lewati_fifo: 'Lewati',
+  fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
 };
 
-const TYPE_CONFIG: Record<'purchase' | 'buyback', { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' }> = {
-  purchase: { label: 'Purchase', icon: <ShoppingBag className="h-3 w-3" />, variant: 'default' },
-  buyback:  { label: 'Buyback',  icon: <RefreshCcw className="h-3 w-3" />, variant: 'secondary' },
-};
+const FILTER_TABS: { key: FilterTab; label: string }[] = [
+  { key: 'semua',    label: 'Semua' },
+  { key: 'beli',     label: 'Beli' },
+  { key: 'jual',     label: 'Jual' },
+  { key: 'validasi', label: 'Validasi' },
+  { key: 'buyback',  label: 'Buyback' },
+  { key: 'fee',      label: 'Fee' },
+];
 
-const TYPE_CONFIG_EXTENDED: Partial<Record<Transaction['type'], { label: string; icon: React.ReactNode; variant: 'default' | 'secondary' | 'outline' | 'destructive' }>> = {
-  refund: { label: 'Refund', icon: <Undo2 className="h-3 w-3" />, variant: 'destructive' },
-};
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function TxRow({ item, userId, isAdmin, onRefundDone }: { item: TransactionWithNft; userId: string; isAdmin: boolean; onRefundDone: () => void }) {
-  const { tx, nft } = item;
-  const cfg = TYPE_CONFIG_EXTENDED[tx.type] ?? TYPE_CONFIG[tx.type as 'purchase' | 'buyback'];
-  const role = tx.buyerId === userId ? 'Buyer' : 'Seller';
+function formatIDR(n: number) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
+  }).format(n);
+}
 
-  const handleRefund = async () => {
-    if (!window.confirm(`Refund this transaction and return the NFT to the original seller?`)) return;
-    setRefunding(true);
-    try { await refundTransaction(tx.id); onRefundDone(); } finally { setRefunding(false); }
-  };
+function relativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (m < 1) return 'baru saja';
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+  if (d < 30) return `${d} hari lalu`;
+  return date.toLocaleDateString('id-ID');
+}
 
-  const [reportOpen, setReportOpen] = useState(false);
+function typeBadgeVariant(type: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (['beli', 'beli_pool'].includes(type)) return 'default';
+  if (type === 'jual') return 'secondary';
+  if (type === 'fee_keluar') return 'destructive';
+  return 'outline';
+}
+
+// ─── Report Dialog ────────────────────────────────────────────────────────────
+
+function ReportDialog({
+  entry, reporterId, onClose,
+}: {
+  entry: LogEntry;
+  reporterId: string;
+  onClose: () => void;
+}) {
   const [reason, setReason] = useState('');
-  const [reporting, setReporting] = useState(false);
-  const [reported, setReported] = useState(false);
-  const [refunding, setRefunding] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
 
-  const handleReport = async () => {
-    if (!reason.trim() || reporting) return;
-    setReporting(true);
-    try {
-      await createReport(tx.id, userId, reason.trim());
-      setReported(true);
-      setReportOpen(false);
-      setReason('');
-    } finally {
-      setReporting(false);
-    }
-  };
-
-  return (
-    <>
-      <Card>
-        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={cfg.variant} className="gap-1 text-xs">
-                {cfg.icon}{cfg.label}
-              </Badge>
-              <Badge variant="outline" className="text-xs">{role}</Badge>
-              {reported && (
-                <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-500/40">
-                  Reported
-                </Badge>
-              )}
-            </div>
-            <p className="font-medium truncate">
-              {nft ? (
-                <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">
-                  {nft.title}
-                </Link>
-              ) : tx.nftId}
-            </p>
-            {tx.description && (
-              <p className="text-xs text-muted-foreground truncate">{tx.description}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {tx.proofLink && (
-              <a href={tx.proofLink} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-primary hover:underline text-xs">
-                <ExternalLink className="h-3 w-3" /> View Proof
-              </a>
-            )}
-            <span className="text-muted-foreground text-xs whitespace-nowrap">
-              {format(tx.createdAt, 'dd MMM yyyy')}
-            </span>
-            {!reported && (
-              <button
-                title="Report anomaly"
-                onClick={() => setReportOpen(true)}
-                className="text-muted-foreground hover:text-yellow-500 transition-colors p-1 rounded"
-              >
-                <TriangleAlert className="h-4 w-4" />
-              </button>
-            )}
-            {isAdmin && tx.type === 'purchase' && (
-              <button
-                title="Admin refund"
-                disabled={refunding}
-                onClick={handleRefund}
-                className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded disabled:opacity-50"
-              >
-                {refunding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
-              </button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={reportOpen} onOpenChange={open => { if (!reporting) setReportOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5 text-yellow-500" />
-              Report Anomaly
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              Describe why this transaction looks suspicious. The admin will review your report.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor={`reason-${tx.id}`}>Reason <span className="text-destructive">*</span></Label>
-              <Textarea
-                id={`reason-${tx.id}`}
-                placeholder="e.g. Proof link is invalid, price mismatch, duplicate transaction..."
-                value={reason}
-                onChange={e => setReason(e.target.value)}
-                disabled={reporting}
-                rows={4}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReportOpen(false)} disabled={reporting}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReport}
-              disabled={!reason.trim() || reporting}
-              className="gap-2"
-            >
-              {reporting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Submit Report
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-const REPORT_STATUS_STYLES: Record<Report['status'], string> = {
-  pending:   'text-yellow-600 border-yellow-500/40 bg-yellow-500/10',
-  upheld:    'text-green-600 border-green-500/40 bg-green-500/10',
-  dismissed: 'text-muted-foreground border-border bg-muted/40',
-};
-
-function ReportCard({ item, adminId, onResolved }: { item: ReportWithMeta; adminId: string; onResolved: () => void }) {
-  const { report, tx, nft, reporter } = item;
-  const [upholding, setUpholding] = useState(false);
-  const [dismissing, setDismissing] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const handleUphold = async () => {
-    if (!window.confirm('Uphold this report? The transaction will be refunded.')) return;
-    setUpholding(true);
-    setErr(null);
-    try {
-      if (tx) await refundTransaction(report.transactionId);
-      await resolveReport(report.id, 'upheld', adminId);
-      onResolved();
-    } catch (e: any) {
-      setErr(e?.message ?? 'Failed to uphold report.');
-    } finally {
-      setUpholding(false);
-    }
-  };
-
-  const handleDismiss = async () => {
-    setDismissing(true);
-    setErr(null);
-    try {
-      await resolveReport(report.id, 'dismissed', adminId);
-      onResolved();
-    } catch (e: any) {
-      setErr(e?.message ?? 'Failed to dismiss report.');
-    } finally {
-      setDismissing(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-sm font-medium truncate">
-              {nft ? (
-                <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">{nft.title}</Link>
-              ) : report.transactionId}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              by {reporter?.displayName || report.userId} · {format(report.createdAt, 'dd MMM yyyy')}
-            </p>
-          </div>
-          <Badge variant="outline" className={`text-xs flex-shrink-0 ${REPORT_STATUS_STYLES[report.status]}`}>
-            {report.status}
-          </Badge>
-        </div>
-
-        <p className="text-sm bg-muted/40 rounded p-2 text-muted-foreground leading-relaxed">{report.reason}</p>
-
-        {tx?.proofLink && (
-          <a href={tx.proofLink} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-primary hover:underline text-xs">
-            <ExternalLink className="h-3 w-3" /> View transaction proof
-          </a>
-        )}
-
-        {err && <p className="text-xs text-destructive">{err}</p>}
-
-        {report.status === 'pending' && (
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" variant="destructive" className="gap-1.5" disabled={upholding || dismissing} onClick={handleUphold}>
-              {upholding && <Loader2 className="h-3 w-3 animate-spin" />}
-              Uphold (Refund)
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={upholding || dismissing} onClick={handleDismiss}>
-              {dismissing && <Loader2 className="h-3 w-3 animate-spin" />}
-              Dismiss
-            </Button>
-          </div>
-        )}
-        {report.status !== 'pending' && report.resolvedAt && (
-          <p className="text-xs text-muted-foreground">
-            Resolved {format(report.resolvedAt, 'dd MMM yyyy')}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyTransactions() {
-  return (
-    <div className="text-center py-20 border-2 border-dashed rounded-lg">
-      <Receipt className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-      <h3 className="text-lg font-semibold mb-1">No transactions yet</h3>
-      <p className="text-muted-foreground text-sm">Your purchase and buyback history will appear here.</p>
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-4 w-48" />
-            </div>
-            <Skeleton className="h-4 w-20" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-const ADMIN_EMAIL = 'ramawan@live.com';
-
-export default function TransactionsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
-  const [items, setItems] = useState<TransactionWithNft[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [reportItems, setReportItems] = useState<ReportWithMeta[]>([]);
-  const [loadingReports, setLoadingReports] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!user) return;
+  async function handleSubmit() {
+    if (!reason.trim()) return;
     setLoading(true);
     try {
-      const txs = await fetchTransactionsByUser(user.id);
-      const enriched = await Promise.all(
-        txs.map(async tx => ({ tx, nft: await fetchNftById(tx.nftId) }))
-      );
-      setItems(enriched);
+      await addDoc(collection(db, 'reports'), {
+        transactionId: entry.id,
+        nft_unit_id: entry.nft_unit_id,
+        reported_user_id: entry.userId,
+        userId: reporterId,
+        reason: reason.trim(),
+        status: 'pending',
+        createdAt: Timestamp.now(),
+      });
+      setDone(true);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }
 
-  const loadReports = useCallback(async () => {
-    if (!user || user.email !== ADMIN_EMAIL) return;
-    setLoadingReports(true);
-    try {
-      const reports = await fetchAllReports();
-      const enriched = await Promise.all(
-        reports.map(async (report) => {
-          const tx = await fetchTransactionById(report.transactionId);
-          const [nft, reporter] = await Promise.all([
-            tx ? fetchNftById(tx.nftId) : Promise.resolve(null),
-            fetchUserById(report.userId),
-          ]);
-          return { report, tx, nft, reporter };
-        })
-      );
-      setReportItems(enriched);
-    } finally {
-      setLoadingReports(false);
-    }
-  }, [user]);
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Laporkan Transaksi</DialogTitle>
+        </DialogHeader>
+        {done ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Laporan terkirim. Tim admin akan meninjau.
+          </p>
+        ) : (
+          <div className="space-y-3 py-1">
+            <p className="text-xs text-muted-foreground">
+              Transaksi:{' '}
+              <span className="font-medium">
+                {entry.nama_nft || entry.nft_unit_id.slice(0, 12) + '…'}
+              </span>
+            </p>
+            <div className="space-y-1.5">
+              <Label>Alasan pelaporan</Label>
+              <Textarea
+                rows={3}
+                placeholder="Jelaskan kenapa transaksi ini mencurigakan..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Tutup</Button>
+          {!done && (
+            <Button onClick={handleSubmit} disabled={loading || !reason.trim()}>
+              {loading ? 'Mengirim...' : 'Kirim Laporan'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function TransactionsPage() {
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterTab>('semua');
+  const [reporting, setReporting] = useState<LogEntry | null>(null);
 
   useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    async function load() {
+      try {
+        const q = query(
+          collectionGroup(db, 'neraca_log'),
+          orderBy('timestamp', 'desc'),
+          limit(100),
+        );
+        const snap = await getDocs(q);
+        const entries: LogEntry[] = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            userId: d.ref.parent.parent?.id ?? '',
+            type: data.type as NeracaLog['type'],
+            nft_unit_id: (data.nft_unit_id as string) ?? '',
+            nama_nft: (data.nama_nft as string) ?? '',
+            harga_transaksi: (data.harga_transaksi as number) ?? 0,
+            nilai_selisih: (data.nilai_selisih as number) ?? 0,
+            delta: (data.delta as number) ?? 0,
+            counterparty_id: (data.counterparty_id as string) ?? '',
+            project_id: (data.project_id as string) ?? '',
+            timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
+          };
+        });
+        setLogs(entries);
+      } finally {
+        setLoading(false);
+      }
+    }
     load();
-    loadReports();
-  }, [load, loadReports]);
+  }, [user]);
+
+  const filtered = filter === 'semua'
+    ? logs
+    : logs.filter(l => FILTER_TYPES[filter].includes(l.type));
 
   if (!user) {
     return (
       <MainLayout>
-        <div className="max-w-md mx-auto text-center py-16">
-          <p className="text-muted-foreground mb-4">Sign in to view your transactions.</p>
-          <Button asChild><Link href="/login">Sign In</Link></Button>
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <h2 className="text-2xl font-bold">Login diperlukan</h2>
+          <p className="text-muted-foreground">
+            Login untuk melihat log transaksi komunitas.
+          </p>
+          <Button asChild><Link href="/login">Login</Link></Button>
         </div>
       </MainLayout>
     );
   }
 
-  const purchases = items.filter(i => i.tx.type === 'purchase');
-  const buybacks  = items.filter(i => i.tx.type === 'buyback');
-
   return (
     <MainLayout>
-      <div className="space-y-8 max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-6">
+
+        {/* Header */}
         <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">Transactions</h1>
-          <p className="text-muted-foreground">
-            History of all your purchases and buybacks.
+          <div className="flex items-center gap-2 mb-1">
+            <ArrowLeftRight className="h-5 w-5 text-primary" />
+            <h1 className="text-2xl font-headline font-bold">Log Transaksi Komunitas</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            100 transaksi terbaru dari seluruh anggota. Semua transaksi bersifat publik
+            sesuai prinsip transparansi TMEP.
           </p>
         </div>
 
-        <Tabs defaultValue="all">
-          <TabsList>
-            <TabsTrigger value="all">
-              All {!loading && `(${items.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="purchases">
-              Purchases {!loading && `(${purchases.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="buybacks">
-              Buybacks {!loading && `(${buybacks.length})`}
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="reports">
-                Reports {!loadingReports && reportItems.length > 0 && `(${reportItems.filter(r => r.report.status === 'pending').length} pending)`}
-              </TabsTrigger>
-            )}
-          </TabsList>
-
-          {loading ? (
-            <div className="mt-6"><LoadingSkeleton /></div>
-          ) : (
-            <>
-              <TabsContent value="all" className="mt-6">
-                {items.length === 0 ? <EmptyTransactions /> : (
-                  <div className="space-y-3">
-                    {items.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="purchases" className="mt-6">
-                {purchases.length === 0 ? <EmptyTransactions /> : (
-                  <div className="space-y-3">
-                    {purchases.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="buybacks" className="mt-6">
-                {buybacks.length === 0 ? <EmptyTransactions /> : (
-                  <div className="space-y-3">
-                    {buybacks.map(item => (
-                      <TxRow key={item.tx.id} item={item} userId={user.id} isAdmin={isAdmin} onRefundDone={load} />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              {isAdmin && (
-                <TabsContent value="reports" className="mt-6">
-                  {loadingReports ? (
-                    <LoadingSkeleton />
-                  ) : reportItems.length === 0 ? (
-                    <div className="text-center py-20 border-2 border-dashed rounded-lg">
-                      <TriangleAlert className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-1">No reports</h3>
-                      <p className="text-muted-foreground text-sm">No anomaly reports from users.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {reportItems.map(item => (
-                        <ReportCard
-                          key={item.report.id}
-                          item={item}
-                          adminId={user.id}
-                          onResolved={() => { load(); loadReports(); }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
+        {/* Filter tabs */}
+        <div className="flex flex-wrap gap-2">
+          {FILTER_TABS.map(tab => (
+            <Button
+              key={tab.key}
+              size="sm"
+              variant={filter === tab.key ? 'default' : 'outline'}
+              onClick={() => setFilter(tab.key)}
+            >
+              {tab.label}
+              {tab.key !== 'semua' && !loading && (
+                <span className="ml-1.5 text-xs opacity-60">
+                  {logs.filter(l => FILTER_TYPES[tab.key].includes(l.type)).length}
+                </span>
               )}
-            </>
-          )}
-        </Tabs>
+            </Button>
+          ))}
+        </div>
+
+        {/* Tabel */}
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-12 text-center">
+            Tidak ada transaksi untuk filter ini.
+          </p>
+        ) : (
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Tipe</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">NFT</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">User</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Delta</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Waktu</th>
+                  <th className="w-8 px-2 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((entry, i) => (
+                  <tr
+                    key={`${entry.userId}-${entry.id}`}
+                    className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
+                  >
+                    <td className="px-4 py-2.5 border-t">
+                      <Badge
+                        variant={typeBadgeVariant(entry.type)}
+                        className="text-[10px] px-1.5 py-0 whitespace-nowrap"
+                      >
+                        {TYPE_LABELS[entry.type] ?? entry.type}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5 border-t max-w-[160px]">
+                      {entry.nft_unit_id ? (
+                        <Link
+                          href={`/nft/${entry.nft_unit_id}`}
+                          className="font-medium truncate block hover:underline"
+                        >
+                          {entry.nama_nft || entry.nft_unit_id.slice(0, 10) + '…'}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground truncate block">
+                          {entry.nama_nft || '—'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 border-t font-mono text-xs text-muted-foreground hidden sm:table-cell">
+                      {entry.userId.slice(0, 8)}…
+                    </td>
+                    <td className={cn(
+                      'px-4 py-2.5 border-t text-right font-semibold font-mono text-xs whitespace-nowrap',
+                      entry.delta > 0 ? 'text-green-600 dark:text-green-400'
+                        : entry.delta < 0 ? 'text-destructive'
+                        : 'text-muted-foreground',
+                    )}>
+                      {entry.delta !== 0
+                        ? `${entry.delta > 0 ? '+' : ''}${formatIDR(entry.delta)}`
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 border-t text-right text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
+                      {relativeTime(entry.timestamp)}
+                    </td>
+                    <td className="px-2 py-2.5 border-t">
+                      {entry.userId !== user.id && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => setReporting(entry)}
+                          title="Laporkan"
+                        >
+                          <Flag className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {reporting && user && (
+          <ReportDialog
+            entry={reporting}
+            reporterId={user.id}
+            onClose={() => setReporting(null)}
+          />
+        )}
       </div>
     </MainLayout>
   );

@@ -1,203 +1,271 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { RefreshCcw, CheckCircle, XCircle, Clock, ExternalLink } from 'lucide-react';
+import {
+  collection, getDocs, query, where, Timestamp,
+} from 'firebase/firestore';
+import { RefreshCcw, Loader2, ImageOff } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/hooks/use-auth';
 import {
-  fetchBuybackRequestsByVendor,
-  fetchBuybackRequestsByBuyer,
-  confirmBuybackRequest,
-  rejectBuybackRequest,
-  completeBuybackRequest,
-  fetchNftById,
-  fetchUserById,
-} from '@/lib/firestore';
-import type { BuybackRequest, NFT, User } from '@/lib/types';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
+import { buybackNftUnit, BuybackError } from '@/lib/projects';
+import { cn } from '@/lib/utils';
+import type { NFTUnit, ProjectCategory } from '@/lib/types';
 
-type RequestWithMeta = {
-  req: BuybackRequest;
-  nft: NFT | null;
-  otherParty: User | null;
-};
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<BuybackRequest['status'], { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
-  pending:   { label: 'Pending',   variant: 'secondary',  icon: <Clock className="h-3 w-3" /> },
-  confirmed: { label: 'Confirmed', variant: 'default',    icon: <CheckCircle className="h-3 w-3" /> },
-  rejected:  { label: 'Rejected',  variant: 'destructive', icon: <XCircle className="h-3 w-3" /> },
-  completed: { label: 'Completed', variant: 'outline',    icon: <CheckCircle className="h-3 w-3" /> },
-};
+function formatIDR(n: number) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
+  }).format(n);
+}
 
-function RequestCard({
-  item,
-  role,
-  onAction,
-}: {
-  item: RequestWithMeta;
-  role: 'vendor' | 'buyer';
-  onAction: () => void;
-}) {
-  const { req, nft, otherParty } = item;
-  const [proofUrl, setProofUrl] = useState('');
-  const [showConfirmForm, setShowConfirmForm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const cfg = STATUS_CONFIG[req.status];
-
-  const act = async (fn: () => Promise<void>) => {
-    setBusy(true);
-    try { await fn(); onAction(); } finally { setBusy(false); }
+function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
+  return {
+    id,
+    project_id: data.project_id as string,
+    developer_id: data.developer_id as string,
+    owner_id: data.owner_id as string,
+    nama_nft: (data.nama_nft as string) ?? '',
+    nama_project: (data.nama_project as string) ?? '',
+    gambar_url: (data.gambar_url as string) ?? '',
+    kategori: (data.kategori as ProjectCategory) ?? 'lainnya',
+    status: (data.status as NFTUnit['status']) ?? 'biasa',
+    harga_jual: (data.harga_jual as number) ?? 0,
+    harga_beli_terakhir: (data.harga_beli_terakhir as number) ?? 0,
+    nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    for_sale: (data.for_sale as boolean) ?? false,
+    in_pool: (data.in_pool as boolean) ?? false,
+    digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
+    project_validasi_id: (data.project_validasi_id as string | null) ?? null,
+    like_count: (data.like_count as number) ?? 0,
+    comment_count: (data.comment_count as number) ?? 0,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
-
-  return (
-    <Card>
-      <CardHeader className="pb-2 flex flex-row items-start justify-between gap-4">
-        <div className="min-w-0">
-          <CardTitle className="text-base truncate">
-            {nft ? (
-              <Link href={`/nft/${nft.id}`} className="hover:text-primary transition-colors">
-                {nft.title}
-              </Link>
-            ) : req.nftId}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {role === 'vendor' ? 'Current owner: ' : 'Requested by: '}
-            <span className="font-medium">{otherParty?.displayName || 'Unknown'}</span>
-          </p>
-        </div>
-        <Badge variant={cfg.variant} className="gap-1 flex-shrink-0 text-xs">
-          {cfg.icon}{cfg.label}
-        </Badge>
-      </CardHeader>
-
-      <CardContent className="pb-2 text-sm text-muted-foreground">
-        <p>Requested: {format(req.createdAt, 'dd MMM yyyy')}</p>
-        {req.proofUrl && (
-          <a href={req.proofUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-primary hover:underline mt-1">
-            <ExternalLink className="h-3 w-3" /> View proof
-          </a>
-        )}
-      </CardContent>
-
-      <CardFooter className="flex flex-wrap gap-2">
-        {/* Vendor actions */}
-        {role === 'vendor' && req.status === 'pending' && (
-          <>
-            {showConfirmForm ? (
-              <div className="w-full space-y-2">
-                <Label htmlFor={`proof-${req.id}`} className="text-xs">Proof URL (payment / transfer)</Label>
-                <Input
-                  id={`proof-${req.id}`}
-                  placeholder="https://..."
-                  value={proofUrl}
-                  onChange={e => setProofUrl(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" disabled={busy || !proofUrl}
-                    onClick={() => act(() => confirmBuybackRequest(req.id, proofUrl))}>
-                    Confirm
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowConfirmForm(false)}>Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <Button size="sm" className="gap-1" onClick={() => setShowConfirmForm(true)}>
-                  <CheckCircle className="h-4 w-4" /> Confirm
-                </Button>
-                <Button size="sm" variant="destructive" className="gap-1" disabled={busy}
-                  onClick={() => act(() => rejectBuybackRequest(req.id))}>
-                  <XCircle className="h-4 w-4" /> Reject
-                </Button>
-              </>
-            )}
-          </>
-        )}
-
-        {/* Buyer actions */}
-        {role === 'buyer' && req.status === 'confirmed' && (
-          <Button size="sm" className="gap-1" disabled={busy}
-            onClick={() => act(() => completeBuybackRequest(req.id, req.nftId))}>
-            <CheckCircle className="h-4 w-4" /> Mark Complete
-          </Button>
-        )}
-      </CardFooter>
-    </Card>
-  );
 }
 
-function RequestList({ items, role, onAction }: { items: RequestWithMeta[]; role: 'vendor' | 'buyer'; onAction: () => void }) {
-  if (items.length === 0) {
-    return (
-      <div className="text-center py-16 border-2 border-dashed rounded-lg">
-        <RefreshCcw className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-        <p className="text-muted-foreground text-sm">No buyback requests here.</p>
-      </div>
-    );
+// ─── Buyback Dialog ───────────────────────────────────────────────────────────
+
+interface BuybackDialogProps {
+  unit: NFTUnit;
+  ownerId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await buybackNftUnit(unit.id, ownerId);
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(
+        err instanceof BuybackError ? err.message : 'Gagal melakukan buyback. Coba lagi.',
+      );
+    } finally {
+      setLoading(false);
+    }
   }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {items.map(item => (
-        <RequestCard key={item.req.id} item={item} role={role} onAction={onAction} />
-      ))}
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Konfirmasi Buyback</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
+            <div className="pt-2 border-t space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga buyback</span>
+                <span className="font-bold">{formatIDR(unit.harga_beli_terakhir)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Efek neracamu</span>
+                <span className={cn(
+                  'font-semibold',
+                  unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
+                )}>
+                  {unit.nilai_selisih > 0
+                    ? `−${formatIDR(unit.nilai_selisih)}`
+                    : 'Tidak ada perubahan'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            NFT akan dikembalikan ke developer. Tindakan ini tidak dapat dibatalkan.
+          </p>
+
+          {error && (
+            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Konfirmasi Buyback
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
+// ─── NFT Card ─────────────────────────────────────────────────────────────────
+
+function BuybackCard({
+  unit, ownerId, onSuccess,
+}: {
+  unit: NFTUnit;
+  ownerId: string;
+  onSuccess: () => void;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+
+  return (
+    <>
+      <div className="rounded-lg border bg-card overflow-hidden flex flex-col">
+        {/* Gambar */}
+        <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
+          {unit.gambar_url && !imgError ? (
+            <img
+              src={unit.gambar_url}
+              alt={unit.nama_nft}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              <ImageOff className="h-8 w-8" />
+            </div>
+          )}
+          <div className="absolute top-1.5 left-1.5">
+            <Badge
+              variant={unit.status === 'valid' ? 'default' : 'secondary'}
+              className="text-[10px] px-1.5 py-0 capitalize"
+            >
+              {unit.status}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="p-3 flex flex-col gap-2 flex-1">
+          <div>
+            <p className="font-semibold text-sm leading-snug">{unit.nama_nft}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{unit.nama_project}</p>
+          </div>
+
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Harga buyback</span>
+              <span className="font-semibold">{formatIDR(unit.harga_beli_terakhir)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Efek neraca</span>
+              <span className={cn(
+                'font-semibold',
+                unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
+              )}>
+                {unit.nilai_selisih > 0 ? `−${formatIDR(unit.nilai_selisih)}` : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mt-auto pt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 text-xs"
+              asChild
+            >
+              <Link href={`/nft/${unit.id}`}>Detail</Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="flex-1 text-xs"
+              onClick={() => setShowDialog(true)}
+            >
+              <RefreshCcw className="h-3.5 w-3.5 mr-1" />
+              Buyback
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {showDialog && (
+        <BuybackDialog
+          unit={unit}
+          ownerId={ownerId}
+          onClose={() => setShowDialog(false)}
+          onSuccess={onSuccess}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BuybackPage() {
   const { user } = useAuth();
-  const [vendorItems, setVendorItems] = useState<RequestWithMeta[]>([]);
-  const [buyerItems, setBuyerItems] = useState<RequestWithMeta[]>([]);
+  const [units, setUnits] = useState<NFTUnit[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const enrich = async (reqs: BuybackRequest[], otherPartyField: 'buyerId' | 'vendorId'): Promise<RequestWithMeta[]> =>
-    Promise.all(
-      reqs.map(async req => {
-        const [nft, otherParty] = await Promise.all([
-          fetchNftById(req.nftId),
-          fetchUserById(req[otherPartyField]),
-        ]);
-        return { req, nft, otherParty };
-      })
-    );
-
-  const load = useCallback(async () => {
+  const loadUnits = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [asVendor, asBuyer] = await Promise.all([
-        fetchBuybackRequestsByVendor(user.id),
-        fetchBuybackRequestsByBuyer(user.id),
-      ]);
-      const [vItems, bItems] = await Promise.all([
-        enrich(asVendor, 'buyerId'),
-        enrich(asBuyer, 'vendorId'),
-      ]);
-      setVendorItems(vItems);
-      setBuyerItems(bItems);
+      const q = query(
+        collection(db, 'nft_units'),
+        where('owner_id', '==', user.id),
+      );
+      const snap = await getDocs(q);
+      const all = snap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>));
+      // Filter: bukan milik developer sendiri, tidak sedang divalidasi, tidak di pool
+      const buybackable = all.filter(
+        u => u.developer_id !== user.id && !u.digunakan_validasi && !u.in_pool,
+      );
+      setUnits(buybackable);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadUnits(); }, [loadUnits]);
 
   if (!user) {
     return (
       <MainLayout>
-        <div className="max-w-md mx-auto text-center py-16">
-          <p className="text-muted-foreground mb-4">Sign in to view buyback requests.</p>
-          <Button asChild><Link href="/login">Sign In</Link></Button>
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <h2 className="text-2xl font-bold">Login diperlukan</h2>
+          <p className="text-muted-foreground">Login untuk melihat NFT yang bisa di-buyback.</p>
+          <Button asChild><Link href="/login">Login</Link></Button>
         </div>
       </MainLayout>
     );
@@ -205,53 +273,61 @@ export default function BuybackPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-8 max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto space-y-6">
+
+        {/* Header */}
         <div>
-          <h1 className="text-4xl font-headline font-bold mb-2">Buyback</h1>
-          <p className="text-muted-foreground">
-            Manage NFT buyback requests — reclaim NFTs you sold or complete incoming requests.
+          <div className="flex items-center gap-2 mb-1">
+            <RefreshCcw className="h-5 w-5 text-primary" />
+            <h1 className="text-2xl font-headline font-bold">Buyback NFT</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            NFT yang kamu miliki dan bisa dikembalikan ke developer asalnya.
           </p>
         </div>
 
-        <Tabs defaultValue="sent">
-          <TabsList>
-            <TabsTrigger value="sent">
-              As Vendor {!loading && `(${vendorItems.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="received">
-              As Buyer {!loading && `(${buyerItems.length})`}
-            </TabsTrigger>
-          </TabsList>
+        {/* Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="space-y-3">
+                <Skeleton className="aspect-video w-full rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : units.length === 0 ? (
+          <div className="text-center py-16 space-y-3">
+            <RefreshCcw className="h-12 w-12 text-muted-foreground mx-auto" />
+            <h3 className="font-semibold text-lg">Tidak ada NFT yang bisa di-buyback</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              NFT yang memenuhi syarat buyback adalah NFT yang kamu beli dari developer lain
+              dan tidak sedang digunakan untuk validasi atau berada di pool.
+            </p>
+            <Button variant="outline" asChild className="mt-2">
+              <Link href="/explore">Jelajahi NFT</Link>
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {units.length} NFT tersedia untuk buyback
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {units.map(unit => (
+                <BuybackCard
+                  key={unit.id}
+                  unit={unit}
+                  ownerId={user.id}
+                  onSuccess={loadUnits}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
-          <TabsContent value="sent" className="mt-6">
-            {loading ? <LoadingSkeleton /> : (
-              <RequestList items={vendorItems} role="vendor" onAction={load} />
-            )}
-          </TabsContent>
-
-          <TabsContent value="received" className="mt-6">
-            {loading ? <LoadingSkeleton /> : (
-              <RequestList items={buyerItems} role="buyer" onAction={load} />
-            )}
-          </TabsContent>
-        </Tabs>
       </div>
     </MainLayout>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="p-4 space-y-3">
-            <Skeleton className="h-5 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-1/3" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
   );
 }

@@ -255,6 +255,14 @@ service cloud.firestore {
       allow write: if isAuth();
     }
 
+    // ─── collectionGroup: neraca_log ─────────────────────────────────────────
+    // Diperlukan agar halaman /transactions bisa query semua log lintas user.
+    // Sesuai prinsip transparansi TMEP: semua user yang login bisa melihat
+    // semua log transaksi komunitas.
+    match /{path=**}/neraca_log/{logId} {
+      allow read: if isAuth();
+    }
+
     // ─── collectionGroup: comments ───────────────────────────────────────────
     // Rule path spesifik di nft_units/.../comments tidak mencakup collectionGroup
     // query. Wildcard ini diperlukan agar /admin/reports bisa fetch semua

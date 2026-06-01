@@ -5,15 +5,10 @@ import {
   Compass,
   FolderOpen,
   Award,
-  Sparkles,
-  Settings,
-  HelpCircle,
   PlusCircle,
   LayoutDashboard,
-  ShieldCheck,
   RefreshCcw,
   ArrowLeftRight,
-  BadgeCheck,
   SlidersHorizontal,
   ShieldAlert,
   CheckSquare,
@@ -43,20 +38,12 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/validate', label: 'Validate', icon: CheckSquare },
   { href: '/pool', label: 'Pool', icon: Layers },
-  { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
-  { href: '/validated', label: 'Validated', icon: BadgeCheck },
   { href: '/create', label: 'Create', icon: PlusCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/validation', label: 'Validation', icon: ShieldCheck },
   { href: '/buyback', label: 'Buyback', icon: RefreshCcw },
-  { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { href: '/transactions', label: 'Transaksi', icon: ArrowLeftRight },
   { href: '/top-developers', label: 'Developer Ranking', icon: Award },
-  { href: '/recommendations', label: 'For You', icon: Sparkles },
-];
-
-const bottomNavItems = [
-  { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/help', label: 'Help', icon: HelpCircle },
+  { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
 ];
 
 export function SidebarNav() {
@@ -101,25 +88,6 @@ export function SidebarNav() {
           )}
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter className="mt-auto">
-        <SidebarSeparator />
-        <SidebarMenu>
-          {bottomNavItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname === item.href}
-                tooltip={{ children: item.label }}
-              >
-                <Link href={item.href}>
-                  <item.icon />
-                  <span>{item.label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarFooter>
     </>
   );
 }
