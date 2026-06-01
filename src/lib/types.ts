@@ -205,7 +205,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator';
+  type: 'beli' | 'beli_pool' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;
@@ -251,6 +251,9 @@ export type NFTUnit = {
   in_pool: boolean;
   digunakan_validasi: boolean;
   project_validasi_id: string | null;
+  harga_beli_sebelum_validasi?: number | null;
+  nilai_selisih_sebelum_validasi?: number | null;
+  pernah_digunakan_validasi?: boolean;
   like_count: number;
   comment_count: number;
   created_at: Date;

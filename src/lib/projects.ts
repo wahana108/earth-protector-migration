@@ -541,7 +541,9 @@ export class ValidasiError extends Error {
 }
 
 // Validasi project: serahkan nilai selisih NFT yang dipilih ke pool jaminan project.
-// Setiap NFT terpilih di-lock (digunakan_validasi=true) dan nilai selisihnya direset ke 0.
+// Mode pertama (pool_jaminan < nilai_project): lock NFT, simpan nilai sebelum reset.
+// Mode revalidasi (pool_jaminan >= nilai_project): rotasi FIFO — validator terlama
+// digantikan, NFT mereka dikembalikan ke kondisi semula.
 export async function validateProject(
   projectId: string,
   userId: string,
@@ -554,8 +556,7 @@ export async function validateProject(
   const userRef = doc(db, 'users', userId);
 
   await runTransaction(db, async (tx) => {
-    // ── Baca semua dokumen sebelum ada write ──────────────────────────────
-
+    // ── Baca project + user + NFT baru ────────────────────────────────────
     const projectSnap = await tx.get(projectRef);
     const userSnap = await tx.get(userRef);
     const nftSnaps = await Promise.all(
@@ -565,69 +566,202 @@ export async function validateProject(
     if (!projectSnap.exists()) throw new ValidasiError('Project tidak ditemukan.');
     if (!userSnap.exists()) throw new ValidasiError('Data user tidak ditemukan.');
 
-    // Validasi eligibility setiap NFT
+    const projectData = projectSnap.data();
+    const isRevalidasi =
+      (projectData.pool_jaminan as number) >= (projectData.nilai_project as number);
+
+    // Validasi eligibility setiap NFT baru
     for (const snap of nftSnaps) {
       if (!snap.exists()) throw new ValidasiError('NFT tidak ditemukan.');
       const nft = snap.data();
       if (nft.owner_id !== userId) throw new ValidasiError(`NFT ${nft.nama_nft} bukan milikmu.`);
       if (nft.for_sale) throw new ValidasiError(`NFT ${nft.nama_nft} sedang dalam status dijual.`);
       if (nft.digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah dipakai validasi.`);
+      if (nft.pernah_digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah pernah digunakan validasi sebelumnya.`);
       if ((nft.nilai_selisih as number) <= 0) throw new ValidasiError(`NFT ${nft.nama_nft} tidak memiliki nilai selisih.`);
     }
 
-    // Hitung total nilai yang diserahkan ke pool
+    // ── Jika revalidasi: baca validator lama yang akan dirotasi ───────────
+    type RawValidatorEntry = { user_id: string; nft_unit_id: string; nilai: number; timestamp: unknown };
+    const rawValidatorList =
+      (projectData.validator_list as RawValidatorEntry[]) ?? [];
+
+    // Urutkan FIFO (timestamp terlama dulu)
+    const sortedValidators = [...rawValidatorList].sort((a, b) => {
+      const toMs = (ts: unknown): number => {
+        if (ts && typeof (ts as { toMillis?: () => number }).toMillis === 'function')
+          return (ts as { toMillis: () => number }).toMillis();
+        if (ts instanceof Date) return ts.getTime();
+        return 0;
+      };
+      return toMs(a.timestamp) - toMs(b.timestamp);
+    });
+
+    // Ambil N entry terlama (N = jumlah NFT baru)
+    const oldEntries = isRevalidasi
+      ? sortedValidators.slice(0, selectedNftIds.length)
+      : [];
+
+    // Baca dokumen NFT lama dan user lama (dalam transaction)
+    const oldNftSnapMap = new Map<string, Awaited<ReturnType<typeof tx.get>>>();
+    const oldUserSnapMap = new Map<string, Awaited<ReturnType<typeof tx.get>>>();
+
+    if (oldEntries.length > 0) {
+      const oldNftReads = await Promise.all(
+        oldEntries.map(e => tx.get(doc(db, 'nft_units', e.nft_unit_id))),
+      );
+      oldNftReads.forEach((snap, i) => oldNftSnapMap.set(oldEntries[i].nft_unit_id, snap));
+
+      const uniqueOldUserIds = [...new Set(oldEntries.map(e => e.user_id))];
+      const oldUserReads = await Promise.all(
+        uniqueOldUserIds.map(uid => tx.get(doc(db, 'users', uid))),
+      );
+      oldUserReads.forEach((snap, i) => oldUserSnapMap.set(uniqueOldUserIds[i], snap));
+    }
+
+    // ── Hitung total nilai NFT baru ───────────────────────────────────────
     const totalSelisih = nftSnaps.reduce(
       (sum, snap) => sum + ((snap.data()!.nilai_selisih as number) ?? 0),
       0,
     );
-
     const now = Timestamp.now();
 
-    // ── Semua write setelah semua read selesai ─────────────────────────────
+    // ── WRITES ────────────────────────────────────────────────────────────
 
-    for (const snap of nftSnaps) {
-      const nft = snap.data()!;
-      const nilai = nft.nilai_selisih as number;
-      const nama_nft = nft.nama_nft as string;
+    if (isRevalidasi) {
+      // Rotasi keluar: restore NFT lama, hapus dari validator_aktif user lama
+      for (const oldEntry of oldEntries) {
+        const oldNftSnap = oldNftSnapMap.get(oldEntry.nft_unit_id);
+        if (!oldNftSnap?.exists()) continue;
+        const oldNft = oldNftSnap.data() as Record<string, unknown>;
 
-      // Lock NFT dan reset nilai selisih
-      tx.update(snap.ref, {
-        digunakan_validasi: true,
-        project_validasi_id: projectId,
-        harga_beli_terakhir: harga_dasar,
-        nilai_selisih: 0,
-        for_sale: false,
+        tx.update(oldNftSnap.ref, {
+          harga_beli_terakhir: (oldNft.harga_beli_sebelum_validasi as number) ?? (oldNft.harga_beli_terakhir as number),
+          nilai_selisih: (oldNft.nilai_selisih_sebelum_validasi as number) ?? 0,
+          digunakan_validasi: false,
+          project_validasi_id: null,
+          pernah_digunakan_validasi: true,
+          harga_beli_sebelum_validasi: null,
+          nilai_selisih_sebelum_validasi: null,
+        });
+
+        const oldUserSnap = oldUserSnapMap.get(oldEntry.user_id);
+        if (oldUserSnap?.exists()) {
+          type ValidatorAktifEntry = { project_id: string; nft_unit_ids: string[]; nilai_total: number; fee_diterima: number };
+          const oldValidatorAktif =
+            ((oldUserSnap.data() as Record<string, unknown>).validator_aktif as ValidatorAktifEntry[]) ?? [];
+          const updatedValidatorAktif = oldValidatorAktif.filter(
+            v => !(v.project_id === projectId && v.nft_unit_ids.includes(oldEntry.nft_unit_id)),
+          );
+          tx.update(oldUserSnap.ref, { validator_aktif: updatedValidatorAktif });
+
+          tx.set(doc(collection(db, 'users', oldEntry.user_id, 'neraca_log')), {
+            type: 'revalidasi_keluar',
+            nft_unit_id: oldEntry.nft_unit_id,
+            nama_nft: (oldNft.nama_nft as string) ?? '',
+            harga_transaksi: 0,
+            nilai_selisih: 0,
+            delta: 0,
+            counterparty_id: userId,
+            project_id: projectId,
+            keterangan: 'digantikan validator baru, NFT dikembalikan',
+            timestamp: now,
+          });
+        }
+      }
+
+      // Lock NFT baru (simpan nilai sebelum reset), log revalidasi_masuk
+      for (const snap of nftSnaps) {
+        const nft = snap.data()!;
+        const nilai = nft.nilai_selisih as number;
+        const hargaBeli = nft.harga_beli_terakhir as number;
+        const nama_nft = nft.nama_nft as string;
+
+        tx.update(snap.ref, {
+          harga_beli_sebelum_validasi: hargaBeli,
+          nilai_selisih_sebelum_validasi: nilai,
+          digunakan_validasi: true,
+          project_validasi_id: projectId,
+          harga_beli_terakhir: harga_dasar,
+          nilai_selisih: 0,
+          for_sale: false,
+        });
+
+        tx.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+          type: 'revalidasi_masuk',
+          nft_unit_id: snap.id,
+          nama_nft,
+          harga_transaksi: harga_dasar,
+          nilai_selisih: nilai,
+          delta: -nilai,
+          counterparty_id: projectId,
+          project_id: projectId,
+          timestamp: now,
+        });
+      }
+
+      // Update project: ganti validator_list secara langsung (bukan arrayUnion)
+      const oldNftIds = new Set(oldEntries.map(e => e.nft_unit_id));
+      const keptValidators = rawValidatorList.filter(v => !oldNftIds.has(v.nft_unit_id));
+      const newValidatorEntries = nftSnaps.map(snap => ({
+        user_id: userId,
+        nft_unit_id: snap.id,
+        nilai: snap.data()!.nilai_selisih as number,
+        timestamp: now,
+      }));
+
+      tx.update(projectRef, {
+        pool_jaminan: increment(totalSelisih),
+        // jumlah_validator tidak berubah: N keluar, N masuk = net 0
+        validator_list: [...keptValidators, ...newValidatorEntries],
       });
 
-      // Neraca log — delta negatif karena selisih diserahkan ke pool
-      tx.set(doc(collection(db, 'users', userId, 'neraca_log')), {
-        type: 'validasi',
+    } else {
+      // Validasi pertama kali: simpan nilai sebelum reset, log 'validasi'
+      for (const snap of nftSnaps) {
+        const nft = snap.data()!;
+        const nilai = nft.nilai_selisih as number;
+        const hargaBeli = nft.harga_beli_terakhir as number;
+        const nama_nft = nft.nama_nft as string;
+
+        tx.update(snap.ref, {
+          harga_beli_sebelum_validasi: hargaBeli,
+          nilai_selisih_sebelum_validasi: nilai,
+          digunakan_validasi: true,
+          project_validasi_id: projectId,
+          harga_beli_terakhir: harga_dasar,
+          nilai_selisih: 0,
+          for_sale: false,
+        });
+
+        tx.set(doc(collection(db, 'users', userId, 'neraca_log')), {
+          type: 'validasi',
+          nft_unit_id: snap.id,
+          nama_nft,
+          harga_transaksi: harga_dasar,
+          nilai_selisih: nilai,
+          delta: -nilai,
+          counterparty_id: projectId,
+          project_id: projectId,
+          timestamp: now,
+        });
+      }
+
+      const newValidatorEntries = nftSnaps.map(snap => ({
+        user_id: userId,
         nft_unit_id: snap.id,
-        nama_nft,
-        harga_transaksi: harga_dasar,
-        nilai_selisih: nilai,
-        delta: -nilai,
-        counterparty_id: projectId,
-        project_id: projectId,
+        nilai: snap.data()!.nilai_selisih as number,
         timestamp: now,
+      }));
+
+      tx.update(projectRef, {
+        pool_jaminan: increment(totalSelisih),
+        jumlah_validator: increment(nftSnaps.length),
+        validator_list: arrayUnion(...newValidatorEntries),
       });
     }
 
-    // Update project: tambah ke pool jaminan dan daftar validator
-    const newValidatorEntries = nftSnaps.map(snap => ({
-      user_id: userId,
-      nft_unit_id: snap.id,
-      nilai: snap.data()!.nilai_selisih as number,
-      timestamp: now,
-    }));
-
-    tx.update(projectRef, {
-      pool_jaminan: increment(totalSelisih),
-      jumlah_validator: increment(nftSnaps.length),
-      validator_list: arrayUnion(...newValidatorEntries),
-    });
-
-    // Update user: catat partisipasi validasi
+    // Update user baru: catat partisipasi validasi (sama di kedua mode)
     tx.update(userRef, {
       validator_aktif: arrayUnion({
         project_id: projectId,

@@ -190,7 +190,10 @@ service cloud.firestore {
               'project_validasi_id',
               'harga_beli_terakhir',
               'nilai_selisih',
-              'for_sale'
+              'for_sale',
+              'harga_beli_sebelum_validasi',
+              'nilai_selisih_sebelum_validasi',
+              'pernah_digunakan_validasi'
             ])) ||
         // Transfer pool flow: tambah transferred_at saat masuk pool
         (isAuth() &&

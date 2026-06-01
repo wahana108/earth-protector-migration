@@ -76,6 +76,9 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     in_pool: (data.in_pool as boolean) ?? false,
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
+    harga_beli_sebelum_validasi: (data.harga_beli_sebelum_validasi as number | null) ?? null,
+    nilai_selisih_sebelum_validasi: (data.nilai_selisih_sebelum_validasi as number | null) ?? null,
+    pernah_digunakan_validasi: (data.pernah_digunakan_validasi as boolean) ?? false,
     like_count: (data.like_count as number) ?? 0,
     comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
@@ -139,7 +142,12 @@ async function fetchEligibleNFTs(userId: string): Promise<NFTUnit[]> {
   );
   return snap.docs
     .map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>))
-    .filter(u => !u.for_sale && !u.digunakan_validasi && u.nilai_selisih > 0);
+    .filter(u =>
+      !u.for_sale &&
+      !u.digunakan_validasi &&
+      !u.pernah_digunakan_validasi &&
+      u.nilai_selisih > 0,
+    );
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -169,10 +177,11 @@ function PageSkeleton() {
 interface ValidationPanelProps {
   project: ProjectWithDev;
   userId: string;
+  isRevalidasi: boolean;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
-function ValidationPanel({ project, userId, onValidated }: ValidationPanelProps) {
+function ValidationPanel({ project, userId, isRevalidasi, onValidated }: ValidationPanelProps) {
   const [loadingNfts, setLoadingNfts] = useState(true);
   const [eligibleNfts, setEligibleNfts] = useState<NFTUnit[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -250,6 +259,15 @@ function ValidationPanel({ project, userId, onValidated }: ValidationPanelProps)
 
   return (
     <div className="border-t">
+      {/* Info revalidasi */}
+      {isRevalidasi && (
+        <div className="mx-4 mt-4 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2.5 text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+          <span className="font-semibold">Mode Revalidasi aktif.</span>{' '}
+          Project ini sudah valid. Dengan memvalidasi, kamu menggantikan validator terlama
+          dan NFT mereka dikembalikan ke kondisi semula.
+        </div>
+      )}
+
       {/* Header panel */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">
         <p className="text-sm font-semibold">Pilih NFT untuk validasi</p>
@@ -345,14 +363,17 @@ interface ProjectValidasiCardProps {
 function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: ProjectValidasiCardProps) {
   const [imgError, setImgError] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [validated, setValidated] = useState(false);
+  const [justValidated, setJustValidated] = useState(false);
+
+  const isRevalidasi = project.nilai_project > 0
+    && project.pool_jaminan >= project.nilai_project;
 
   const progressPct = project.nilai_project > 0
     ? Math.min(100, Math.round((project.pool_jaminan / project.nilai_project) * 100))
     : 0;
 
   function handleValidated(projectId: string, totalSelisih: number, count: number) {
-    setValidated(true);
+    setJustValidated(true);
     setExpanded(false);
     onValidated(projectId, totalSelisih, count);
   }
@@ -360,7 +381,7 @@ function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: Projec
   return (
     <div className={cn(
       'rounded-xl border bg-card overflow-hidden transition-all',
-      validated && 'opacity-75',
+      justValidated && 'opacity-75',
     )}>
       {/* Card utama */}
       <div className="flex gap-4 p-4">
@@ -384,10 +405,16 @@ function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: Projec
         <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex items-start gap-2 flex-wrap">
             <p className="font-semibold text-sm leading-snug">{project.nama_project}</p>
-            {validated && (
+            {isRevalidasi && (
+              <Badge variant="default" className="text-xs gap-1 shrink-0 bg-green-600 hover:bg-green-600">
+                <ShieldCheck className="h-3 w-3" />
+                Valid ✓ Revalidasi Tersedia
+              </Badge>
+            )}
+            {justValidated && (
               <Badge variant="secondary" className="text-xs gap-1 shrink-0">
                 <ShieldCheck className="h-3 w-3" />
-                Sudah Divalidasi
+                Baru Divalidasi
               </Badge>
             )}
           </div>
@@ -417,32 +444,31 @@ function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: Projec
             </p>
           </div>
 
-          {/* Tombol expand */}
-          {!validated && (
-            <Button
-              size="sm"
-              variant={expanded ? 'secondary' : 'default'}
-              className="h-7 text-xs gap-1.5 mt-1"
-              disabled={!poolCukup}
-              onClick={() => poolCukup && setExpanded(v => !v)}
-              title={!poolCukup ? 'Pool belum mencapai kapasitas minimum' : undefined}
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Validasi Project ini
-              {expanded
-                ? <ChevronUp className="h-3.5 w-3.5" />
-                : <ChevronDown className="h-3.5 w-3.5" />
-              }
-            </Button>
-          )}
+          {/* Tombol expand — disabled hanya jika pool belum cukup */}
+          <Button
+            size="sm"
+            variant={expanded ? 'secondary' : 'default'}
+            className="h-7 text-xs gap-1.5 mt-1"
+            disabled={!poolCukup}
+            onClick={() => poolCukup && setExpanded(v => !v)}
+            title={!poolCukup ? 'Pool belum mencapai kapasitas minimum' : undefined}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {isRevalidasi ? 'Revalidasi Project ini' : 'Validasi Project ini'}
+            {expanded
+              ? <ChevronUp className="h-3.5 w-3.5" />
+              : <ChevronDown className="h-3.5 w-3.5" />
+            }
+          </Button>
         </div>
       </div>
 
       {/* Panel validasi — expand di bawah card */}
-      {expanded && !validated && (
+      {expanded && (
         <ValidationPanel
           project={project}
           userId={userId}
+          isRevalidasi={isRevalidasi}
           onValidated={handleValidated}
         />
       )}

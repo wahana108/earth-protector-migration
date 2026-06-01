@@ -6,7 +6,7 @@ import {
   collectionGroup, query, orderBy, limit, getDocs,
   addDoc, collection, Timestamp,
 } from 'firebase/firestore';
-import { ArrowLeftRight, Flag } from 'lucide-react';
+import { ArrowLeftRight, Flag, Search } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -160,6 +160,7 @@ export default function TransactionsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>('semua');
+  const [searchQuery, setSearchQuery] = useState('');
   const [reporting, setReporting] = useState<LogEntry | null>(null);
 
   useEffect(() => {
@@ -196,9 +197,14 @@ export default function TransactionsPage() {
     load();
   }, [user]);
 
-  const filtered = filter === 'semua'
-    ? logs
-    : logs.filter(l => FILTER_TYPES[filter].includes(l.type));
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = logs.filter(l => {
+    const matchesTab = filter === 'semua' || FILTER_TYPES[filter].includes(l.type);
+    const matchesSearch = !q
+      || l.nama_nft.toLowerCase().includes(q)
+      || (TYPE_LABELS[l.type] ?? l.type).toLowerCase().includes(q);
+    return matchesTab && matchesSearch;
+  });
 
   if (!user) {
     return (
@@ -228,6 +234,18 @@ export default function TransactionsPage() {
             100 transaksi terbaru dari seluruh anggota. Semua transaksi bersifat publik
             sesuai prinsip transparansi TMEP.
           </p>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Cari nama NFT atau tipe transaksi..."
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
 
         {/* Filter tabs */}
