@@ -374,13 +374,14 @@ function PoolHeader({ meta, kapasitasMinimum, loading }: PoolHeaderProps) {
 interface NftPoolCardProps {
   unit: NFTUnit;
   currentUserId?: string;
+  isTopDeveloper?: boolean;
   onBuy: (unit: NFTUnit) => void;
 }
 
-function NftPoolCard({ unit, currentUserId, onBuy }: NftPoolCardProps) {
+function NftPoolCard({ unit, currentUserId, isTopDeveloper, onBuy }: NftPoolCardProps) {
   const [imgError, setImgError] = useState(false);
   const isOwn = !!currentUserId && currentUserId === unit.owner_id;
-  const canBuy = !!currentUserId && !isOwn && unit.for_sale;
+  const canBuy = !!currentUserId && !isOwn && unit.for_sale && !isTopDeveloper;
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
@@ -433,6 +434,7 @@ function NftPoolCard({ unit, currentUserId, onBuy }: NftPoolCardProps) {
           title={
             !currentUserId ? 'Login untuk membeli' :
             isOwn ? 'Ini NFT milikmu' :
+            isTopDeveloper ? 'Top Developer wajib membeli melalui antrian FIFO' :
             !unit.for_sale ? 'NFT tidak dijual' :
             'Beli NFT ini'
           }
@@ -440,6 +442,11 @@ function NftPoolCard({ unit, currentUserId, onBuy }: NftPoolCardProps) {
           <ShoppingCart className="h-3 w-3" />
           {isOwn ? 'Milikmu' : !unit.for_sale ? 'Tidak Dijual' : 'Beli'}
         </Button>
+        {isTopDeveloper && !isOwn && unit.for_sale && (
+          <p className="text-center text-[10px] text-muted-foreground leading-tight">
+            Top Developer wajib membeli melalui antrian FIFO
+          </p>
+        )}
       </div>
     </div>
   );
@@ -705,6 +712,7 @@ export default function PoolPage() {
                     key={unit.id}
                     unit={unit}
                     currentUserId={user?.id}
+                    isTopDeveloper={isTopDeveloper}
                     onBuy={setBuyTarget}
                   />
                 ))}
