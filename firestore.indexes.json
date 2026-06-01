@@ -146,11 +146,12 @@
       ]
     },
     {
-      "collectionGroup": "topDevelopers",
+      "collectionGroup": "nft_units",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "contributionScore", "order": "DESCENDING" },
-        { "fieldPath": "__name__",          "order": "DESCENDING" }
+        { "fieldPath": "for_sale",   "order": "ASCENDING"  },
+        { "fieldPath": "in_pool",    "order": "ASCENDING"  },
+        { "fieldPath": "like_count", "order": "DESCENDING" }
       ]
     }
   ],
