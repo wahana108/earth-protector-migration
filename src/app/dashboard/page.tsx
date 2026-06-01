@@ -133,10 +133,15 @@ interface BuybackDialogProps {
 }
 
 function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps) {
+  const { emailVerified } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleConfirm() {
+    if (!emailVerified) {
+      setError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -219,10 +224,15 @@ interface TransferPoolDialogProps {
 }
 
 function TransferPoolDialog({ unit, userId, onClose, onSuccess }: TransferPoolDialogProps) {
+  const { emailVerified } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleConfirm() {
+    if (!emailVerified) {
+      setError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {

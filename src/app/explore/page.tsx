@@ -95,6 +95,7 @@ interface BuyDialogProps {
 }
 
 function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
+  const { emailVerified } = useAuth();
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   const [linkBukti, setLinkBukti] = useState<string | null>(null);
@@ -109,6 +110,10 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
   }, [unit.project_id]);
 
   async function handleConfirm() {
+    if (!emailVerified) {
+      setError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
+      return;
+    }
     setBuying(true);
     setError('');
     try {

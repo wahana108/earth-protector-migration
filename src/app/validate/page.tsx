@@ -182,6 +182,7 @@ interface ValidationPanelProps {
 }
 
 function ValidationPanel({ project, userId, isRevalidasi, onValidated }: ValidationPanelProps) {
+  const { emailVerified } = useAuth();
   const [loadingNfts, setLoadingNfts] = useState(true);
   const [eligibleNfts, setEligibleNfts] = useState<NFTUnit[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -217,6 +218,10 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
 
   async function handleConfirm() {
     if (selectedIds.size === 0) return;
+    if (!emailVerified) {
+      setError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {

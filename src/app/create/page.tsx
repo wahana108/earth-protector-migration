@@ -70,7 +70,7 @@ function formatIDR(n: number) {
 }
 
 export default function CreatePage() {
-  const { user } = useAuth();
+  const { user, emailVerified } = useAuth();
   const [config, setConfig] = useState<CommunityConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -142,6 +142,10 @@ export default function CreatePage() {
 
   const onSubmit = async (data: FormData) => {
     if (!user || !config) return;
+    if (!emailVerified) {
+      setSubmitError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
+      return;
+    }
 
     // Config-dependent validation (values come from Firestore, not hardcoded)
     if (data.nilai_project < config.nilai_minimum_project) {
