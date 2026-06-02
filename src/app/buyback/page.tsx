@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   collection, getDocs, query, where, Timestamp,
 } from 'firebase/firestore';
-import { RefreshCcw, Loader2, ImageOff } from 'lucide-react';
+import { RefreshCcw, Loader2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { buybackNftUnit, BuybackError } from '@/lib/projects';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -143,7 +144,6 @@ function BuybackCard({
   ownerId: string;
   onSuccess: () => void;
 }) {
-  const [imgError, setImgError] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
 
   return (
@@ -151,18 +151,12 @@ function BuybackCard({
       <div className="rounded-lg border bg-card overflow-hidden flex flex-col">
         {/* Gambar */}
         <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
-          {unit.gambar_url && !imgError ? (
-            <img
-              src={unit.gambar_url}
-              alt={unit.nama_nft}
-              className="w-full h-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <ImageOff className="h-8 w-8" />
-            </div>
-          )}
+          <img
+            src={unit.gambar_url || getPlaceholder(unit.kategori)}
+            alt={unit.nama_nft}
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+          />
           <div className="absolute top-1.5 left-1.5">
             <Badge
               variant={unit.status === 'valid' ? 'default' : 'secondary'}
