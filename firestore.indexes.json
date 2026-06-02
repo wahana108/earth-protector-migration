@@ -169,6 +169,30 @@
         { "fieldPath": "seller_id",  "order": "ASCENDING"  },
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "buyback_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "requester_id", "order": "ASCENDING" },
+        { "fieldPath": "status",       "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nft_units",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "owner_id",        "order": "ASCENDING" },
+        { "fieldPath": "purchase_status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nft_units",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "developer_id",    "order": "ASCENDING" },
+        { "fieldPath": "purchase_status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

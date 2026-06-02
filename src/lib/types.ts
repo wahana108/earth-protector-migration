@@ -26,6 +26,7 @@ export type User = {
   isTopDeveloper?: boolean;
   validator_aktif?: ValidatorAktif[];
   pending_seller_actions?: number;
+  total_poin_pending?: number;
 };
 
 export type NFT = {
@@ -76,11 +77,13 @@ export type BuybackRequest = {
   nft_nama: string;
   harga_buyback: number;
   nilai_selisih: number;
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled' | 'auto_completed' | 'disputed';
   proof_link: string | null;
   ai_confidence: number | null;
   requester_note: string | null;
   rejection_reason: string | null;
+  confirmed_at?: Date | null;
+  auto_complete_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -116,6 +119,7 @@ export type CommunityConfig = {
   kapasitas_pool_minimum: number;
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
+  purchase_autoclose_days: number;
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
@@ -214,7 +218,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'jual' | 'validasi' | 'buyback' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;
@@ -267,6 +271,9 @@ export type NFTUnit = {
   comment_count: number;
   created_at: Date;
   purchased_at?: Date;
+  purchase_status?: 'pending' | 'completed' | 'disputed' | 'auto_completed';
+  purchase_confirmed_at?: Date | null;
+  purchase_auto_complete_at?: Date | null;
   buyback_pending?: boolean;
   transferred_at?: Date;
   fifo_skip_count?: number;

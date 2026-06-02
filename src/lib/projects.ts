@@ -201,7 +201,7 @@ export async function buyNftUnit(
   buyerId: string,
   harga_dasar: number,
   batas_atas: number,
-  options?: { transaction_description?: string; proof_link?: string },
+  options?: { transaction_description?: string; proof_link?: string; purchase_autoclose_days?: number },
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
@@ -248,8 +248,7 @@ export async function buyNftUnit(
     if (!sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
     if (!buyerSnap.exists()) throw new BuyError('Data pembeli tidak ditemukan.');
 
-    const sellerPoin: number = sellerSnap.data().total_poin ?? 0;
-    const buyerPoin: number = buyerSnap.data().total_poin ?? 0;
+    const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
     const buyerBuybackCount: number = buyerSnap.data().buybackCount ?? 0;
     const sellerSoldNfts: number = sellerSnap.data().soldNfts ?? 0;
     const link_bukti = projectSnap.exists()
@@ -258,24 +257,31 @@ export async function buyNftUnit(
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
 
-    // 4. Update nft_unit — pindah kepemilikan; keluarkan dari pool jika beli_pool
+    // 4. Update nft_unit — pindah kepemilikan, tandai purchase pending
+    const autoCloseDays = options?.purchase_autoclose_days ?? 7;
     tx.update(nftRef, {
       owner_id: buyerId,
       for_sale: false,
       harga_beli_terakhir: harga_jual,
       purchased_at: serverTimestamp(),
+      purchase_status: 'pending',
+      purchase_auto_complete_at: Timestamp.fromMillis(Date.now() + autoCloseDays * 86400000),
       ...(isPoolPurchase ? { in_pool: false } : {}),
     });
 
-    // 5. Neraca penjual: -= nilai_selisih (PENJUAL selalu minus atau nol)
+    // 5. Seller: soldNfts +1, pending_seller_actions +1 (poin TIDAK berubah — deferred)
+    const isSameDoc = sellerId === developerIdCapture;
     tx.update(sellerRef, {
-      total_poin: sellerPoin - nilai_selisih,
       soldNfts: sellerSoldNfts + 1,
+      ...(isSameDoc ? { pending_seller_actions: increment(1) } : {}),
     });
+    if (!isSameDoc) {
+      tx.update(doc(db, 'users', developerIdCapture), { pending_seller_actions: increment(1) });
+    }
 
-    // 6. Neraca pembeli: += nilai_selisih; beli_pool juga tambah buybackCount
+    // 6. Buyer: poin masuk pending, bukan total_poin; beli_pool tetap tambah buybackCount
     tx.update(buyerRef, {
-      total_poin: buyerPoin + nilai_selisih,
+      total_poin_pending: buyerPoinPending + nilai_selisih,
       ...(isPoolPurchase ? { buybackCount: buyerBuybackCount + 1 } : {}),
     });
 
@@ -284,23 +290,11 @@ export async function buyNftUnit(
       tx.update(poolRef, { jumlah_nft_valid: increment(-1) });
     }
 
-    // 8. Log neraca penjual (immutable)
-    tx.set(doc(collection(db, 'users', sellerId, 'neraca_log')), {
-      type: 'jual',
-      nft_unit_id: nftUnitId,
-      nama_nft,
-      harga_transaksi: harga_jual,
-      nilai_selisih,
-      delta: -nilai_selisih,
-      counterparty_id: buyerId,
-      project_id,
-      link_bukti,
-      timestamp: serverTimestamp(),
-    });
+    // 8. Log neraca penjual TIDAK dibuat di sini — deferred ke confirmPurchase/autoCompletePurchase
 
-    // 9. Log neraca pembeli — tipe berbeda untuk pembelian dari pool
+    // 9. Log neraca pembeli: beli_pending
     tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
-      type: isPoolPurchase ? 'beli_pool' : 'beli',
+      type: 'beli_pending',
       nft_unit_id: nftUnitId,
       nama_nft,
       harga_transaksi: harga_jual,
@@ -351,6 +345,7 @@ export class BuybackError extends Error {
 export async function buybackNftUnit(
   nftUnitId: string,
   ownerId: string,
+  { isAuto = false }: { isAuto?: boolean } = {},
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
   let developerIdCapture = '';
@@ -412,7 +407,7 @@ export async function buybackNftUnit(
 
     // 4. Log neraca developer (immutable)
     tx.set(doc(collection(db, 'users', developerId, 'neraca_log')), {
-      type: 'buyback',
+      type: isAuto ? 'buyback_auto' : 'buyback',
       nft_unit_id: nftUnitId,
       nama_nft,
       harga_transaksi: harga_beli_terakhir,
@@ -426,7 +421,7 @@ export async function buybackNftUnit(
 
     // 5. Log neraca pemilik (immutable)
     tx.set(doc(collection(db, 'users', ownerId, 'neraca_log')), {
-      type: 'buyback',
+      type: isAuto ? 'buyback_auto' : 'buyback',
       nft_unit_id: nftUnitId,
       nama_nft,
       harga_transaksi: harga_beli_terakhir,
@@ -1026,6 +1021,9 @@ export async function confirmBuybackRequest(
   sellerId: string,
   proofLink: string,
 ): Promise<void> {
+  const config = await getCommunityConfig();
+  const autoCloseDays = config?.purchase_autoclose_days ?? 7;
+
   const requestRef = doc(db, 'buyback_requests', requestId);
   const requestSnap = await getDoc(requestRef);
   if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
@@ -1034,8 +1032,16 @@ export async function confirmBuybackRequest(
   if (request.seller_id !== sellerId) throw new BuybackRequestError('Kamu bukan penjual NFT ini.');
   if (request.status !== 'pending') throw new BuybackRequestError('Permintaan ini sudah tidak bisa dikonfirmasi.');
 
+  const autoCompleteAt = Timestamp.fromMillis(Date.now() + autoCloseDays * 86400000);
+
   const batch = writeBatch(db);
-  batch.update(requestRef, { status: 'confirmed', proof_link: proofLink, updated_at: serverTimestamp() });
+  batch.update(requestRef, {
+    status: 'confirmed',
+    proof_link: proofLink,
+    confirmed_at: serverTimestamp(),
+    auto_complete_at: autoCompleteAt,
+    updated_at: serverTimestamp(),
+  });
   batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(-1) });
   await batch.commit();
 }
@@ -1066,6 +1072,7 @@ export async function rejectBuybackRequest(
 export async function completeBuybackRequest(
   requestId: string,
   requesterId: string,
+  { auto = false }: { auto?: boolean } = {},
 ): Promise<void> {
   const requestRef = doc(db, 'buyback_requests', requestId);
   const requestSnap = await getDoc(requestRef);
@@ -1075,8 +1082,42 @@ export async function completeBuybackRequest(
   if (request.requester_id !== requesterId) throw new BuybackRequestError('Kamu bukan pembuat permintaan ini.');
   if (request.status !== 'confirmed') throw new BuybackRequestError('Permintaan belum dikonfirmasi seller.');
 
-  await buybackNftUnit(request.nft_unit_id as string, requesterId);
-  await updateDoc(requestRef, { status: 'completed', updated_at: serverTimestamp() });
+  await buybackNftUnit(request.nft_unit_id as string, requesterId, { isAuto: auto });
+  await updateDoc(requestRef, {
+    status: auto ? 'auto_completed' : 'completed',
+    updated_at: serverTimestamp(),
+  });
+}
+
+// Pembeli mengajukan keberatan setelah seller konfirmasi buyback.
+export async function disputeBuybackRequest(
+  requestId: string,
+  requesterId: string,
+  reason: string,
+): Promise<void> {
+  const requestRef = doc(db, 'buyback_requests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
+
+  const request = requestSnap.data();
+  if (request.requester_id !== requesterId) throw new BuybackRequestError('Kamu bukan pembuat permintaan ini.');
+  if (request.status !== 'confirmed') throw new BuybackRequestError('Hanya bisa mengajukan keberatan untuk permintaan yang sudah dikonfirmasi.');
+
+  const nftUnitId = request.nft_unit_id as string;
+  const sellerId = request.seller_id as string;
+  const batch = writeBatch(db);
+  batch.update(requestRef, { status: 'disputed', updated_at: serverTimestamp() });
+  batch.update(doc(db, 'nft_units', nftUnitId), { buyback_pending: false });
+  batch.set(doc(collection(db, 'purchase_disputes')), {
+    nft_unit_id: nftUnitId,
+    seller_id: sellerId,
+    buyer_id: requesterId,
+    type: 'buyback',
+    reason,
+    status: 'pending_admin',
+    created_at: serverTimestamp(),
+  });
+  await batch.commit();
 }
 
 // Pembeli membatalkan permintaan (bisa dari status pending atau confirmed).
@@ -1102,6 +1143,162 @@ export async function cancelBuybackRequest(
     batch.update(doc(db, 'users', request.seller_id as string), { pending_seller_actions: increment(-1) });
   }
   await batch.commit();
+}
+
+// ─── Konfirmasi Pembelian (Purchase Confirmation System) ─────────────────────
+
+export class PurchaseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PurchaseError';
+  }
+}
+
+// Developer mengkonfirmasi bahwa penjualan sah — poin ditransfer dari pending ke aktif.
+export async function confirmPurchase(nftUnitId: string, developerId: string): Promise<void> {
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+
+  await runTransaction(db, async (tx) => {
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) throw new PurchaseError('NFT tidak ditemukan.');
+
+    const nft = nftSnap.data();
+    if (nft.developer_id !== developerId) throw new PurchaseError('Kamu bukan developer NFT ini.');
+    if (nft.purchase_status !== 'pending') throw new PurchaseError('Transaksi ini sudah tidak bisa dikonfirmasi.');
+
+    const buyerId = nft.owner_id as string;
+    const nilai_selisih = nft.nilai_selisih as number;
+    const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
+    const harga_beli_terakhir = nft.harga_beli_terakhir as number;
+
+    const developerRef = doc(db, 'users', developerId);
+    const buyerRef = doc(db, 'users', buyerId);
+    const projectRef = doc(db, 'projects', project_id);
+
+    const [developerSnap, buyerSnap, projectSnap] = await Promise.all([
+      tx.get(developerRef), tx.get(buyerRef), tx.get(projectRef),
+    ]);
+    if (!developerSnap.exists()) throw new PurchaseError('Data developer tidak ditemukan.');
+    if (!buyerSnap.exists()) throw new PurchaseError('Data pembeli tidak ditemukan.');
+
+    const developerPoin: number = (developerSnap.data().total_poin as number) ?? 0;
+    const developerPending: number = (developerSnap.data().pending_seller_actions as number) ?? 0;
+    const buyerPoin: number = (buyerSnap.data().total_poin as number) ?? 0;
+    const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
+    const link_bukti = projectSnap.exists() ? (projectSnap.data().link_bukti as string) ?? '' : '';
+
+    tx.update(nftRef, { purchase_status: 'completed', purchase_confirmed_at: serverTimestamp() });
+
+    tx.update(developerRef, {
+      total_poin: developerPoin - nilai_selisih,
+      pending_seller_actions: Math.max(0, developerPending - 1),
+    });
+
+    tx.update(buyerRef, {
+      total_poin: buyerPoin + nilai_selisih,
+      total_poin_pending: Math.max(0, buyerPoinPending - nilai_selisih),
+    });
+
+    tx.set(doc(collection(db, 'users', developerId, 'neraca_log')), {
+      type: 'jual', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: -nilai_selisih, counterparty_id: buyerId, project_id, link_bukti,
+      timestamp: serverTimestamp(),
+    });
+
+    tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+      type: 'beli', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: nilai_selisih, counterparty_id: developerId, project_id, link_bukti,
+      timestamp: serverTimestamp(),
+    });
+  });
+}
+
+// Developer melaporkan pembelian sebagai fiktif — buat dispute, serahkan ke admin.
+export async function reportPurchase(
+  nftUnitId: string,
+  developerId: string,
+  reason: string,
+): Promise<void> {
+  const nftSnap = await getDoc(doc(db, 'nft_units', nftUnitId));
+  if (!nftSnap.exists()) throw new PurchaseError('NFT tidak ditemukan.');
+
+  const nft = nftSnap.data();
+  if (nft.developer_id !== developerId) throw new PurchaseError('Kamu bukan developer NFT ini.');
+  if (nft.purchase_status !== 'pending') throw new PurchaseError('Transaksi ini sudah tidak bisa dilaporkan.');
+
+  const buyerId = nft.owner_id as string;
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'nft_units', nftUnitId), { purchase_status: 'disputed' });
+  batch.update(doc(db, 'users', developerId), { pending_seller_actions: increment(-1) });
+  batch.set(doc(collection(db, 'purchase_disputes')), {
+    nft_unit_id: nftUnitId, seller_id: developerId, buyer_id: buyerId,
+    type: 'purchase', reason, status: 'pending_admin', created_at: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+// Dipanggil otomatis (lazy eval) ketika purchase_auto_complete_at sudah terlewati.
+export async function autoCompletePurchase(nftUnitId: string): Promise<void> {
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+
+  await runTransaction(db, async (tx) => {
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) return;
+
+    const nft = nftSnap.data();
+    if (nft.purchase_status !== 'pending') return; // sudah diproses
+
+    const buyerId = nft.owner_id as string;
+    const developerId = nft.developer_id as string;
+    const nilai_selisih = nft.nilai_selisih as number;
+    const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
+    const harga_beli_terakhir = nft.harga_beli_terakhir as number;
+
+    const developerRef = doc(db, 'users', developerId);
+    const buyerRef = doc(db, 'users', buyerId);
+    const projectRef = doc(db, 'projects', project_id);
+
+    const [developerSnap, buyerSnap, projectSnap] = await Promise.all([
+      tx.get(developerRef), tx.get(buyerRef), tx.get(projectRef),
+    ]);
+    if (!developerSnap.exists() || !buyerSnap.exists()) return;
+
+    const developerPoin: number = (developerSnap.data().total_poin as number) ?? 0;
+    const developerPending: number = (developerSnap.data().pending_seller_actions as number) ?? 0;
+    const buyerPoin: number = (buyerSnap.data().total_poin as number) ?? 0;
+    const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
+    const link_bukti = projectSnap.exists() ? (projectSnap.data().link_bukti as string) ?? '' : '';
+
+    tx.update(nftRef, { purchase_status: 'auto_completed', purchase_confirmed_at: serverTimestamp() });
+
+    tx.update(developerRef, {
+      total_poin: developerPoin - nilai_selisih,
+      pending_seller_actions: Math.max(0, developerPending - 1),
+    });
+
+    tx.update(buyerRef, {
+      total_poin: buyerPoin + nilai_selisih,
+      total_poin_pending: Math.max(0, buyerPoinPending - nilai_selisih),
+    });
+
+    tx.set(doc(collection(db, 'users', developerId, 'neraca_log')), {
+      type: 'jual', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: -nilai_selisih, counterparty_id: buyerId, project_id, link_bukti,
+      timestamp: serverTimestamp(),
+    });
+
+    tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+      type: 'beli_auto', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: nilai_selisih, counterparty_id: developerId, project_id, link_bukti,
+      timestamp: serverTimestamp(),
+    });
+  });
 }
 
 // ─── Admin: Recalculate all developer levels ──────────────────────────────────

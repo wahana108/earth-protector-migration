@@ -25,6 +25,7 @@ import {
   createBuybackRequest,
   cancelBuybackRequest,
   completeBuybackRequest,
+  disputeBuybackRequest,
   BuybackRequestError,
 } from '@/lib/projects';
 import { cn } from '@/lib/utils';
@@ -42,12 +43,13 @@ function formatIDR(n: number) {
 type BuybackReqData = {
   id: string;
   nft_unit_id: string;
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled' | 'auto_completed' | 'disputed';
   proof_link: string | null;
   rejection_reason: string | null;
   requester_note: string | null;
   harga_buyback: number;
   nilai_selisih: number;
+  auto_complete_at: Date | null;
   created_at: Date;
 };
 
@@ -91,8 +93,16 @@ function toBuybackReq(id: string, data: Record<string, unknown>): BuybackReqData
     requester_note: (data.requester_note as string | null) ?? null,
     harga_buyback: (data.harga_buyback as number) ?? 0,
     nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    auto_complete_at: (data.auto_complete_at as Timestamp)?.toDate?.() ?? null,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
+}
+
+function daysUntil(date: Date | null): number | null {
+  if (!date) return null;
+  const ms = date.getTime() - Date.now();
+  if (ms <= 0) return 0;
+  return Math.ceil(ms / 86400000);
 }
 
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
@@ -222,6 +232,62 @@ function CancelDialog({
   );
 }
 
+function DisputeDialog({
+  requestId, requesterId, onClose, onSuccess,
+}: {
+  requestId: string;
+  requesterId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleDispute() {
+    if (!reason.trim()) { setError('Alasan keberatan wajib diisi.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await disputeBuybackRequest(requestId, requesterId, reason.trim());
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err instanceof BuybackRequestError ? err.message : 'Gagal mengajukan keberatan. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Ajukan Keberatan</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-1">
+          <p className="text-sm text-muted-foreground">
+            Jelaskan alasan keberatanmu. Kasus ini akan diserahkan ke admin untuk ditinjau.
+          </p>
+          <Textarea
+            placeholder="Alasan keberatan…"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="text-sm resize-none"
+          />
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant="destructive" onClick={handleDispute} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Ajukan Keberatan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CompleteDialog({
   unit, request, ownerId, onClose, onSuccess,
 }: {
@@ -303,7 +369,7 @@ function CompleteDialog({
 
 // ─── NFT Card ─────────────────────────────────────────────────────────────────
 
-type DialogType = 'request' | 'cancel' | 'complete' | null;
+type DialogType = 'request' | 'cancel' | 'complete' | 'dispute' | null;
 
 function BuybackCard({
   item, ownerId, onSuccess,
@@ -348,10 +414,15 @@ function BuybackCard({
     }
     if (request?.status === 'confirmed') {
       return (
-        <Button size="sm" variant="default" className="flex-1 text-xs" onClick={() => setDialog('complete')}>
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-          Selesaikan Buyback
-        </Button>
+        <div className="flex gap-1.5 w-full">
+          <Button size="sm" variant="outline" className="flex-1 text-xs border-red-200 text-red-700 hover:bg-red-50" onClick={() => setDialog('dispute')}>
+            Keberatan
+          </Button>
+          <Button size="sm" variant="default" className="flex-1 text-xs" onClick={() => setDialog('complete')}>
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+            Selesaikan
+          </Button>
+        </div>
       );
     }
     return (
@@ -395,6 +466,17 @@ function BuybackCard({
               <span><span className="font-medium">Alasan penolakan:</span> {request.rejection_reason}</span>
             </div>
           )}
+
+          {/* Countdown auto-complete */}
+          {request?.status === 'confirmed' && (() => {
+            const days = daysUntil(request.auto_complete_at);
+            return days !== null ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {days === 0 ? 'Segera auto-complete' : `Auto-complete dalam ${days} hari`}
+              </p>
+            ) : null;
+          })()}
 
           {/* Confirmed: show proof link */}
           {request?.status === 'confirmed' && request.proof_link && (
@@ -440,6 +522,9 @@ function BuybackCard({
       {dialog === 'complete' && request && (
         <CompleteDialog unit={nft} request={request} ownerId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
+      {dialog === 'dispute' && request && (
+        <DisputeDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+      )}
     </>
   );
 }
@@ -464,11 +549,31 @@ export default function BuybackPage() {
         )),
       ]);
 
+      const allReqs = reqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>));
+
+      // Lazy eval: auto-complete buyback request yang sudah melewati batas waktu
+      const nowMs = Date.now();
+      const expiredReqs = allReqs.filter(r =>
+        r.status === 'confirmed' &&
+        r.auto_complete_at &&
+        nowMs > r.auto_complete_at.getTime(),
+      );
+      if (expiredReqs.length > 0) {
+        await Promise.all(
+          expiredReqs.map(r => completeBuybackRequest(r.id, user.id, { auto: true }).catch(() => {})),
+        );
+        // Reload requests setelah auto-complete
+        const freshReqsSnap = await getDocs(query(
+          collection(db, 'buyback_requests'),
+          where('requester_id', '==', user.id),
+          orderBy('created_at', 'desc'),
+        ));
+        allReqs.splice(0, allReqs.length, ...freshReqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>)));
+      }
+
       const buybackableNfts = nftsSnap.docs
         .map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>))
         .filter(u => u.developer_id !== user.id && !u.digunakan_validasi && !u.in_pool);
-
-      const allReqs = reqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>));
 
       // Build map: nft_unit_id -> most recent relevant request (pending, confirmed, rejected)
       const reqMap = new Map<string, BuybackReqData>();

@@ -37,6 +37,7 @@ type EditValues = {
   kapasitas_pool_minimum: number;
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
+  purchase_autoclose_days: number;
   fase_aktif: number;
   ai_provider: string;
   anomali_flag: number;
@@ -58,6 +59,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
     minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
     minimum_holding_days: c.minimum_holding_days ?? 7,
+    purchase_autoclose_days: c.purchase_autoclose_days ?? 7,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
@@ -79,6 +81,7 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
     minimum_nft_pool_untuk_validasi: e.minimum_nft_pool_untuk_validasi,
     minimum_holding_days: e.minimum_holding_days,
+    purchase_autoclose_days: e.purchase_autoclose_days,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
@@ -419,6 +422,20 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <EditRow label="Min. NFT di Pool" value={editValues.minimum_nft_pool_untuk_validasi}
                     onChange={v => setField('minimum_nft_pool_untuk_validasi', v as number)} />
+                  <EditRow label="Min. Holding (hari)" value={editValues.minimum_holding_days}
+                    onChange={v => setField('minimum_holding_days', v as number)} />
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Durasi Auto-Complete Transaksi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Auto-close (hari)" value={editValues.purchase_autoclose_days}
+                    onChange={v => setField('purchase_autoclose_days', v as number)} />
                 </CardContent>
               </Card>
 
@@ -519,6 +536,24 @@ export default function ParametersPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Validasi bergulir hanya bisa dimulai jika pool rekomendasi
                       sudah terisi minimal sejumlah NFT ini.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Durasi Auto-Complete Transaksi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Auto-close Pembelian & Buyback"
+                    value={`${config.purchase_autoclose_days ?? 7} hari`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Jika seller tidak mengkonfirmasi atau pembeli tidak menyelesaikan buyback
+                      dalam batas waktu ini, sistem akan menyelesaikan transaksi secara otomatis.
                     </p>
                   </div>
                 </CardContent>

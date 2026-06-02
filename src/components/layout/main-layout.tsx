@@ -43,12 +43,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 min-w-0">
           <AppHeader />
 
-          {/* Banner permintaan buyback seller */}
+          {/* Banner tindakan seller tertunda (penjualan + buyback) */}
           {showSellerBanner && (
             <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-3 text-sm text-orange-800">
               <ShoppingBag className="h-4 w-4 shrink-0" />
               <span className="flex-1">
-                Ada {pendingSellerActions} permintaan buyback NFT Anda menunggu konfirmasi.
+                Ada {pendingSellerActions} tindakan yang menunggu konfirmasimu (penjualan + buyback).
               </span>
               <Button
                 size="sm"
@@ -56,7 +56,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 asChild
                 className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs shrink-0"
               >
-                <Link href="/buyback-requests">Tinjau Sekarang →</Link>
+                <Link href="/purchase-confirmations">Tinjau →</Link>
               </Button>
               <button
                 onClick={() => setSellerBannerDismissed(true)}

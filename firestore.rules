@@ -26,7 +26,7 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level', 'pending_seller_actions'])) ||
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions'])) ||
         // Validasi flow: pemilik akun mencatat partisipasi validasi
         (isMe(userId) &&
           request.resource.data.diff(resource.data)
@@ -103,6 +103,18 @@ service cloud.firestore {
         resource.data.buyerId  == request.auth.uid ||
         isAdmin()
       );
+      allow delete: if isAdmin();
+    }
+
+    // ─── purchase_disputes/{disputeId} — laporan transaksi mencurigakan ────────
+    match /purchase_disputes/{disputeId} {
+      allow read: if isAuth() && (
+        resource.data.seller_id == request.auth.uid ||
+        resource.data.buyer_id  == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuth();
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -191,7 +203,11 @@ service cloud.firestore {
         // Buy flow: siapapun yang auth boleh ambil NFT for_sale (in_pool opsional untuk beli_pool)
         (isAuth() && resource.data.for_sale == true &&
           request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at'])) ||
+            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at', 'purchase_status', 'purchase_auto_complete_at'])) ||
+        // Purchase confirmation flow: developer konfirmasi atau auto-complete
+        (isAuth() &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['purchase_status', 'purchase_confirmed_at'])) ||
         // Comment flow: siapapun yang auth boleh update comment_count saja
         (isAuth() && request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly(['comment_count'])) ||

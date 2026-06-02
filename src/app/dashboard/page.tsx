@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase } from '@/lib/projects';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -75,6 +75,8 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     like_count: (data.like_count as number) ?? 0,
     comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+    purchase_status: (data.purchase_status as NFTUnit['purchase_status']) ?? undefined,
+    purchase_auto_complete_at: (data.purchase_auto_complete_at as Timestamp)?.toDate?.() ?? undefined,
   };
 }
 
@@ -118,7 +120,8 @@ function toProject(id: string, data: Record<string, unknown>): Project {
 }
 
 const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
-  beli: 'Beli', beli_pool: 'Beli Pool', jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback',
+  beli: 'Beli', beli_pool: 'Beli Pool', beli_pending: 'Beli (Pending)', beli_auto: 'Beli (Auto)',
+  jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback', buyback_auto: 'Buyback (Auto)',
   level_change: 'Level', transfer_pool: 'Pool', lewati_fifo: 'Lewati',
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
@@ -362,12 +365,13 @@ function EditProjectGambarDialog({ project, onClose, onSaved }: EditProjectGamba
 
 interface RingkasanProps {
   totalPoin: number;
+  totalPoinPending: number;
   nftDimiliki: number;
   soldNfts: number;
   buybackCount: number;
 }
 
-function RingkasanNeraca({ totalPoin, nftDimiliki, soldNfts, buybackCount }: RingkasanProps) {
+function RingkasanNeraca({ totalPoin, totalPoinPending, nftDimiliki, soldNfts, buybackCount }: RingkasanProps) {
   const buybackPct = soldNfts > 0 ? Math.round((buybackCount / soldNfts) * 100) : 0;
   const isPositif = totalPoin >= 0;
 
@@ -375,7 +379,7 @@ function RingkasanNeraca({ totalPoin, nftDimiliki, soldNfts, buybackCount }: Rin
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <Card>
         <CardHeader className="pb-1">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Total Poin Neraca</CardTitle>
+          <CardTitle className="text-xs font-medium text-muted-foreground">Poin Aktif</CardTitle>
         </CardHeader>
         <CardContent>
           <p className={cn('text-2xl font-bold', isPositif ? 'text-green-600' : 'text-destructive')}>
@@ -384,6 +388,12 @@ function RingkasanNeraca({ totalPoin, nftDimiliki, soldNfts, buybackCount }: Rin
           <p className="text-xs text-muted-foreground mt-0.5">
             {isPositif ? 'akumulasi dari pembelian' : 'akumulasi dari penjualan'}
           </p>
+          {totalPoinPending > 0 && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" />
+              +{formatIDR(totalPoinPending)} pending
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -682,6 +692,7 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [totalPoin, setTotalPoin] = useState(0);
+  const [totalPoinPending, setTotalPoinPending] = useState(0);
   const [soldNfts, setSoldNfts] = useState(0);
   const [buybackCount, setBuybackCount] = useState(0);
   const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
@@ -715,14 +726,37 @@ export default function DashboardPage() {
       if (userSnap.exists()) {
         const d = userSnap.data();
         setTotalPoin((d.total_poin as number) ?? 0);
+        setTotalPoinPending((d.total_poin_pending as number) ?? 0);
         setSoldNfts((d.soldNfts as number) ?? 0);
         setBuybackCount((d.buybackCount as number) ?? 0);
         setIsTopDeveloper((d.level as string) === 'top_developer');
       }
 
-      setOwnedUnits(
-        unitsSnap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>)),
+      const allUnits = unitsSnap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>));
+
+      // Lazy eval: auto-complete pembelian yang sudah melewati batas waktu
+      const nowMs = Date.now();
+      const expiredPurchases = allUnits.filter(u =>
+        u.purchase_status === 'pending' &&
+        u.purchase_auto_complete_at &&
+        nowMs > u.purchase_auto_complete_at.getTime(),
       );
+      if (expiredPurchases.length > 0) {
+        await Promise.all(expiredPurchases.map(u => autoCompletePurchase(u.id).catch(() => {})));
+        // Reload setelah auto-complete
+        const [freshUserSnap, freshUnitsSnap] = await Promise.all([
+          getDoc(doc(db, 'users', user.id)),
+          getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
+        ]);
+        if (freshUserSnap.exists()) {
+          const d = freshUserSnap.data();
+          setTotalPoin((d.total_poin as number) ?? 0);
+          setTotalPoinPending((d.total_poin_pending as number) ?? 0);
+        }
+        setOwnedUnits(freshUnitsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>)));
+      } else {
+        setOwnedUnits(allUnits);
+      }
       setLogs(
         logsSnap.docs.map((d) => toNeracaLog(d.id, d.data() as Record<string, unknown>)),
       );
@@ -814,6 +848,7 @@ export default function DashboardPage() {
               <h2 className="font-semibold text-lg">Ringkasan Neraca</h2>
               <RingkasanNeraca
                 totalPoin={totalPoin}
+                totalPoinPending={totalPoinPending}
                 nftDimiliki={ownedUnits.length}
                 soldNfts={soldNfts}
                 buybackCount={buybackCount}
