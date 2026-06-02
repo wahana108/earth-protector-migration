@@ -153,6 +153,22 @@
         { "fieldPath": "in_pool",    "order": "ASCENDING"  },
         { "fieldPath": "like_count", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "buyback_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "requester_id", "order": "ASCENDING"  },
+        { "fieldPath": "created_at",   "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "buyback_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seller_id",  "order": "ASCENDING"  },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
