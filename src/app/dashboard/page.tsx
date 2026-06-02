@@ -120,7 +120,7 @@ function toProject(id: string, data: Record<string, unknown>): Project {
 }
 
 const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
-  beli: 'Beli', beli_pool: 'Beli Pool', beli_pending: 'Beli (Pending)', beli_auto: 'Beli (Auto)',
+  beli: 'Beli', beli_pool: 'Beli Pool', beli_pending: 'Beli (Pending)', beli_auto: 'Beli (Auto)', beli_dibatalkan: 'Beli Dibatalkan',
   jual: 'Jual', validasi: 'Validasi', buyback: 'Buyback', buyback_auto: 'Buyback (Auto)',
   level_change: 'Level', transfer_pool: 'Pool', lewati_fifo: 'Lewati',
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',

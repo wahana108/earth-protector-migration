@@ -1301,6 +1301,100 @@ export async function autoCompletePurchase(nftUnitId: string): Promise<void> {
   });
 }
 
+// Resolusi dispute oleh admin: 'approve' = sah (poin ditransfer), 'reject' = batal (NFT kembali).
+export async function resolvePurchaseDispute(
+  disputeId: string,
+  decision: 'approve' | 'reject',
+): Promise<void> {
+  const disputeRef = doc(db, 'purchase_disputes', disputeId);
+  const disputeSnap = await getDoc(disputeRef);
+  if (!disputeSnap.exists()) throw new PurchaseError('Dispute tidak ditemukan.');
+
+  const dispute = disputeSnap.data();
+  if (dispute.status !== 'pending_admin') throw new PurchaseError('Dispute ini sudah diproses.');
+
+  const nftUnitId = dispute.nft_unit_id as string;
+  const sellerId = dispute.seller_id as string;
+  const buyerId = dispute.buyer_id as string;
+
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+
+  await runTransaction(db, async (tx) => {
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) throw new PurchaseError('NFT tidak ditemukan.');
+
+    const nft = nftSnap.data();
+    const nilai_selisih = nft.nilai_selisih as number;
+    const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
+    const harga_beli_terakhir = nft.harga_beli_terakhir as number;
+
+    const sellerRef = doc(db, 'users', sellerId);
+    const buyerRef = doc(db, 'users', buyerId);
+    const projectRef = doc(db, 'projects', project_id);
+
+    const [sellerSnap, buyerSnap, projectSnap] = await Promise.all([
+      tx.get(sellerRef), tx.get(buyerRef), tx.get(projectRef),
+    ]);
+
+    const sellerPoin: number = (sellerSnap.data()?.total_poin as number) ?? 0;
+    const sellerPending: number = (sellerSnap.data()?.pending_seller_actions as number) ?? 0;
+    const buyerPoin: number = (buyerSnap.data()?.total_poin as number) ?? 0;
+    const buyerPoinPending: number = (buyerSnap.data()?.total_poin_pending as number) ?? 0;
+    const link_bukti = projectSnap.exists() ? (projectSnap.data().link_bukti as string) ?? '' : '';
+
+    if (decision === 'approve') {
+      // Transaksi sah: pindahkan poin dari pending ke aktif
+      tx.update(nftRef, { purchase_status: 'completed', purchase_confirmed_at: serverTimestamp() });
+
+      tx.update(sellerRef, {
+        total_poin: sellerPoin - nilai_selisih,
+        pending_seller_actions: Math.max(0, sellerPending - 1),
+      });
+      tx.update(buyerRef, {
+        total_poin: buyerPoin + nilai_selisih,
+        total_poin_pending: Math.max(0, buyerPoinPending - nilai_selisih),
+      });
+
+      tx.set(doc(collection(db, 'users', sellerId, 'neraca_log')), {
+        type: 'jual', nft_unit_id: nftUnitId, nama_nft,
+        harga_transaksi: harga_beli_terakhir, nilai_selisih,
+        delta: -nilai_selisih, counterparty_id: buyerId, project_id, link_bukti,
+        timestamp: serverTimestamp(),
+      });
+      tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+        type: 'beli', nft_unit_id: nftUnitId, nama_nft,
+        harga_transaksi: harga_beli_terakhir, nilai_selisih,
+        delta: nilai_selisih, counterparty_id: sellerId, project_id, link_bukti,
+        timestamp: serverTimestamp(),
+      });
+
+      tx.update(disputeRef, { status: 'resolved_approved', resolved_at: serverTimestamp() });
+    } else {
+      // Transaksi batal: NFT kembali ke seller, hapus poin pending buyer
+      tx.update(nftRef, {
+        purchase_status: 'cancelled',
+        owner_id: sellerId,
+        for_sale: false,
+      });
+
+      tx.update(sellerRef, { pending_seller_actions: Math.max(0, sellerPending - 1) });
+      tx.update(buyerRef, {
+        total_poin_pending: Math.max(0, buyerPoinPending - nilai_selisih),
+      });
+
+      tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+        type: 'beli_dibatalkan', nft_unit_id: nftUnitId, nama_nft,
+        harga_transaksi: harga_beli_terakhir, nilai_selisih,
+        delta: 0, counterparty_id: sellerId, project_id,
+        timestamp: serverTimestamp(),
+      });
+
+      tx.update(disputeRef, { status: 'resolved_rejected', resolved_at: serverTimestamp() });
+    }
+  });
+}
+
 // ─── Admin: Recalculate all developer levels ──────────────────────────────────
 
 export type RecalcStats = {
