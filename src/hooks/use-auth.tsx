@@ -11,6 +11,7 @@ import { User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { User } from "@/lib/types";
+import { getCommunityConfig } from "@/lib/community-config";
 import {
   signInWithEmail,
   signUpWithEmail,
@@ -26,6 +27,9 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   emailVerified: boolean;
+  isSuperAdmin: boolean;
+  isAdmin: boolean;
+  isModerator: boolean;
   signIn: (credentials: AuthCredentials) => Promise<FirebaseUser>;
   signUp: (credentials: AuthCredentials) => Promise<FirebaseUser>;
   signInWithGoogle: () => Promise<FirebaseUser>;
@@ -85,10 +89,15 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
   };
 }
 
+const SUPER_ADMIN_EMAIL = 'ramawan@live.com';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (userState) => {
@@ -96,9 +105,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userState) {
         const appUser = await fetchUserProfile(userState);
         setUser(appUser);
+
+        const email = userState.email ?? '';
+        const superAdmin = email === SUPER_ADMIN_EMAIL;
+        setIsSuperAdmin(superAdmin);
+        if (superAdmin) {
+          setIsAdmin(true);
+          setIsModerator(true);
+        } else {
+          try {
+            const config = await getCommunityConfig();
+            const adminFlag = (config?.admin_emails ?? []).includes(email);
+            const modFlag = adminFlag || (config?.moderator_emails ?? []).includes(email);
+            setIsAdmin(adminFlag);
+            setIsModerator(modFlag);
+          } catch {
+            setIsAdmin(false);
+            setIsModerator(false);
+          }
+        }
+
         document.cookie = "__session=1; path=/; SameSite=Lax";
       } else {
         setUser(null);
+        setIsSuperAdmin(false);
+        setIsAdmin(false);
+        setIsModerator(false);
         document.cookie = "__session=; path=/; Max-Age=0";
       }
       setLoading(false);
@@ -112,6 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firebaseUser,
     loading,
     emailVerified: firebaseUser?.emailVerified ?? false,
+    isSuperAdmin,
+    isAdmin,
+    isModerator,
     signIn: signInWithEmail,
     signUp: signUpWithEmail,
     signInWithGoogle,

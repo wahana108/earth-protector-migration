@@ -12,8 +12,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { fetchFlaggedComments, ignoreComment, deleteComment } from '@/lib/comments';
 import type { FlaggedComment } from '@/lib/comments';
 
-const ADMIN_EMAIL = 'ramawan@live.com';
-
 function relativeTime(date: Date): string {
   const diff = Date.now() - date.getTime();
   const m = Math.floor(diff / 60000);
@@ -52,24 +50,19 @@ function PageSkeleton() {
 }
 
 export default function AdminReportsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isModerator } = useAuth();
   const router = useRouter();
   const [comments, setComments] = useState<FlaggedComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
 
-  const isAdmin = !authLoading && user?.email === ADMIN_EMAIL;
-
   useEffect(() => {
     if (authLoading) return;
-    if (!user || user.email !== ADMIN_EMAIL) {
-      router.replace('/');
-      return;
-    }
+    if (!isModerator) { router.replace('/'); return; }
     fetchFlaggedComments()
       .then(setComments)
       .finally(() => setLoading(false));
-  }, [user, authLoading, router]);
+  }, [isModerator, authLoading, router]);
 
   async function handleIgnore(c: FlaggedComment) {
     setActingId(c.id);
@@ -91,8 +84,7 @@ export default function AdminReportsPage() {
     }
   }
 
-  // Tampilkan spinner saat auth loading atau saat redirect non-admin
-  if (authLoading || !isAdmin) {
+  if (authLoading || !isModerator) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center py-24">

@@ -31,6 +31,17 @@ export type CreateProjectInput = {
 };
 
 export async function createProject(input: CreateProjectInput): Promise<string> {
+  // Cek batas maksimum project per user
+  const [config, existingSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDocs(query(collection(db, 'projects'), where('developer_id', '==', input.developer_id))),
+  ]);
+  const maxProjects = config?.max_projects_per_user ?? 5;
+  const activeCount = existingSnap.docs.filter(d => (d.data().status as string | undefined) !== 'deleted').length;
+  if (activeCount >= maxProjects) {
+    throw new Error(`Batas maksimum project tercapai (maks ${maxProjects} project per user).`);
+  }
+
   const jumlah_nft = Math.floor(input.nilai_project / input.harga_dasar);
   const nilai_selisih = input.harga_jual - input.harga_dasar;
 
@@ -1301,7 +1312,128 @@ export async function autoCompletePurchase(nftUnitId: string): Promise<void> {
   });
 }
 
-// Resolusi dispute oleh admin: 'approve' = sah (poin ditransfer), 'reject' = batal (NFT kembali).
+// ─── Soft Delete Project (Admin) ─────────────────────────────────────────────
+
+// Hapus project secara soft: tandai deleted, invalidasi semua NFT,
+// tangani pool/validasi/pending purchase.
+export async function deleteProject(projectId: string, adminId: string): Promise<void> {
+  const nftsSnap = await getDocs(
+    query(collection(db, 'nft_units'), where('project_id', '==', projectId)),
+  );
+
+  const poolNfts = nftsSnap.docs.filter(d => d.data().in_pool === true);
+  const validationNfts = nftsSnap.docs.filter(d => d.data().digunakan_validasi === true);
+  const pendingPurchaseNfts = nftsSnap.docs.filter(d => (d.data().purchase_status as string) === 'pending');
+
+  // Kumpulkan unique user IDs yang perlu di-update
+  const affectedUserIds = new Set<string>();
+  validationNfts.forEach(d => affectedUserIds.add(d.data().owner_id as string));
+  pendingPurchaseNfts.forEach(d => affectedUserIds.add(d.data().owner_id as string));
+
+  const userSnapMap = new Map<string, Record<string, unknown>>();
+  await Promise.all([...affectedUserIds].map(async uid => {
+    const s = await getDoc(doc(db, 'users', uid));
+    if (s.exists()) userSnapMap.set(uid, s.data() as Record<string, unknown>);
+  }));
+
+  // Hitung perubahan poin_pending per user (untuk pending purchases)
+  const pendingReductions = new Map<string, number>();
+  for (const d of pendingPurchaseNfts) {
+    const nft = d.data();
+    const buyerId = nft.owner_id as string;
+    const nilai = (nft.nilai_selisih as number) ?? 0;
+    pendingReductions.set(buyerId, (pendingReductions.get(buyerId) ?? 0) + nilai);
+  }
+
+  // Kumpulkan validator_aktif updates (per user, filter project ini)
+  const validatorUpdates = new Map<string, unknown[]>();
+  for (const d of validationNfts) {
+    const ownerId = d.data().owner_id as string;
+    if (!validatorUpdates.has(ownerId)) {
+      const userData = userSnapMap.get(ownerId);
+      const aktif = (userData?.validator_aktif as unknown[]) ?? [];
+      validatorUpdates.set(ownerId, (aktif as Array<{ project_id: string }>).filter(v => v.project_id !== projectId));
+    }
+  }
+
+  // Batch writer helper (max 490 ops per batch)
+  const batches: ReturnType<typeof writeBatch>[] = [];
+  let cur = writeBatch(db);
+  let ops = 0;
+  const add = (fn: (b: ReturnType<typeof writeBatch>) => void) => {
+    if (ops >= 490) { batches.push(cur); cur = writeBatch(db); ops = 0; }
+    fn(cur); ops++;
+  };
+
+  const poolRef = doc(db, 'pool_rekomendasi', 'v1');
+  const processedIds = new Set<string>();
+
+  // Pool NFTs: keluarkan dari pool
+  if (poolNfts.length > 0) {
+    add(b => b.update(poolRef, { jumlah_nft_valid: increment(-poolNfts.length) }));
+    for (const d of poolNfts) {
+      add(b => b.update(d.ref, { in_pool: false, for_sale: false, status: 'invalid', buyback_pending: false }));
+      processedIds.add(d.id);
+    }
+  }
+
+  // Validation NFTs: unlock dan restore nilai
+  for (const d of validationNfts) {
+    const nft = d.data();
+    add(b => b.update(d.ref, {
+      digunakan_validasi: false,
+      project_validasi_id: null,
+      pernah_digunakan_validasi: true,
+      harga_beli_terakhir: (nft.harga_beli_sebelum_validasi as number) ?? nft.harga_beli_terakhir,
+      nilai_selisih: (nft.nilai_selisih_sebelum_validasi as number) ?? 0,
+      harga_beli_sebelum_validasi: null,
+      nilai_selisih_sebelum_validasi: null,
+      status: 'invalid',
+    }));
+    processedIds.add(d.id);
+  }
+  for (const [uid, aktif] of validatorUpdates.entries()) {
+    add(b => b.update(doc(db, 'users', uid), { validator_aktif: aktif }));
+  }
+
+  // Pending purchases: cancel dan kembalikan ke developer
+  for (const d of pendingPurchaseNfts) {
+    const nft = d.data();
+    add(b => b.update(d.ref, {
+      purchase_status: 'cancelled',
+      owner_id: nft.developer_id,
+      for_sale: false,
+      status: 'invalid',
+    }));
+    processedIds.add(d.id);
+  }
+  for (const [buyerId, reduction] of pendingReductions.entries()) {
+    const userData = userSnapMap.get(buyerId);
+    const currentPending = (userData?.total_poin_pending as number) ?? 0;
+    add(b => b.update(doc(db, 'users', buyerId), {
+      total_poin_pending: Math.max(0, currentPending - reduction),
+    }));
+  }
+
+  // Sisa NFT: invalidasi
+  for (const d of nftsSnap.docs) {
+    if (!processedIds.has(d.id)) {
+      add(b => b.update(d.ref, { status: 'invalid', buyback_pending: false }));
+    }
+  }
+
+  // Tandai project sebagai deleted
+  add(b => b.update(doc(db, 'projects', projectId), {
+    status: 'deleted',
+    deleted_at: serverTimestamp(),
+    deleted_by: adminId,
+  }));
+
+  batches.push(cur);
+  await Promise.all(batches.map(b => b.commit()));
+}
+
+// ─── Resolusi dispute oleh admin: 'approve' = sah (poin ditransfer), 'reject' = batal (NFT kembali).
 export async function resolvePurchaseDispute(
   disputeId: string,
   decision: 'approve' | 'reject',

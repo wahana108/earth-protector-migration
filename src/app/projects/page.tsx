@@ -72,7 +72,9 @@ async function fetchProjects(kat: ProjectCategory | 'semua'): Promise<ProjectWit
   const snap = await getDocs(q);
   if (snap.empty) return [];
 
-  const projects = snap.docs.map(d => toProject(d.id, d.data() as Record<string, unknown>));
+  const projects = snap.docs
+    .filter(d => (d.data().status as string | undefined) !== 'deleted')
+    .map(d => toProject(d.id, d.data() as Record<string, unknown>));
   const projectIds = projects.map(p => p.id);
   const uniqueDevIds = [...new Set(projects.map(p => p.developer_id))];
 

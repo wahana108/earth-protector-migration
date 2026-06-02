@@ -32,8 +32,6 @@ import {
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
 
-const ADMIN_EMAIL = 'ramawan@live.com';
-
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/explore', label: 'Explore', icon: Compass },
@@ -52,8 +50,7 @@ const navItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const { isModerator } = useAuth();
 
   return (
     <>
@@ -76,7 +73,7 @@ export function SidebarNav() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {isAdmin && (
+          {isModerator && (
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild

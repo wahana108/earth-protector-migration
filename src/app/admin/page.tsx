@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
-  Minus, Flag, AlertTriangle, CheckCircle2, XCircle,
+  Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  collection, getDocs, query, where, orderBy, getDoc, doc, Timestamp,
+  collection, getDocs, query, where, orderBy, getDoc, doc, Timestamp, limit,
 } from 'firebase/firestore';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -20,12 +20,22 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { recalculateAllDeveloperLevels, resolvePurchaseDispute, PurchaseError, type RecalcStats } from '@/lib/projects';
+import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
 import { db } from '@/lib/firebase';
 
-const ADMIN_EMAIL = 'ramawan@live.com';
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type ProjectAdminItem = {
+  id: string;
+  nama_project: string;
+  developer_id: string;
+  developer_name: string;
+  jumlah_nft: number;
+  status_project: string;
+  is_deleted: boolean;
+  created_at: Date;
+  deleted_at?: Date;
+};
 
 type DisputeItem = {
   id: string;
@@ -48,6 +58,122 @@ function formatDate(d: Date) {
 }
 
 // ─── Resolve Dialog ───────────────────────────────────────────────────────────
+
+// ─── Delete Project Dialog ────────────────────────────────────────────────────
+
+function DeleteProjectDialog({
+  project, adminId, onClose, onDeleted,
+}: {
+  project: ProjectAdminItem;
+  adminId: string;
+  onClose: () => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleDelete() {
+    setLoading(true);
+    setError('');
+    try {
+      await deleteProject(project.id, adminId);
+      onDeleted(project.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menghapus project.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Hapus Project</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="rounded-lg border p-3 text-sm space-y-1">
+            <p className="font-semibold">{project.nama_project}</p>
+            <p className="text-xs text-muted-foreground">Developer: {project.developer_name}</p>
+            <p className="text-xs text-muted-foreground">{project.jumlah_nft} NFT unit</p>
+          </div>
+          <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-xs text-red-700 dark:text-red-400 space-y-1">
+            <p className="font-semibold">Tindakan ini akan:</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li>Menandai project sebagai deleted</li>
+              <li>Semua NFT dalam project diset invalid</li>
+              <li>NFT di pool dikeluarkan dari pool</li>
+              <li>NFT dalam validasi dikembalikan ke pemilik</li>
+              <li>Pembelian pending dibatalkan</li>
+            </ul>
+          </div>
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Hapus Project
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Project Card ─────────────────────────────────────────────────────────────
+
+function ProjectAdminCard({
+  project, adminId, onDeleted,
+}: {
+  project: ProjectAdminItem;
+  adminId: string;
+  onDeleted: (id: string) => void;
+}) {
+  const [showDialog, setShowDialog] = useState(false);
+
+  return (
+    <>
+      <div className={`rounded-lg border p-3 flex gap-3 items-start ${project.is_deleted ? 'opacity-60 bg-muted/30' : 'bg-card'}`}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-sm truncate">{project.nama_project}</p>
+            {project.is_deleted
+              ? <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-800 border-red-300 shrink-0">Deleted</Badge>
+              : <Badge variant="secondary" className="text-[10px] shrink-0">{project.status_project}</Badge>
+            }
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Developer: <span className="font-medium text-foreground">{project.developer_name}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {project.jumlah_nft} NFT · {formatDate(project.created_at)}
+            {project.deleted_at && <> · Dihapus {formatDate(project.deleted_at)}</>}
+          </p>
+        </div>
+        {!project.is_deleted && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 border-red-200 text-red-700 hover:bg-red-50 shrink-0"
+            onClick={() => setShowDialog(true)}
+          >
+            <Trash2 className="h-3 w-3" />
+            Hapus
+          </Button>
+        )}
+      </div>
+      {showDialog && (
+        <DeleteProjectDialog
+          project={project}
+          adminId={adminId}
+          onClose={() => setShowDialog(false)}
+          onDeleted={onDeleted}
+        />
+      )}
+    </>
+  );
+}
 
 function ResolveDialog({
   dispute, decision, onClose, onResolved,
@@ -191,7 +317,7 @@ function DisputeCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin, isModerator } = useAuth();
   const router = useRouter();
 
   // Recalculate state
@@ -204,17 +330,22 @@ export default function AdminPage() {
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
   const [loadingDisputes, setLoadingDisputes] = useState(true);
 
-  const isAdmin = !authLoading && user?.email === ADMIN_EMAIL;
+  // Projects state
+  const [projects, setProjects] = useState<ProjectAdminItem[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectFilter, setProjectFilter] = useState<'semua' | 'aktif' | 'deleted'>('aktif');
+  const [projectSearch, setProjectSearch] = useState('');
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user || user.email !== ADMIN_EMAIL) router.replace('/');
-  }, [user, authLoading, router]);
+    if (!isModerator) router.replace('/');
+  }, [isModerator, authLoading, router]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isModerator) return;
     loadDisputes();
-  }, [isAdmin]);
+    loadProjects();
+  }, [isModerator]);
 
   async function loadDisputes() {
     setLoadingDisputes(true);
@@ -271,8 +402,48 @@ export default function AdminPage() {
     }
   }
 
+  async function loadProjects() {
+    setLoadingProjects(true);
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'projects'),
+        orderBy('created_at', 'desc'),
+        limit(50),
+      ));
+      if (snap.empty) { setProjects([]); return; }
+
+      const devIds = [...new Set(snap.docs.map(d => d.data().developer_id as string))];
+      const devSnaps = await Promise.all(devIds.map(id => getDoc(doc(db, 'users', id))));
+      const devMap = new Map<string, string>();
+      devSnaps.forEach((s, i) => {
+        devMap.set(devIds[i], s.exists() ? (s.data().displayName as string) || devIds[i].slice(0, 8) + '…' : '—');
+      });
+
+      setProjects(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          nama_project: (data.nama_project as string) ?? '',
+          developer_id: data.developer_id as string,
+          developer_name: devMap.get(data.developer_id as string) ?? '—',
+          jumlah_nft: (data.jumlah_nft as number) ?? 0,
+          status_project: (data.status_project as string) ?? 'aktif',
+          is_deleted: (data.status as string) === 'deleted',
+          created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+          deleted_at: (data.deleted_at as Timestamp)?.toDate?.() ?? undefined,
+        };
+      }));
+    } finally {
+      setLoadingProjects(false);
+    }
+  }
+
   function handleResolved(id: string) {
     setDisputes(prev => prev.filter(d => d.id !== id));
+  }
+
+  function handleProjectDeleted(id: string) {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, is_deleted: true } : p));
   }
 
   async function handleRecalculate() {
@@ -293,7 +464,11 @@ export default function AdminPage() {
     }
   }
 
-  if (authLoading || !isAdmin) {
+  const filteredProjects = projects
+    .filter(p => projectFilter === 'semua' ? true : projectFilter === 'aktif' ? !p.is_deleted : p.is_deleted)
+    .filter(p => !projectSearch || p.nama_project.toLowerCase().includes(projectSearch.toLowerCase()) || p.developer_name.toLowerCase().includes(projectSearch.toLowerCase()));
+
+  if (authLoading || !isModerator) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center py-24">
@@ -361,6 +536,57 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Manajemen Project */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trash2 className="h-4 w-4" />
+                Manajemen Project
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Lihat dan hapus project. Penghapusan bersifat soft-delete.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2 flex-wrap">
+                {(['aktif', 'semua', 'deleted'] as const).map(f => (
+                  <Button key={f} size="sm" variant={projectFilter === f ? 'default' : 'outline'} className="h-7 text-xs capitalize" onClick={() => setProjectFilter(f)}>
+                    {f === 'aktif' ? 'Aktif' : f === 'deleted' ? 'Deleted' : 'Semua'}
+                  </Button>
+                ))}
+                <div className="relative flex-1 min-w-40">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    className="w-full h-7 pl-8 pr-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Cari nama atau developer…"
+                    value={projectSearch}
+                    onChange={e => setProjectSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {loadingProjects ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat project…
+                </div>
+              ) : filteredProjects.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">Tidak ada project ditemukan.</p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredProjects.map(p => (
+                    <ProjectAdminCard key={p.id} project={p} adminId={user!.id} onDeleted={handleProjectDeleted} />
+                  ))}
+                  <p className="text-xs text-muted-foreground text-center pt-1">
+                    {filteredProjects.length} project ditampilkan (maks 50)
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Recalculate Developer Levels */}
         <Card>

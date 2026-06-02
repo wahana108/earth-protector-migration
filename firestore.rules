@@ -13,9 +13,22 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
-    // Admin override: ramawan@live.com (sesuai CLAUDE.md)
+    // Super admin hardcoded + dynamic admin list dari community_config
     function isAdmin() {
-      return isAuth() && request.auth.token.email == 'ramawan@live.com';
+      return isAuth() && (
+        request.auth.token.email == 'ramawan@live.com' ||
+        (exists(/databases/$(database)/documents/community_config/v1) &&
+         get(/databases/$(database)/documents/community_config/v1)
+           .data.admin_emails.hasAny([request.auth.token.email]))
+      );
+    }
+
+    function isModerator() {
+      return isAdmin() ||
+        (isAuth() &&
+         exists(/databases/$(database)/documents/community_config/v1) &&
+         get(/databases/$(database)/documents/community_config/v1)
+           .data.moderator_emails.hasAny([request.auth.token.email]));
     }
 
     // ─── users/{userId} ───────────────────────────────────────────────────────
@@ -169,6 +182,10 @@ service cloud.firestore {
       allow create: if isAuth() && request.resource.data.developer_id == request.auth.uid;
       allow update: if isAdmin() ||
         (isAuth() && resource.data.developer_id == request.auth.uid) ||
+        // Soft delete oleh admin: hanya set status, deleted_at, deleted_by
+        (isAdmin() &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['status', 'deleted_at', 'deleted_by'])) ||
         // Validasi flow: siapapun yang login bisa tambah jaminan ke project
         (isAuth() &&
           request.resource.data.diff(resource.data)

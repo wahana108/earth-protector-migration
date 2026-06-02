@@ -135,6 +135,7 @@ async function fetchTopDeveloperProjects(): Promise<ProjectWithDev[]> {
   if (projectsSnap.empty) return [];
 
   const projects = projectsSnap.docs
+    .filter(d => (d.data().status as string | undefined) !== 'deleted')
     .map(d => toProject(d.id, d.data() as Record<string, unknown>))
     .filter(p => topDevIds.includes(p.developer_id));
 

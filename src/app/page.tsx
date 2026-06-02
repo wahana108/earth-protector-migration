@@ -84,7 +84,7 @@ export default function HomePage() {
         const recentSnap = await getDocs(
           query(collection(db, 'projects'), orderBy('created_at', 'desc'), limit(4)),
         );
-        setProjects(recentSnap.docs.map(d => {
+        setProjects(recentSnap.docs.filter(d => (d.data().status as string | undefined) !== 'deleted').map(d => {
           const data = d.data();
           return {
             id: d.id,

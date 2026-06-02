@@ -120,6 +120,9 @@ export type CommunityConfig = {
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
   purchase_autoclose_days: number;
+  max_projects_per_user: number;
+  admin_emails: string[];
+  moderator_emails: string[];
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
@@ -214,6 +217,9 @@ export type Project = {
   like_count: number;
   anomali_flag: boolean;
   created_at: Date;
+  status?: 'deleted';
+  deleted_at?: Date | null;
+  deleted_by?: string | null;
 };
 
 export type NeracaLog = {

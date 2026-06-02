@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, SlidersHorizontal, Pencil } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, SlidersHorizontal, Pencil, X, Plus, Users, Loader2 } from 'lucide-react';
 import {
   getCommunityConfig,
   seedCommunityConfig,
@@ -20,7 +20,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import type { CommunityConfig, FeePool } from '@/lib/types';
 
-const ADMIN_EMAIL = 'ramawan@live.com';
+const SUPER_ADMIN_EMAIL = 'ramawan@live.com';
 
 // ─── Tipe flat untuk form edit ───────────────────────────────────────────────
 type EditValues = {
@@ -38,6 +38,7 @@ type EditValues = {
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
   purchase_autoclose_days: number;
+  max_projects_per_user: number;
   fase_aktif: number;
   ai_provider: string;
   anomali_flag: number;
@@ -60,6 +61,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
     minimum_holding_days: c.minimum_holding_days ?? 7,
     purchase_autoclose_days: c.purchase_autoclose_days ?? 7,
+    max_projects_per_user: c.max_projects_per_user ?? 5,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
@@ -67,7 +69,7 @@ function configToEdit(c: CommunityConfig): EditValues {
   };
 }
 
-function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'updated_by'> {
+function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at' | 'updated_by'>> {
   return {
     harga_dasar: e.harga_dasar,
     batas_atas: e.batas_atas,
@@ -82,6 +84,7 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     minimum_nft_pool_untuk_validasi: e.minimum_nft_pool_untuk_validasi,
     minimum_holding_days: e.minimum_holding_days,
     purchase_autoclose_days: e.purchase_autoclose_days,
+    max_projects_per_user: e.max_projects_per_user,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
@@ -138,8 +141,7 @@ function ParamCardSkeleton() {
 
 // ─── Halaman utama ────────────────────────────────────────────────────────────
 export default function ParametersPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const { user, isAdmin, isSuperAdmin } = useAuth();
 
   const [config, setConfig] = useState<CommunityConfig | null>(null);
   const [isDefault, setIsDefault] = useState(false);
@@ -442,6 +444,18 @@ export default function ParametersPage() {
               <Card className="ring-2 ring-primary/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Batas Project
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Maks. project per user" value={editValues.max_projects_per_user}
+                    onChange={v => setField('max_projects_per_user', v as number)} />
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Fee Sharing
                   </CardTitle>
                 </CardHeader>
@@ -550,6 +564,8 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <ParamRow label="Auto-close Pembelian & Buyback"
                     value={`${config.purchase_autoclose_days ?? 7} hari`} />
+                  <ParamRow label="Maks. Project per User"
+                    value={`${config.max_projects_per_user ?? 5} project`} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Jika seller tidak mengkonfirmasi atau pembeli tidak menyelesaikan buyback
@@ -635,7 +651,148 @@ export default function ParametersPage() {
           </div>
         </div>
 
+        {/* Tim Administrator — hanya Super Admin */}
+        {isSuperAdmin && config && (
+          <TeamManagementSection
+            config={config}
+            userId={user!.id}
+            onSaved={(updated) => setConfig(prev => prev ? { ...prev, ...updated } : prev)}
+          />
+        )}
+
       </div>
     </MainLayout>
+  );
+}
+
+// ─── Team Management Section ──────────────────────────────────────────────────
+
+function TeamManagementSection({
+  config, userId, onSaved,
+}: {
+  config: CommunityConfig;
+  userId: string;
+  onSaved: (updated: Partial<CommunityConfig>) => void;
+}) {
+  const [adminEmails, setAdminEmails] = useState<string[]>(config.admin_emails ?? []);
+  const [moderatorEmails, setModeratorEmails] = useState<string[]>(config.moderator_emails ?? []);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newModEmail, setNewModEmail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  function addAdmin() {
+    const email = newAdminEmail.trim().toLowerCase();
+    if (!email || adminEmails.includes(email)) return;
+    setAdminEmails(prev => [...prev, email]);
+    setNewAdminEmail('');
+  }
+
+  function addModerator() {
+    const email = newModEmail.trim().toLowerCase();
+    if (!email || moderatorEmails.includes(email)) return;
+    setModeratorEmails(prev => [...prev, email]);
+    setNewModEmail('');
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      await updateCommunityConfig(userId, { admin_emails: adminEmails, moderator_emails: moderatorEmails });
+      onSaved({ admin_emails: adminEmails, moderator_emails: moderatorEmails });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="border-primary/30">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          Tim Administrator
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Hanya Super Admin yang dapat mengelola bagian ini.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Admin */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin</p>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-2.5 py-1">
+              {SUPER_ADMIN_EMAIL}
+              <span className="text-[10px] opacity-60">Super Admin</span>
+            </span>
+            {adminEmails.map(email => (
+              <span key={email} className="inline-flex items-center gap-1 text-xs bg-muted border rounded-full px-2.5 py-1">
+                {email}
+                <button onClick={() => setAdminEmails(prev => prev.filter(e => e !== email))} className="text-muted-foreground hover:text-destructive ml-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              className="h-8 text-xs"
+              placeholder="email@baru.com"
+              value={newAdminEmail}
+              onChange={e => setNewAdminEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addAdmin()}
+            />
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 shrink-0" onClick={addAdmin}>
+              <Plus className="h-3 w-3" /> Tambah
+            </Button>
+          </div>
+        </div>
+
+        {/* Moderator */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Moderator</p>
+          <div className="flex flex-wrap gap-2">
+            {moderatorEmails.length === 0 && (
+              <span className="text-xs text-muted-foreground italic">Belum ada moderator.</span>
+            )}
+            {moderatorEmails.map(email => (
+              <span key={email} className="inline-flex items-center gap-1 text-xs bg-muted border rounded-full px-2.5 py-1">
+                {email}
+                <button onClick={() => setModeratorEmails(prev => prev.filter(e => e !== email))} className="text-muted-foreground hover:text-destructive ml-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              className="h-8 text-xs"
+              placeholder="email@baru.com"
+              value={newModEmail}
+              onChange={e => setNewModEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addModerator()}
+            />
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 shrink-0" onClick={addModerator}>
+              <Plus className="h-3 w-3" /> Tambah
+            </Button>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {saved && <p className="text-sm text-green-600">Tersimpan.</p>}
+
+        <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+          Simpan Perubahan Tim
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
