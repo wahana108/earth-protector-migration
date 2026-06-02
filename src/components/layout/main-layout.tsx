@@ -6,20 +6,24 @@ import { SidebarNav } from './sidebar-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
-import { MailWarning, X } from 'lucide-react';
+import { MailWarning, ShoppingBag, X } from 'lucide-react';
+import Link from 'next/link';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(!isMobile);
-  const { firebaseUser, emailVerified, resendVerificationEmail, loading } = useAuth();
+  const { firebaseUser, user, emailVerified, resendVerificationEmail, loading } = useAuth();
   const [resent, setResent] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(false);
+  const [sellerBannerDismissed, setSellerBannerDismissed] = React.useState(false);
 
   React.useEffect(() => {
     setOpen(!isMobile);
   }, [isMobile]);
 
   const showBanner = !loading && !!firebaseUser && !emailVerified && !dismissed;
+  const pendingSellerActions = user?.pending_seller_actions ?? 0;
+  const showSellerBanner = !loading && !!user && pendingSellerActions > 0 && !sellerBannerDismissed;
 
   async function handleResend() {
     try {
@@ -38,6 +42,31 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </Sidebar>
         <div className="flex flex-col flex-1 min-w-0">
           <AppHeader />
+
+          {/* Banner permintaan buyback seller */}
+          {showSellerBanner && (
+            <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-3 text-sm text-orange-800">
+              <ShoppingBag className="h-4 w-4 shrink-0" />
+              <span className="flex-1">
+                Ada {pendingSellerActions} permintaan buyback NFT Anda menunggu konfirmasi.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                asChild
+                className="border-orange-400 text-orange-800 hover:bg-orange-100 h-7 text-xs shrink-0"
+              >
+                <Link href="/buyback-requests">Tinjau Sekarang →</Link>
+              </Button>
+              <button
+                onClick={() => setSellerBannerDismissed(true)}
+                className="text-orange-600 hover:text-orange-900 shrink-0"
+                aria-label="Tutup banner"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {/* Banner verifikasi email */}
           {showBanner && (

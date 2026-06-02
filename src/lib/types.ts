@@ -25,6 +25,7 @@ export type User = {
   buybackCount?: number;
   isTopDeveloper?: boolean;
   validator_aktif?: ValidatorAktif[];
+  pending_seller_actions?: number;
 };
 
 export type NFT = {
@@ -69,12 +70,19 @@ export type Like = {
 
 export type BuybackRequest = {
   id: string;
-  nftId: string;
-  buyerId: string;
-  vendorId: string;
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed';
-  proofUrl: string | null;
-  createdAt: Date;
+  nft_unit_id: string;
+  requester_id: string;
+  seller_id: string;
+  nft_nama: string;
+  harga_buyback: number;
+  nilai_selisih: number;
+  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled';
+  proof_link: string | null;
+  ai_confidence: number | null;
+  requester_note: string | null;
+  rejection_reason: string | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
 export type TopDeveloper = {
@@ -107,6 +115,7 @@ export type CommunityConfig = {
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
   minimum_nft_pool_untuk_validasi: number;
+  minimum_holding_days: number;
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
@@ -257,6 +266,8 @@ export type NFTUnit = {
   like_count: number;
   comment_count: number;
   created_at: Date;
+  purchased_at?: Date;
+  buyback_pending?: boolean;
   transferred_at?: Date;
   fifo_skip_count?: number;
   last_skipped_by?: string;

@@ -263,6 +263,7 @@ export async function buyNftUnit(
       owner_id: buyerId,
       for_sale: false,
       harga_beli_terakhir: harga_jual,
+      purchased_at: serverTimestamp(),
       ...(isPoolPurchase ? { in_pool: false } : {}),
     });
 
@@ -395,6 +396,7 @@ export async function buybackNftUnit(
     tx.update(nftRef, {
       owner_id: developerId,
       for_sale: false,
+      buyback_pending: false,
     });
 
     // 2. Neraca developer: +nilai_selisih, buybackCount +1
@@ -555,6 +557,10 @@ export async function validateProject(
 ): Promise<void> {
   if (selectedNftIds.length === 0) throw new ValidasiError('Pilih minimal 1 NFT untuk validasi.');
 
+  const config = await getCommunityConfig();
+  const minimumHoldingDays = config?.minimum_holding_days ?? 7;
+  const nowMs = Date.now();
+
   const projectRef = doc(db, 'projects', projectId);
   const userRef = doc(db, 'users', userId);
 
@@ -582,6 +588,22 @@ export async function validateProject(
       if (nft.digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah dipakai validasi.`);
       if (nft.pernah_digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah pernah digunakan validasi sebelumnya.`);
       if ((nft.nilai_selisih as number) <= 0) throw new ValidasiError(`NFT ${nft.nama_nft} tidak memiliki nilai selisih.`);
+
+      // Holding period check
+      if (minimumHoldingDays > 0 && nft.purchased_at) {
+        const purchasedMs: number =
+          typeof (nft.purchased_at as Timestamp).toMillis === 'function'
+            ? (nft.purchased_at as Timestamp).toMillis()
+            : nft.purchased_at instanceof Date
+            ? nft.purchased_at.getTime()
+            : 0;
+        if (purchasedMs > 0 && nowMs - purchasedMs < minimumHoldingDays * 86400000) {
+          const remainingDays = Math.ceil((minimumHoldingDays * 86400000 - (nowMs - purchasedMs)) / 86400000);
+          throw new ValidasiError(
+            `NFT ${nft.nama_nft as string} harus dipegang minimal ${minimumHoldingDays} hari sebelum bisa dipakai validasi. Sisa waktu: ${remainingDays} hari.`,
+          );
+        }
+      }
     }
 
     // ── Jika revalidasi: baca validator lama yang akan dirotasi ───────────
@@ -943,6 +965,142 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
     });
   }
 
+  await batch.commit();
+}
+
+// ─── Buyback 2 Arah (Two-Way Handshake) ──────────────────────────────────────
+
+export class BuybackRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BuybackRequestError';
+  }
+}
+
+// Pembeli membuat permintaan buyback ke developer/seller NFT.
+export async function createBuybackRequest(
+  nftUnitId: string,
+  requesterId: string,
+  requesterNote: string | null = null,
+): Promise<string> {
+  const nftSnap = await getDoc(doc(db, 'nft_units', nftUnitId));
+  if (!nftSnap.exists()) throw new BuybackRequestError('NFT tidak ditemukan.');
+
+  const nft = nftSnap.data();
+  if (nft.owner_id !== requesterId) throw new BuybackRequestError('Kamu bukan pemilik NFT ini.');
+  if (nft.developer_id === requesterId) throw new BuybackRequestError('NFT masih berada di tangan developer.');
+  if (nft.digunakan_validasi) throw new BuybackRequestError('NFT sedang digunakan validasi.');
+  if (nft.in_pool) throw new BuybackRequestError('NFT sedang berada di pool rekomendasi.');
+  if (nft.buyback_pending) throw new BuybackRequestError('Sudah ada permintaan buyback yang sedang diproses.');
+
+  const sellerId = nft.developer_id as string;
+  const batch = writeBatch(db);
+  const requestRef = doc(collection(db, 'buyback_requests'));
+
+  batch.set(requestRef, {
+    nft_unit_id: nftUnitId,
+    requester_id: requesterId,
+    seller_id: sellerId,
+    nft_nama: (nft.nama_nft as string) ?? '',
+    harga_buyback: (nft.harga_beli_terakhir as number) ?? 0,
+    nilai_selisih: (nft.nilai_selisih as number) ?? 0,
+    status: 'pending',
+    proof_link: null,
+    ai_confidence: null,
+    requester_note: requesterNote,
+    rejection_reason: null,
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  });
+
+  batch.update(doc(db, 'nft_units', nftUnitId), { buyback_pending: true });
+  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(1) });
+
+  await batch.commit();
+  return requestRef.id;
+}
+
+// Seller mengkonfirmasi permintaan buyback + mengisi proof_link.
+export async function confirmBuybackRequest(
+  requestId: string,
+  sellerId: string,
+  proofLink: string,
+): Promise<void> {
+  const requestRef = doc(db, 'buyback_requests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
+
+  const request = requestSnap.data();
+  if (request.seller_id !== sellerId) throw new BuybackRequestError('Kamu bukan penjual NFT ini.');
+  if (request.status !== 'pending') throw new BuybackRequestError('Permintaan ini sudah tidak bisa dikonfirmasi.');
+
+  const batch = writeBatch(db);
+  batch.update(requestRef, { status: 'confirmed', proof_link: proofLink, updated_at: serverTimestamp() });
+  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(-1) });
+  await batch.commit();
+}
+
+// Seller menolak permintaan buyback.
+export async function rejectBuybackRequest(
+  requestId: string,
+  sellerId: string,
+  reason: string,
+): Promise<void> {
+  const requestRef = doc(db, 'buyback_requests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
+
+  const request = requestSnap.data();
+  if (request.seller_id !== sellerId) throw new BuybackRequestError('Kamu bukan penjual NFT ini.');
+  if (request.status !== 'pending') throw new BuybackRequestError('Permintaan ini sudah tidak bisa ditolak.');
+
+  const batch = writeBatch(db);
+  batch.update(requestRef, { status: 'rejected', rejection_reason: reason, updated_at: serverTimestamp() });
+  batch.update(doc(db, 'nft_units', request.nft_unit_id as string), { buyback_pending: false });
+  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(-1) });
+  await batch.commit();
+}
+
+// Pembeli menyelesaikan buyback setelah seller konfirmasi.
+// Memanggil buybackNftUnit() yang sudah ada untuk eksekusi transfer neraca.
+export async function completeBuybackRequest(
+  requestId: string,
+  requesterId: string,
+): Promise<void> {
+  const requestRef = doc(db, 'buyback_requests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
+
+  const request = requestSnap.data();
+  if (request.requester_id !== requesterId) throw new BuybackRequestError('Kamu bukan pembuat permintaan ini.');
+  if (request.status !== 'confirmed') throw new BuybackRequestError('Permintaan belum dikonfirmasi seller.');
+
+  await buybackNftUnit(request.nft_unit_id as string, requesterId);
+  await updateDoc(requestRef, { status: 'completed', updated_at: serverTimestamp() });
+}
+
+// Pembeli membatalkan permintaan (bisa dari status pending atau confirmed).
+export async function cancelBuybackRequest(
+  requestId: string,
+  requesterId: string,
+): Promise<void> {
+  const requestRef = doc(db, 'buyback_requests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new BuybackRequestError('Permintaan tidak ditemukan.');
+
+  const request = requestSnap.data();
+  if (request.requester_id !== requesterId) throw new BuybackRequestError('Kamu bukan pembuat permintaan ini.');
+  if (!['pending', 'confirmed'].includes(request.status as string)) {
+    throw new BuybackRequestError('Permintaan ini sudah tidak bisa dibatalkan.');
+  }
+
+  const wasPending = request.status === 'pending';
+  const batch = writeBatch(db);
+  batch.update(requestRef, { status: 'cancelled', updated_at: serverTimestamp() });
+  batch.update(doc(db, 'nft_units', request.nft_unit_id as string), { buyback_pending: false });
+  if (wasPending) {
+    batch.update(doc(db, 'users', request.seller_id as string), { pending_seller_actions: increment(-1) });
+  }
   await batch.commit();
 }
 

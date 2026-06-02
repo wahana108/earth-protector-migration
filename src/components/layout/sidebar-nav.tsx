@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   CheckSquare,
   Layers,
+  ShoppingBag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -41,6 +42,7 @@ const navItems = [
   { href: '/create', label: 'Create', icon: PlusCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/buyback', label: 'Buyback', icon: RefreshCcw },
+  { href: '/buyback-requests', label: 'Permintaan Buyback', icon: ShoppingBag },
   { href: '/transactions', label: 'Transaksi', icon: ArrowLeftRight },
   { href: '/top-developers', label: 'Developer Ranking', icon: Award },
   { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },

@@ -26,7 +26,7 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level'])) ||
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'buybackCount', 'level', 'pending_seller_actions'])) ||
         // Validasi flow: pemilik akun mencatat partisipasi validasi
         (isMe(userId) &&
           request.resource.data.diff(resource.data)
@@ -90,8 +90,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // ─── buybackRequests/{requestId} ─────────────────────────────────────────
-    // Hanya buyer (pemilik saat ini) dan vendor (kreator) yang bisa baca/update.
+    // ─── buybackRequests/{requestId} — legacy, tidak digunakan ──────────────
     match /buybackRequests/{requestId} {
       allow read: if isAuth() && (
         resource.data.buyerId  == request.auth.uid ||
@@ -102,6 +101,24 @@ service cloud.firestore {
       allow update: if isAuth() && (
         resource.data.vendorId == request.auth.uid ||
         resource.data.buyerId  == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ─── buyback_requests/{requestId} — Fase 2B two-way handshake ────────────
+    // Pembeli (requester) buat request, seller konfirmasi/tolak, pembeli selesaikan.
+    match /buyback_requests/{requestId} {
+      allow read: if isAuth() && (
+        resource.data.requester_id == request.auth.uid ||
+        resource.data.seller_id    == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuth() &&
+        request.resource.data.requester_id == request.auth.uid;
+      allow update: if isAuth() && (
+        resource.data.seller_id    == request.auth.uid ||
+        resource.data.requester_id == request.auth.uid ||
         isAdmin()
       );
       allow delete: if isAdmin();
@@ -174,7 +191,7 @@ service cloud.firestore {
         // Buy flow: siapapun yang auth boleh ambil NFT for_sale (in_pool opsional untuk beli_pool)
         (isAuth() && resource.data.for_sale == true &&
           request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool'])) ||
+            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at'])) ||
         // Comment flow: siapapun yang auth boleh update comment_count saja
         (isAuth() && request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly(['comment_count'])) ||

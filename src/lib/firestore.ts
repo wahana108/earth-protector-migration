@@ -226,14 +226,26 @@ export async function fetchVoteStats(nftId: string): Promise<{ approve: number; 
 // ─── Converters ───────────────────────────────────────────────────────────────
 
 function toBuybackRequest(id: string, data: Record<string, any>): BuybackRequest {
+  const createdDate = data.createdAt instanceof Timestamp
+    ? data.createdAt.toDate()
+    : data.created_at instanceof Timestamp
+    ? data.created_at.toDate()
+    : new Date();
   return {
     id,
-    nftId: data.nftId,
-    buyerId: data.buyerId,
-    vendorId: data.vendorId,
+    nft_unit_id: data.nft_unit_id ?? data.nftId ?? '',
+    requester_id: data.requester_id ?? data.buyerId ?? '',
+    seller_id: data.seller_id ?? data.vendorId ?? '',
+    nft_nama: data.nft_nama ?? '',
+    harga_buyback: data.harga_buyback ?? 0,
+    nilai_selisih: data.nilai_selisih ?? 0,
     status: data.status,
-    proofUrl: data.proofUrl ?? null,
-    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+    proof_link: data.proof_link ?? data.proofUrl ?? null,
+    ai_confidence: data.ai_confidence ?? null,
+    requester_note: data.requester_note ?? null,
+    rejection_reason: data.rejection_reason ?? null,
+    created_at: createdDate,
+    updated_at: data.updated_at instanceof Timestamp ? data.updated_at.toDate() : createdDate,
   };
 }
 

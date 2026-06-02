@@ -51,6 +51,7 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
       soldNfts: data.soldNfts ?? 0,
       buybackCount: data.buybackCount ?? 0,
       isTopDeveloper: data.isTopDeveloper ?? false,
+      pending_seller_actions: (data.pending_seller_actions as number) ?? 0,
     };
   }
 

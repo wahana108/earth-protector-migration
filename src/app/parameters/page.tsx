@@ -36,6 +36,7 @@ type EditValues = {
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
   minimum_nft_pool_untuk_validasi: number;
+  minimum_holding_days: number;
   fase_aktif: number;
   ai_provider: string;
   anomali_flag: number;
@@ -56,6 +57,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_soldNfts_top_developer: c.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
     minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
+    minimum_holding_days: c.minimum_holding_days ?? 7,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
@@ -76,6 +78,7 @@ function editToConfig(e: EditValues): Omit<CommunityConfig, 'updated_at' | 'upda
     minimum_soldNfts_top_developer: e.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
     minimum_nft_pool_untuk_validasi: e.minimum_nft_pool_untuk_validasi,
+    minimum_holding_days: e.minimum_holding_days,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },

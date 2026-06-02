@@ -17,6 +17,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   minimum_soldNfts_top_developer: 24,
   kapasitas_pool_minimum: 90,
   minimum_nft_pool_untuk_validasi: 90,
+  minimum_holding_days: 7,
   fase_aktif: 1,
   ai_provider: 'gemini',
   ai_anomali_threshold: { flag: 1, invalid: 100 },

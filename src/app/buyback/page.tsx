@@ -3,20 +3,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  collection, getDocs, query, where, Timestamp,
+  collection, getDocs, query, where, Timestamp, orderBy,
 } from 'firebase/firestore';
-import { RefreshCcw, Loader2 } from 'lucide-react';
+import {
+  RefreshCcw, Loader2, Clock, CheckCircle2, XCircle,
+  ExternalLink, AlertTriangle,
+} from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { buybackNftUnit, BuybackError } from '@/lib/projects';
+import {
+  createBuybackRequest,
+  cancelBuybackRequest,
+  completeBuybackRequest,
+  BuybackRequestError,
+} from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
@@ -28,6 +38,23 @@ function formatIDR(n: number) {
     style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
   }).format(n);
 }
+
+type BuybackReqData = {
+  id: string;
+  nft_unit_id: string;
+  status: 'pending' | 'confirmed' | 'rejected' | 'completed' | 'cancelled';
+  proof_link: string | null;
+  rejection_reason: string | null;
+  requester_note: string | null;
+  harga_buyback: number;
+  nilai_selisih: number;
+  created_at: Date;
+};
+
+type NFTWithReq = {
+  nft: NFTUnit;
+  request: BuybackReqData | null;
+};
 
 function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
   return {
@@ -47,22 +74,38 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     in_pool: (data.in_pool as boolean) ?? false,
     digunakan_validasi: (data.digunakan_validasi as boolean) ?? false,
     project_validasi_id: (data.project_validasi_id as string | null) ?? null,
+    buyback_pending: (data.buyback_pending as boolean) ?? false,
     like_count: (data.like_count as number) ?? 0,
     comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
   };
 }
 
-// ─── Buyback Dialog ───────────────────────────────────────────────────────────
+function toBuybackReq(id: string, data: Record<string, unknown>): BuybackReqData {
+  return {
+    id,
+    nft_unit_id: data.nft_unit_id as string,
+    status: data.status as BuybackReqData['status'],
+    proof_link: (data.proof_link as string | null) ?? null,
+    rejection_reason: (data.rejection_reason as string | null) ?? null,
+    requester_note: (data.requester_note as string | null) ?? null,
+    harga_buyback: (data.harga_buyback as number) ?? 0,
+    nilai_selisih: (data.nilai_selisih as number) ?? 0,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+  };
+}
 
-interface BuybackDialogProps {
+// ─── Dialogs ─────────────────────────────────────────────────────────────────
+
+function RequestDialog({
+  unit, ownerId, onClose, onSuccess,
+}: {
   unit: NFTUnit;
   ownerId: string;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps) {
+}) {
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -70,25 +113,22 @@ function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps
     setLoading(true);
     setError('');
     try {
-      await buybackNftUnit(unit.id, ownerId);
+      await createBuybackRequest(unit.id, ownerId, note.trim() || null);
       onSuccess();
       onClose();
-    } catch (err: unknown) {
-      setError(
-        err instanceof BuybackError ? err.message : 'Gagal melakukan buyback. Coba lagi.',
-      );
+    } catch (err) {
+      setError(err instanceof BuybackRequestError ? err.message : 'Gagal membuat permintaan. Coba lagi.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Konfirmasi Buyback</DialogTitle>
+          <DialogTitle>Request Buyback</DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 py-1">
           <div className="rounded-lg border p-3 space-y-2 text-sm">
             <p className="font-semibold leading-snug">{unit.nama_nft}</p>
@@ -100,29 +140,155 @@ function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
-                <span className={cn(
-                  'font-semibold',
-                  unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
-                )}>
-                  {unit.nilai_selisih > 0
-                    ? `−${formatIDR(unit.nilai_selisih)}`
-                    : 'Tidak ada perubahan'}
+                <span className={cn('font-semibold', unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                  {unit.nilai_selisih > 0 ? `−${formatIDR(unit.nilai_selisih)}` : 'Tidak ada perubahan'}
                 </span>
               </div>
             </div>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Catatan untuk seller (opsional)</Label>
+            <Textarea
+              placeholder="Alasan atau pesan untuk developer…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="text-sm resize-none"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Permintaan ini akan dikirim ke developer. NFT akan dikembalikan setelah developer mengkonfirmasi.
+          </p>
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Kirim Request
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
+function CancelDialog({
+  requestId, requesterId, onClose, onSuccess,
+}: {
+  requestId: string;
+  requesterId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await cancelBuybackRequest(requestId, requesterId);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err instanceof BuybackRequestError ? err.message : 'Gagal membatalkan. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Batalkan Permintaan</DialogTitle>
+        </DialogHeader>
+        <div className="py-2">
+          <p className="text-sm text-muted-foreground">
+            Permintaan buyback akan dibatalkan dan NFT bisa di-request lagi nanti.
+          </p>
+          {error && <p className="mt-3 text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Kembali</Button>
+          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Ya, Batalkan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CompleteDialog({
+  unit, request, ownerId, onClose, onSuccess,
+}: {
+  unit: NFTUnit;
+  request: BuybackReqData;
+  ownerId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await completeBuybackRequest(request.id, ownerId);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err instanceof BuybackRequestError ? err.message : 'Gagal menyelesaikan buyback. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Selesaikan Buyback</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="rounded-lg border p-3 space-y-2 text-sm">
+            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
+            <div className="pt-2 border-t space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Harga buyback</span>
+                <span className="font-bold">{formatIDR(request.harga_buyback)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Efek neracamu</span>
+                <span className={cn('font-semibold', request.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                  {request.nilai_selisih > 0 ? `−${formatIDR(request.nilai_selisih)}` : 'Tidak ada perubahan'}
+                </span>
+              </div>
+            </div>
+          </div>
+          {request.proof_link && (
+            <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 p-3 text-sm">
+              <p className="text-xs text-muted-foreground mb-1">Bukti dari developer:</p>
+              <a
+                href={request.proof_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-700 dark:text-green-400 hover:underline flex items-center gap-1 text-xs font-medium break-all"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                {request.proof_link}
+              </a>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
             NFT akan dikembalikan ke developer. Tindakan ini tidak dapat dibatalkan.
           </p>
-
-          {error && (
-            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
         </div>
-
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
@@ -137,88 +303,142 @@ function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps
 
 // ─── NFT Card ─────────────────────────────────────────────────────────────────
 
+type DialogType = 'request' | 'cancel' | 'complete' | null;
+
 function BuybackCard({
-  unit, ownerId, onSuccess,
+  item, ownerId, onSuccess,
 }: {
-  unit: NFTUnit;
+  item: NFTWithReq;
   ownerId: string;
   onSuccess: () => void;
 }) {
-  const [showDialog, setShowDialog] = useState(false);
+  const [dialog, setDialog] = useState<DialogType>(null);
+  const { nft, request } = item;
+
+  const statusBadge = () => {
+    if (!request) return null;
+    if (request.status === 'pending') return (
+      <Badge variant="secondary" className="text-xs gap-1 bg-yellow-100 text-yellow-800 border-yellow-300">
+        <Clock className="h-3 w-3" />
+        Menunggu konfirmasi
+      </Badge>
+    );
+    if (request.status === 'confirmed') return (
+      <Badge variant="secondary" className="text-xs gap-1 bg-green-100 text-green-800 border-green-300">
+        <CheckCircle2 className="h-3 w-3" />
+        Developer setuju
+      </Badge>
+    );
+    if (request.status === 'rejected') return (
+      <Badge variant="secondary" className="text-xs gap-1 bg-red-100 text-red-800 border-red-300">
+        <XCircle className="h-3 w-3" />
+        Ditolak
+      </Badge>
+    );
+    return null;
+  };
+
+  const actionButtons = () => {
+    if (request?.status === 'pending') {
+      return (
+        <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setDialog('cancel')}>
+          Batalkan Request
+        </Button>
+      );
+    }
+    if (request?.status === 'confirmed') {
+      return (
+        <Button size="sm" variant="default" className="flex-1 text-xs" onClick={() => setDialog('complete')}>
+          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+          Selesaikan Buyback
+        </Button>
+      );
+    }
+    return (
+      <Button size="sm" variant="destructive" className="flex-1 text-xs" onClick={() => setDialog('request')}>
+        <RefreshCcw className="h-3.5 w-3.5 mr-1" />
+        {request?.status === 'rejected' ? 'Request Baru' : 'Request Buyback'}
+      </Button>
+    );
+  };
 
   return (
     <>
       <div className="rounded-lg border bg-card overflow-hidden flex flex-col">
-        {/* Gambar */}
         <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
           <img
-            src={unit.gambar_url || getPlaceholder(unit.kategori)}
-            alt={unit.nama_nft}
+            src={nft.gambar_url || getPlaceholder(nft.kategori)}
+            alt={nft.nama_nft}
             className="w-full h-full object-contain"
-            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(nft.kategori); }}
           />
           <div className="absolute top-1.5 left-1.5">
-            <Badge
-              variant={unit.status === 'valid' ? 'default' : 'secondary'}
-              className="text-[10px] px-1.5 py-0 capitalize"
-            >
-              {unit.status}
+            <Badge variant={nft.status === 'valid' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0 capitalize">
+              {nft.status}
             </Badge>
           </div>
         </div>
 
-        {/* Info */}
         <div className="p-3 flex flex-col gap-2 flex-1">
           <div>
-            <p className="font-semibold text-sm leading-snug">{unit.nama_nft}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{unit.nama_project}</p>
+            <p className="font-semibold text-sm leading-snug">{nft.nama_nft}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{nft.nama_project}</p>
           </div>
+
+          {/* Status badge */}
+          {statusBadge() && <div>{statusBadge()}</div>}
+
+          {/* Rejection reason */}
+          {request?.status === 'rejected' && request.rejection_reason && (
+            <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 px-2.5 py-2 text-xs text-red-700 dark:text-red-400 flex gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span><span className="font-medium">Alasan penolakan:</span> {request.rejection_reason}</span>
+            </div>
+          )}
+
+          {/* Confirmed: show proof link */}
+          {request?.status === 'confirmed' && request.proof_link && (
+            <a
+              href={request.proof_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-700 dark:text-green-400 hover:underline flex items-center gap-1 truncate"
+            >
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              Lihat bukti developer
+            </a>
+          )}
 
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Harga buyback</span>
-              <span className="font-semibold">{formatIDR(unit.harga_beli_terakhir)}</span>
+              <span className="font-semibold">{formatIDR(nft.harga_beli_terakhir)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Efek neraca</span>
-              <span className={cn(
-                'font-semibold',
-                unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
-              )}>
-                {unit.nilai_selisih > 0 ? `−${formatIDR(unit.nilai_selisih)}` : '—'}
+              <span className={cn('font-semibold', nft.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                {nft.nilai_selisih > 0 ? `−${formatIDR(nft.nilai_selisih)}` : '—'}
               </span>
             </div>
           </div>
 
           <div className="flex gap-2 mt-auto pt-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs"
-              asChild
-            >
-              <Link href={`/nft/${unit.id}`}>Detail</Link>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" asChild>
+              <Link href={`/nft/${nft.id}`}>Detail</Link>
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="flex-1 text-xs"
-              onClick={() => setShowDialog(true)}
-            >
-              <RefreshCcw className="h-3.5 w-3.5 mr-1" />
-              Buyback
-            </Button>
+            {actionButtons()}
           </div>
         </div>
       </div>
 
-      {showDialog && (
-        <BuybackDialog
-          unit={unit}
-          ownerId={ownerId}
-          onClose={() => setShowDialog(false)}
-          onSuccess={onSuccess}
-        />
+      {dialog === 'request' && (
+        <RequestDialog unit={nft} ownerId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+      )}
+      {dialog === 'cancel' && request && (
+        <CancelDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+      )}
+      {dialog === 'complete' && request && (
+        <CompleteDialog unit={nft} request={request} ownerId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
     </>
   );
@@ -228,30 +448,45 @@ function BuybackCard({
 
 export default function BuybackPage() {
   const { user } = useAuth();
-  const [units, setUnits] = useState<NFTUnit[]>([]);
+  const [items, setItems] = useState<NFTWithReq[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadUnits = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const q = query(
-        collection(db, 'nft_units'),
-        where('owner_id', '==', user.id),
-      );
-      const snap = await getDocs(q);
-      const all = snap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>));
-      // Filter: bukan milik developer sendiri, tidak sedang divalidasi, tidak di pool
-      const buybackable = all.filter(
-        u => u.developer_id !== user.id && !u.digunakan_validasi && !u.in_pool,
-      );
-      setUnits(buybackable);
+      const [nftsSnap, reqsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
+        getDocs(query(
+          collection(db, 'buyback_requests'),
+          where('requester_id', '==', user.id),
+          orderBy('created_at', 'desc'),
+        )),
+      ]);
+
+      const buybackableNfts = nftsSnap.docs
+        .map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>))
+        .filter(u => u.developer_id !== user.id && !u.digunakan_validasi && !u.in_pool);
+
+      const allReqs = reqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>));
+
+      // Build map: nft_unit_id -> most recent relevant request (pending, confirmed, rejected)
+      const reqMap = new Map<string, BuybackReqData>();
+      for (const req of allReqs) {
+        if (!['pending', 'confirmed', 'rejected'].includes(req.status)) continue;
+        if (!reqMap.has(req.nft_unit_id)) reqMap.set(req.nft_unit_id, req);
+      }
+
+      setItems(buybackableNfts.map(nft => ({
+        nft,
+        request: reqMap.get(nft.id) ?? null,
+      })));
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  useEffect(() => { loadUnits(); }, [loadUnits]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   if (!user) {
     return (
@@ -265,22 +500,41 @@ export default function BuybackPage() {
     );
   }
 
+  const pendingCount = items.filter(i => i.request?.status === 'pending').length;
+  const confirmedCount = items.filter(i => i.request?.status === 'confirmed').length;
+
   return (
     <MainLayout>
       <div className="max-w-5xl mx-auto space-y-6">
 
-        {/* Header */}
         <div>
           <div className="flex items-center gap-2 mb-1">
             <RefreshCcw className="h-5 w-5 text-primary" />
             <h1 className="text-2xl font-headline font-bold">Buyback NFT</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            NFT yang kamu miliki dan bisa dikembalikan ke developer asalnya.
+            Kembalikan NFT yang kamu miliki ke developer asalnya melalui proses konfirmasi dua arah.
           </p>
         </div>
 
-        {/* Grid */}
+        {/* Summary badges */}
+        {(pendingCount > 0 || confirmedCount > 0) && (
+          <div className="flex gap-3 flex-wrap">
+            {pendingCount > 0 && (
+              <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+                <Clock className="h-3.5 w-3.5" />
+                {pendingCount} menunggu konfirmasi
+              </div>
+            )}
+            {confirmedCount > 0 && (
+              <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-green-100 text-green-800 border border-green-300">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {confirmedCount} siap diselesaikan
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -291,13 +545,13 @@ export default function BuybackPage() {
               </div>
             ))}
           </div>
-        ) : units.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="text-center py-16 space-y-3">
             <RefreshCcw className="h-12 w-12 text-muted-foreground mx-auto" />
             <h3 className="font-semibold text-lg">Tidak ada NFT yang bisa di-buyback</h3>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               NFT yang memenuhi syarat buyback adalah NFT yang kamu beli dari developer lain
-              dan tidak sedang digunakan untuk validasi atau berada di pool.
+              dan tidak sedang digunakan validasi atau berada di pool.
             </p>
             <Button variant="outline" asChild className="mt-2">
               <Link href="/explore">Jelajahi NFT</Link>
@@ -305,17 +559,10 @@ export default function BuybackPage() {
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              {units.length} NFT tersedia untuk buyback
-            </p>
+            <p className="text-sm text-muted-foreground">{items.length} NFT tersedia untuk buyback</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {units.map(unit => (
-                <BuybackCard
-                  key={unit.id}
-                  unit={unit}
-                  ownerId={user.id}
-                  onSuccess={loadUnits}
-                />
+              {items.map(item => (
+                <BuybackCard key={item.nft.id} item={item} ownerId={user.id} onSuccess={loadData} />
               ))}
             </div>
           </>

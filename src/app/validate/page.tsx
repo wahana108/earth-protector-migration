@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import {
   ChevronDown, ChevronUp, Loader2,
-  ShieldCheck, CheckSquare, Square, AlertTriangle,
+  ShieldCheck, CheckSquare, Square, AlertTriangle, Clock,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -83,6 +83,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     like_count: (data.like_count as number) ?? 0,
     comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+    purchased_at: (data.purchased_at as Timestamp)?.toDate?.() ?? undefined,
   };
 }
 
@@ -94,6 +95,7 @@ type PoolStatus = {
   jumlahNftValid: number;
   minPool: number;
   poolCukup: boolean;
+  minimumHoldingDays: number;
 };
 
 async function fetchPoolStatus(): Promise<PoolStatus> {
@@ -105,7 +107,12 @@ async function fetchPoolStatus(): Promise<PoolStatus> {
     ? ((poolSnap.data().jumlah_nft_valid as number) ?? 0)
     : 0;
   const minPool = config?.minimum_nft_pool_untuk_validasi ?? 90;
-  return { jumlahNftValid, minPool, poolCukup: jumlahNftValid >= minPool };
+  return {
+    jumlahNftValid,
+    minPool,
+    poolCukup: jumlahNftValid >= minPool,
+    minimumHoldingDays: config?.minimum_holding_days ?? 7,
+  };
 }
 
 async function fetchTopDeveloperProjects(): Promise<ProjectWithDev[]> {
@@ -179,10 +186,19 @@ interface ValidationPanelProps {
   project: ProjectWithDev;
   userId: string;
   isRevalidasi: boolean;
+  minimumHoldingDays: number;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
-function ValidationPanel({ project, userId, isRevalidasi, onValidated }: ValidationPanelProps) {
+function holdingCheck(nft: NFTUnit, days: number): { eligible: boolean; daysRemaining: number } {
+  if (days <= 0 || !nft.purchased_at) return { eligible: true, daysRemaining: 0 };
+  const holdingMs = Date.now() - (nft.purchased_at as Date).getTime();
+  const requiredMs = days * 86400000;
+  if (holdingMs >= requiredMs) return { eligible: true, daysRemaining: 0 };
+  return { eligible: false, daysRemaining: Math.ceil((requiredMs - holdingMs) / 86400000) };
+}
+
+function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, onValidated }: ValidationPanelProps) {
   const { emailVerified } = useAuth();
   const [loadingNfts, setLoadingNfts] = useState(true);
   const [eligibleNfts, setEligibleNfts] = useState<NFTUnit[]>([]);
@@ -196,6 +212,10 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
       .finally(() => setLoadingNfts(false));
   }, [userId]);
 
+  // Split NFTs into holding-eligible and holding-pending
+  const holdingEligibleNfts = eligibleNfts.filter(u => holdingCheck(u, minimumHoldingDays).eligible);
+  const holdingPendingNfts = eligibleNfts.filter(u => !holdingCheck(u, minimumHoldingDays).eligible);
+
   function toggleSelect(id: string) {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -206,14 +226,14 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
   }
 
   function toggleAll() {
-    if (selectedIds.size === eligibleNfts.length) {
+    if (selectedIds.size === holdingEligibleNfts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(eligibleNfts.map(u => u.id)));
+      setSelectedIds(new Set(holdingEligibleNfts.map(u => u.id)));
     }
   }
 
-  const totalSelisih = eligibleNfts
+  const totalSelisih = holdingEligibleNfts
     .filter(u => selectedIds.has(u.id))
     .reduce((sum, u) => sum + u.nilai_selisih, 0);
 
@@ -261,7 +281,7 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
     );
   }
 
-  const allSelected = selectedIds.size === eligibleNfts.length;
+  const allSelected = selectedIds.size === holdingEligibleNfts.length;
 
   return (
     <div className="border-t">
@@ -277,51 +297,98 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
       {/* Header panel */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">
         <p className="text-sm font-semibold">Pilih NFT untuk validasi</p>
-        <button
-          onClick={toggleAll}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {allSelected
-            ? <CheckSquare className="h-3.5 w-3.5" />
-            : <Square className="h-3.5 w-3.5" />
-          }
-          {allSelected ? 'Batal pilih semua' : 'Pilih semua'}
-        </button>
+        {holdingEligibleNfts.length > 0 && (
+          <button
+            onClick={toggleAll}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {allSelected
+              ? <CheckSquare className="h-3.5 w-3.5" />
+              : <Square className="h-3.5 w-3.5" />
+            }
+            {allSelected ? 'Batal pilih semua' : 'Pilih semua'}
+          </button>
+        )}
       </div>
 
-      {/* NFT list */}
-      <div className="divide-y border-y mx-4 rounded-lg overflow-hidden">
-        {eligibleNfts.map(unit => {
-          const isSelected = selectedIds.has(unit.id);
-          return (
-            <label
-              key={unit.id}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors text-sm',
-                isSelected ? 'bg-primary/5' : 'bg-card hover:bg-muted/40',
-              )}
-            >
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={() => toggleSelect(unit.id)}
-                className="shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{unit.nama_nft}</p>
-                <p className="text-xs text-muted-foreground truncate">{unit.nama_project}</p>
-              </div>
-              <div className="text-right shrink-0 space-y-0.5">
-                <p className="text-xs text-muted-foreground">
-                  Beli: {formatIDR(unit.harga_beli_terakhir)}
-                </p>
-                <p className="text-xs font-semibold text-green-600">
-                  +{formatIDR(unit.nilai_selisih)}
-                </p>
-              </div>
-            </label>
-          );
-        })}
-      </div>
+      {/* NFT list — eligible */}
+      {holdingEligibleNfts.length > 0 && (
+        <div className="divide-y border-y mx-4 rounded-lg overflow-hidden">
+          {holdingEligibleNfts.map(unit => {
+            const isSelected = selectedIds.has(unit.id);
+            return (
+              <label
+                key={unit.id}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors text-sm',
+                  isSelected ? 'bg-primary/5' : 'bg-card hover:bg-muted/40',
+                )}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleSelect(unit.id)}
+                  className="shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{unit.nama_nft}</p>
+                  <p className="text-xs text-muted-foreground truncate">{unit.nama_project}</p>
+                </div>
+                <div className="text-right shrink-0 space-y-0.5">
+                  <p className="text-xs text-muted-foreground">
+                    Beli: {formatIDR(unit.harga_beli_terakhir)}
+                  </p>
+                  <p className="text-xs font-semibold text-green-600">
+                    +{formatIDR(unit.nilai_selisih)}
+                  </p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {/* NFT list — holding period not met */}
+      {holdingPendingNfts.length > 0 && (
+        <div className="mx-4">
+          <p className="text-xs text-muted-foreground mt-3 mb-1.5 font-medium">
+            Belum memenuhi holding period ({minimumHoldingDays} hari):
+          </p>
+          <div className="divide-y border-y rounded-lg overflow-hidden">
+            {holdingPendingNfts.map(unit => {
+              const { daysRemaining } = holdingCheck(unit, minimumHoldingDays);
+              return (
+                <div
+                  key={unit.id}
+                  className="flex items-center gap-3 px-3 py-2.5 text-sm bg-muted/30 opacity-60"
+                >
+                  <Checkbox checked={false} disabled className="shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-muted-foreground">{unit.nama_nft}</p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                      <Clock className="h-3 w-3" />
+                      Eligible dalam {daysRemaining} hari
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 space-y-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      Beli: {formatIDR(unit.harga_beli_terakhir)}
+                    </p>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      +{formatIDR(unit.nilai_selisih)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {holdingEligibleNfts.length === 0 && holdingPendingNfts.length > 0 && (
+        <div className="mx-4 mt-2 mb-3 text-center text-sm text-muted-foreground">
+          <p>Semua NFT Anda belum memenuhi holding period minimum.</p>
+        </div>
+      )}
 
       {/* Footer: total + konfirmasi */}
       <div className="px-4 pt-3 pb-4 space-y-3">
@@ -345,7 +412,7 @@ function ValidationPanel({ project, userId, isRevalidasi, onValidated }: Validat
 
         <Button
           className="w-full"
-          disabled={selectedIds.size === 0 || submitting}
+          disabled={selectedIds.size === 0 || submitting || holdingEligibleNfts.length === 0}
           onClick={handleConfirm}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
@@ -363,10 +430,11 @@ interface ProjectValidasiCardProps {
   project: ProjectWithDev;
   userId: string;
   poolCukup: boolean;
+  minimumHoldingDays: number;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
-function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: ProjectValidasiCardProps) {
+function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, onValidated }: ProjectValidasiCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [justValidated, setJustValidated] = useState(false);
 
@@ -468,6 +536,7 @@ function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: Projec
           project={project}
           userId={userId}
           isRevalidasi={isRevalidasi}
+          minimumHoldingDays={minimumHoldingDays}
           onValidated={handleValidated}
         />
       )}
@@ -483,7 +552,7 @@ export default function ValidatePage() {
 
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectWithDev[]>([]);
-  const [poolStatus, setPoolStatus] = useState<PoolStatus>({ jumlahNftValid: 0, minPool: 90, poolCukup: false });
+  const [poolStatus, setPoolStatus] = useState<PoolStatus>({ jumlahNftValid: 0, minPool: 90, poolCukup: false, minimumHoldingDays: 7 });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -576,6 +645,7 @@ export default function ValidatePage() {
                 project={p}
                 userId={user!.id}
                 poolCukup={poolStatus.poolCukup}
+                minimumHoldingDays={poolStatus.minimumHoldingDays}
                 onValidated={handleValidated}
               />
             ))}
