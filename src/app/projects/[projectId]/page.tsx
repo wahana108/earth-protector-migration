@@ -4,7 +4,7 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  ArrowLeft, ExternalLink, ImageOff, Heart, MapPin, Calendar, Users, ShieldCheck,
+  ArrowLeft, ExternalLink, Heart, MapPin, Calendar, Users, ShieldCheck,
   CheckCircle2, XCircle, HelpCircle,
 } from 'lucide-react';
 import {
@@ -22,6 +22,7 @@ import {
   KATEGORI_LABELS,
   type Project, type NFTUnit, type ProjectCategory, type ValidatorEntry,
 } from '@/lib/types';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,25 +120,18 @@ type PageData = {
 // ─── Mini NFT Card ────────────────────────────────────────────────────────────
 
 function MiniNftCard({ unit }: { unit: NFTUnit }) {
-  const [imgError, setImgError] = useState(false);
   return (
     <Link
       href={`/nft/${unit.id}`}
       className="rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
       <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
-        {unit.gambar_url && !imgError ? (
-          <img
-            src={unit.gambar_url}
-            alt={unit.nama_nft}
-            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <ImageOff className="h-6 w-6" />
-          </div>
-        )}
+        <img
+          src={unit.gambar_url || getPlaceholder(unit.kategori)}
+          alt={unit.nama_nft}
+          className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
+          onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+        />
         <div className="absolute top-1.5 left-1.5">
           <Badge
             variant={unit.status === 'valid' ? 'default' : 'secondary'}
@@ -296,19 +290,14 @@ export default function ProjectDetailPage({
         </Button>
 
         {/* Hero image */}
-        {project.gambar_url ? (
-          <div className="aspect-video rounded-xl overflow-hidden bg-muted">
-            <img
-              src={project.gambar_url}
-              alt={project.nama_project}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="aspect-video rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
-            <ImageOff className="h-16 w-16" />
-          </div>
-        )}
+        <div className="aspect-video rounded-xl overflow-hidden bg-muted">
+          <img
+            src={project.gambar_url || getPlaceholder(project.kategori)}
+            alt={project.nama_project}
+            className="w-full h-full object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
+          />
+        </div>
 
         {/* Header */}
         <div className="space-y-3">

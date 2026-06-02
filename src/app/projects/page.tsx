@@ -124,7 +124,7 @@ function ProjectCard({ project }: { project: ProjectWithMeta }) {
         <img
           src={project.gambar_url || getPlaceholder(project.kategori)}
           alt={project.nama_project}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
         />
         <div className="absolute top-2 left-2">

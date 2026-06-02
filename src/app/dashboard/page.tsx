@@ -8,7 +8,7 @@ import {
   query, where, orderBy, limit, Timestamp,
 } from 'firebase/firestore';
 import {
-  PlusCircle, Loader2, Lock, Pencil, ImageOff,
+  PlusCircle, Loader2, Lock, Pencil,
   RefreshCcw, TrendingDown, TrendingUp, Minus, Upload,
 } from 'lucide-react';
 
@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError } from '@/lib/projects';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -435,8 +436,6 @@ interface DaftarNFTProps {
 }
 
 function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback, onTransferPool }: DaftarNFTProps) {
-  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
-
   if (units.length === 0) {
     return (
       <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
@@ -451,7 +450,6 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback
   return (
     <div className="space-y-3">
       {units.map((unit) => {
-        const imgErr = imgErrors.has(unit.id);
         const locked = unit.digunakan_validasi;
         const canBuyback = !locked && unit.owner_id !== unit.developer_id;
 
@@ -462,18 +460,12 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback
           >
             {/* Thumbnail */}
             <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden shrink-0">
-              {unit.gambar_url && !imgErr ? (
-                <img
-                  src={unit.gambar_url}
-                  alt={unit.nama_nft}
-                  className="w-full h-full object-cover"
-                  onError={() => setImgErrors((prev) => new Set(prev).add(unit.id))}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                  <ImageOff className="h-5 w-5" />
-                </div>
-              )}
+              <img
+                src={unit.gambar_url || getPlaceholder(unit.kategori)}
+                alt={unit.nama_nft}
+                className="w-full h-full object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+              />
             </div>
 
             {/* Info */}
@@ -610,30 +602,21 @@ interface ProjectSayaProps {
 }
 
 function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSayaProps) {
-  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
-
   return (
     <div className="space-y-3">
       {projects.map((project) => {
         const stillOwned = ownedCountByProject[project.id] ?? 0;
         const terjual = project.jumlah_nft - stillOwned;
-        const imgErr = imgErrors.has(project.id);
 
         return (
           <div key={project.id} className="flex gap-3 rounded-xl border bg-card p-3 items-start">
             <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden shrink-0 relative group/img">
-              {project.gambar_url && !imgErr ? (
-                <img
-                  src={project.gambar_url}
-                  alt={project.nama_project}
-                  className="w-full h-full object-cover"
-                  onError={() => setImgErrors((prev) => new Set(prev).add(project.id))}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                  <ImageOff className="h-5 w-5" />
-                </div>
-              )}
+              <img
+                src={project.gambar_url || getPlaceholder(project.kategori)}
+                alt={project.nama_project}
+                className="w-full h-full object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
+              />
             </div>
 
             <div className="flex-1 min-w-0 space-y-1">

@@ -558,7 +558,7 @@ function NftUnitCard({
         <img
           src={unit.gambar_url || getPlaceholder(unit.kategori)}
           alt={unit.nama_nft}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
         />
 

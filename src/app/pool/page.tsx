@@ -414,7 +414,7 @@ function NftPoolCard({ unit, currentUserId, isTopDeveloper, onBuy }: NftPoolCard
         <img
           src={unit.gambar_url || getPlaceholder(unit.kategori)}
           alt={unit.nama_nft}
-          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
           onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
         />
         <div className="absolute top-2 left-2 z-10">
@@ -490,7 +490,7 @@ function FifoCard({ unit, userId, onBuy, onSkip }: FifoCardProps) {
           <img
             src={unit.gambar_url || getPlaceholder(unit.kategori)}
             alt={unit.nama_nft}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
           />
         </div>

@@ -154,7 +154,7 @@ function BuybackCard({
           <img
             src={unit.gambar_url || getPlaceholder(unit.kategori)}
             alt={unit.nama_nft}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
           />
           <div className="absolute top-1.5 left-1.5">

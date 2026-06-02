@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { getPlaceholder } from '@/lib/category-placeholders';
 import { db } from '@/lib/firebase';
 import { KATEGORI_LABELS, type ProjectCategory } from '@/lib/types';
 
@@ -212,17 +213,12 @@ export default function HomePage() {
                   className="rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow flex flex-col"
                 >
                   <div className="aspect-video bg-muted overflow-hidden">
-                    {project.gambar_url ? (
-                      <img
-                        src={project.gambar_url}
-                        alt={project.nama_project}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <FolderOpen className="h-8 w-8" />
-                      </div>
-                    )}
+                    <img
+                      src={project.gambar_url || getPlaceholder(project.kategori)}
+                      alt={project.nama_project}
+                      className="w-full h-full object-contain hover:scale-105 transition-transform duration-300"
+                      onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
+                    />
                   </div>
                   <div className="p-3 space-y-1.5">
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">

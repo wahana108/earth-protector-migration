@@ -4,7 +4,7 @@ import { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  ArrowLeft, ExternalLink, ImageOff, Heart, Loader2, ShoppingCart, Flag, Trash2,
+  ArrowLeft, ExternalLink, Heart, Loader2, ShoppingCart, Flag, Trash2,
 } from 'lucide-react';
 import {
   collection, doc, getDoc, getDocs, query, orderBy, limit, Timestamp,
@@ -26,6 +26,7 @@ import { buyNftUnit, BuyError, toggleNftLike } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -448,8 +449,6 @@ export default function NftDetailPage({
   const [data, setData] = useState<PageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
-  const [imgError, setImgError] = useState(false);
-
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
@@ -593,18 +592,12 @@ export default function NftDetailPage({
 
         {/* Gambar */}
         <div className="aspect-video rounded-xl overflow-hidden bg-muted">
-          {unit.gambar_url && !imgError ? (
-            <img
-              src={unit.gambar_url}
-              alt={unit.nama_nft}
-              className="w-full h-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <ImageOff className="h-16 w-16" />
-            </div>
-          )}
+          <img
+            src={unit.gambar_url || getPlaceholder(unit.kategori)}
+            alt={unit.nama_nft}
+            className="w-full h-full object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+          />
         </div>
 
         {/* Info utama */}

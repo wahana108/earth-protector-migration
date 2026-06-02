@@ -7,7 +7,7 @@ import {
   query, where, orderBy, limit, Timestamp,
 } from 'firebase/firestore';
 import {
-  ChevronDown, ChevronUp, ImageOff, Loader2,
+  ChevronDown, ChevronUp, Loader2,
   ShieldCheck, CheckSquare, Square, AlertTriangle,
 } from 'lucide-react';
 
@@ -24,6 +24,7 @@ import { validateProject, ValidasiError } from '@/lib/projects';
 import type { Project, NFTUnit, ProjectCategory } from '@/lib/types';
 import { KATEGORI_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -366,7 +367,6 @@ interface ProjectValidasiCardProps {
 }
 
 function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: ProjectValidasiCardProps) {
-  const [imgError, setImgError] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [justValidated, setJustValidated] = useState(false);
 
@@ -392,18 +392,12 @@ function ProjectValidasiCard({ project, userId, poolCukup, onValidated }: Projec
       <div className="flex gap-4 p-4">
         {/* Thumbnail */}
         <div className="w-20 h-20 rounded-lg bg-muted overflow-hidden shrink-0">
-          {project.gambar_url && !imgError ? (
-            <img
-              src={project.gambar_url}
-              alt={project.nama_project}
-              className="w-full h-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <ImageOff className="h-5 w-5" />
-            </div>
-          )}
+          <img
+            src={project.gambar_url || getPlaceholder(project.kategori)}
+            alt={project.nama_project}
+            className="w-full h-full object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
+          />
         </div>
 
         {/* Info */}
