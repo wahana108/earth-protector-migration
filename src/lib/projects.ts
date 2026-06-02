@@ -201,6 +201,7 @@ export async function buyNftUnit(
   buyerId: string,
   harga_dasar: number,
   batas_atas: number,
+  options?: { transaction_description?: string; proof_link?: string },
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
@@ -316,6 +317,8 @@ export async function buyNftUnit(
       ke: buyerId,
       harga: harga_jual,
       timestamp: serverTimestamp(),
+      ...(options?.transaction_description && { transaction_description: options.transaction_description }),
+      ...(options?.proof_link && { proof_link: options.proof_link }),
     });
   });
 

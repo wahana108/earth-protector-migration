@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#d1fae5"/>
+  <!-- trunk -->
+  <rect x="190" y="185" width="20" height="50" rx="4" fill="#6b7280"/>
+  <!-- canopy layers -->
+  <polygon points="200,60 240,130 160,130" fill="#059669"/>
+  <polygon points="200,90 250,170 150,170" fill="#10b981"/>
+  <polygon points="200,120 255,195 145,195" fill="#34d399"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#065f46" text-anchor="middle">Tree Planting</text>
+</svg>

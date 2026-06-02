@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#fecaca"/>
+  <!-- heart shape -->
+  <path d="M200,220 C200,220 100,165 100,115 C100,85 120,65 150,65 C168,65 185,75 200,92 C215,75 232,65 250,65 C280,65 300,85 300,115 C300,165 200,220 200,220 Z" fill="#dc2626"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#7f1d1d" text-anchor="middle">Kesehatan</text>
+</svg>

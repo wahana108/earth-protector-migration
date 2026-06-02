@@ -6,7 +6,7 @@ import {
   collection, query, where, orderBy, limit,
   getDocs, getDoc, doc, Timestamp,
 } from 'firebase/firestore';
-import { Search, ExternalLink, ImageOff, Heart, Loader2 } from 'lucide-react';
+import { Search, ExternalLink, Heart, Loader2 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import {
   type Project, type ProjectCategory,
 } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,25 +115,18 @@ async function fetchProjects(kat: ProjectCategory | 'semua'): Promise<ProjectWit
 // ─── Project Card ─────────────────────────────────────────────────────────────
 
 function ProjectCard({ project }: { project: ProjectWithMeta }) {
-  const [imgError, setImgError] = useState(false);
   const isInvalidasi = project.status_project === 'dalam_invalidasi';
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
       {/* Gambar — link ke detail */}
       <Link href={`/projects/${project.id}`} className="aspect-video bg-muted relative overflow-hidden block shrink-0 group">
-        {project.gambar_url && !imgError ? (
-          <img
-            src={project.gambar_url}
-            alt={project.nama_project}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <ImageOff className="h-10 w-10" />
-          </div>
-        )}
+        <img
+          src={project.gambar_url || getPlaceholder(project.kategori)}
+          alt={project.nama_project}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(project.kategori); }}
+        />
         <div className="absolute top-2 left-2">
           <Badge
             variant={isInvalidasi ? 'destructive' : 'default'}

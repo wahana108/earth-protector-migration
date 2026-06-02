@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#f3f4f6"/>
+  <!-- image placeholder icon: rectangle with mountain and sun -->
+  <rect x="120" y="90" width="160" height="120" rx="8" fill="none" stroke="#9ca3af" stroke-width="5"/>
+  <circle cx="160" cy="125" r="15" fill="#d1d5db"/>
+  <polyline points="120,185 165,145 195,175 225,150 280,210" stroke="#9ca3af" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#4b5563" text-anchor="middle">Lainnya</text>
+</svg>

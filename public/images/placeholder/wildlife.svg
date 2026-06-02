@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#fef3c7"/>
+  <!-- paw print: main pad -->
+  <ellipse cx="200" cy="175" rx="38" ry="30" fill="#d97706"/>
+  <!-- toe pads -->
+  <ellipse cx="160" cy="130" rx="18" ry="16" fill="#d97706"/>
+  <ellipse cx="200" cy="118" rx="18" ry="16" fill="#d97706"/>
+  <ellipse cx="240" cy="130" rx="18" ry="16" fill="#d97706"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#78350f" text-anchor="middle">Wildlife</text>
+</svg>

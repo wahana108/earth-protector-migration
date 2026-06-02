@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#e5e7eb"/>
+  <!-- leaf with downward arrow = carbon reduction -->
+  <path d="M200,70 C235,70 270,105 270,145 C270,185 235,205 200,215 C165,205 130,185 130,145 C130,105 165,70 200,70 Z" fill="#6b7280"/>
+  <line x1="200" y1="80" x2="200" y2="210" stroke="#d1d5db" stroke-width="3" stroke-linecap="round"/>
+  <!-- down arrow -->
+  <line x1="200" y1="225" x2="200" y2="248" stroke="#374151" stroke-width="6" stroke-linecap="round"/>
+  <polyline points="185,235 200,252 215,235" stroke="#374151" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="200" y="285" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#1f2937" text-anchor="middle">Carbon Reduction</text>
+</svg>

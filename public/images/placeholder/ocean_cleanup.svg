@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#bfdbfe"/>
+  <!-- waves -->
+  <path d="M60,120 Q100,90 140,120 Q180,150 220,120 Q260,90 300,120 Q340,150 360,130" stroke="#1d4ed8" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M60,155 Q100,125 140,155 Q180,185 220,155 Q260,125 300,155 Q340,185 360,165" stroke="#2563eb" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M60,190 Q100,160 140,190 Q180,220 220,190 Q260,160 300,190 Q340,220 360,200" stroke="#3b82f6" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#1e3a8a" text-anchor="middle">Ocean Cleanup</text>
+</svg>

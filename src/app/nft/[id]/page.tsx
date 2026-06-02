@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -61,6 +62,8 @@ type HistoryItem = {
   ke_name: string;
   harga: number;
   timestamp: Date;
+  transaction_description?: string;
+  proof_link?: string;
 };
 
 // ─── Converter ────────────────────────────────────────────────────────────────
@@ -106,12 +109,17 @@ function BuyDialog({
 }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
+  const [txDescription, setTxDescription] = useState('');
+  const [proofLink, setProofLink] = useState('');
 
   async function handleConfirm() {
     setBuying(true);
     setError('');
     try {
-      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas);
+      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas, {
+        transaction_description: txDescription.trim() || undefined,
+        proof_link: proofLink.trim() || undefined,
+      });
       onSuccess();
       onClose();
     } catch (err: unknown) {
@@ -168,6 +176,25 @@ function BuyDialog({
               NFT ini dijual di harga dasar — neraca tidak berubah untuk kedua pihak.
             </p>
           )}
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Keterangan (opsional)</p>
+            <Textarea
+              placeholder="Deskripsi singkat alasan pembelian..."
+              value={txDescription}
+              onChange={(e) => setTxDescription(e.target.value)}
+              rows={2}
+              className="text-sm resize-none"
+              disabled={buying}
+            />
+            <Input
+              placeholder="Link bukti transaksi (opsional)"
+              value={proofLink}
+              onChange={(e) => setProofLink(e.target.value)}
+              className="text-sm"
+              disabled={buying}
+            />
+          </div>
 
           {error && (
             <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
@@ -489,6 +516,8 @@ export default function NftDetailPage({
           ke: d.data().ke as string,
           harga: (d.data().harga as number) ?? 0,
           timestamp: (d.data().timestamp as Timestamp)?.toDate() ?? new Date(),
+          transaction_description: (d.data().transaction_description as string) || undefined,
+          proof_link: (d.data().proof_link as string) || undefined,
         }));
 
         const uniqueIds = [...new Set(raw.flatMap(h => [h.dari, h.ke]))];
@@ -509,6 +538,8 @@ export default function NftDetailPage({
             ke_name: nameMap[h.ke] ?? h.ke.slice(0, 8) + '…',
             harga: h.harga,
             timestamp: h.timestamp,
+            transaction_description: h.transaction_description,
+            proof_link: h.proof_link,
           })),
         );
       })
@@ -692,17 +723,44 @@ export default function NftDetailPage({
                 </thead>
                 <tbody>
                   {history.map((h, i) => (
-                    <tr
-                      key={h.id}
-                      className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
-                    >
-                      <td className="px-3 py-2 font-medium">{h.dari_name}</td>
-                      <td className="px-3 py-2 font-medium">{h.ke_name}</td>
-                      <td className="px-3 py-2 text-right">{formatIDR(h.harga)}</td>
-                      <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                        {relativeTime(h.timestamp)}
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={h.id}
+                        className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
+                      >
+                        <td className="px-3 py-2 font-medium">{h.dari_name}</td>
+                        <td className="px-3 py-2 font-medium">{h.ke_name}</td>
+                        <td className="px-3 py-2 text-right">{formatIDR(h.harga)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                          {relativeTime(h.timestamp)}
+                        </td>
+                      </tr>
+                      {(h.transaction_description || h.proof_link) && (
+                        <tr
+                          key={`${h.id}-note`}
+                          className={cn('border-t border-dashed', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
+                        >
+                          <td colSpan={4} className="px-3 pb-2 pt-0.5">
+                            {h.transaction_description && (
+                              <p className="text-xs text-muted-foreground italic">
+                                {h.transaction_description}
+                              </p>
+                            )}
+                            {h.proof_link && (
+                              <a
+                                href={h.proof_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline mt-0.5"
+                              >
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                                Bukti transaksi
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>

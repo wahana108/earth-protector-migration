@@ -7,7 +7,7 @@ import {
   query, where, orderBy, limit, Timestamp,
 } from 'firebase/firestore';
 import {
-  ImageOff, Loader2, ShoppingCart, Heart,
+  Loader2, ShoppingCart, Heart,
   Layers, AlertTriangle, ListOrdered, SkipForward,
 } from 'lucide-react';
 
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -35,6 +36,7 @@ import { getCommunityConfig } from '@/lib/community-config';
 import { buyNftUnit, BuyError, skipFifoNft, SkipFifoError } from '@/lib/projects';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,12 +136,17 @@ interface BuyDialogProps {
 function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
+  const [txDescription, setTxDescription] = useState('');
+  const [proofLink, setProofLink] = useState('');
 
   async function handleConfirm() {
     setBuying(true);
     setError('');
     try {
-      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas);
+      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas, {
+        transaction_description: txDescription.trim() || undefined,
+        proof_link: proofLink.trim() || undefined,
+      });
       onSuccess(unit.id);
       onClose();
     } catch (err: unknown) {
@@ -174,6 +181,24 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
             <Layers className="h-3 w-3" />
             NFT dari Pool Rekomendasi
           </Badge>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Keterangan (opsional)</p>
+            <Textarea
+              placeholder="Deskripsi singkat alasan pembelian..."
+              value={txDescription}
+              onChange={(e) => setTxDescription(e.target.value)}
+              rows={2}
+              className="text-sm resize-none"
+              disabled={buying}
+            />
+            <Input
+              placeholder="Link bukti transaksi (opsional)"
+              value={proofLink}
+              onChange={(e) => setProofLink(e.target.value)}
+              className="text-sm"
+              disabled={buying}
+            />
+          </div>
           {error && (
             <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{error}</p>
           )}
@@ -379,7 +404,6 @@ interface NftPoolCardProps {
 }
 
 function NftPoolCard({ unit, currentUserId, isTopDeveloper, onBuy }: NftPoolCardProps) {
-  const [imgError, setImgError] = useState(false);
   const isOwn = !!currentUserId && currentUserId === unit.owner_id;
   const canBuy = !!currentUserId && !isOwn && unit.for_sale && !isTopDeveloper;
 
@@ -387,18 +411,12 @@ function NftPoolCard({ unit, currentUserId, isTopDeveloper, onBuy }: NftPoolCard
     <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
       <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
         <Link href={`/nft/${unit.id}`} className="absolute inset-0 z-0" aria-label={unit.nama_nft} />
-        {unit.gambar_url && !imgError ? (
-          <img
-            src={unit.gambar_url}
-            alt={unit.nama_nft}
-            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <ImageOff className="h-10 w-10" />
-          </div>
-        )}
+        <img
+          src={unit.gambar_url || getPlaceholder(unit.kategori)}
+          alt={unit.nama_nft}
+          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+          onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+        />
         <div className="absolute top-2 left-2 z-10">
           <Badge className="text-xs gap-1 bg-amber-500 hover:bg-amber-500 text-white">
             <Layers className="h-2.5 w-2.5" />
@@ -462,7 +480,6 @@ interface FifoCardProps {
 }
 
 function FifoCard({ unit, userId, onBuy, onSkip }: FifoCardProps) {
-  const [imgError, setImgError] = useState(false);
   const isOwn = unit.owner_id === userId;
   const canBuy = !isOwn && unit.for_sale;
 
@@ -470,18 +487,12 @@ function FifoCard({ unit, userId, onBuy, onSkip }: FifoCardProps) {
     <div className="rounded-xl border-2 border-primary/30 bg-card overflow-hidden">
       <div className="flex gap-4 p-4">
         <div className="w-24 h-24 rounded-lg bg-muted overflow-hidden shrink-0">
-          {unit.gambar_url && !imgError ? (
-            <img
-              src={unit.gambar_url}
-              alt={unit.nama_nft}
-              className="w-full h-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-              <ImageOff className="h-6 w-6" />
-            </div>
-          )}
+          <img
+            src={unit.gambar_url || getPlaceholder(unit.kategori)}
+            alt={unit.nama_nft}
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+          />
         </div>
 
         <div className="flex-1 min-w-0 space-y-1.5">

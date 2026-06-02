@@ -8,7 +8,7 @@ import {
   getDocs, getDoc, doc, Timestamp,
 } from 'firebase/firestore';
 import {
-  Heart, ImageOff, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag, ExternalLink, Search,
+  Heart, Pencil, Loader2, ShoppingCart, MessageCircle, Trash2, Flag, ExternalLink, Search,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -35,6 +35,7 @@ import {
   type NFTUnit, type ProjectCategory, type Comment,
 } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlaceholder } from '@/lib/category-placeholders';
 
 const PAGE_SIZE = 24;
 
@@ -99,6 +100,8 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   const [linkBukti, setLinkBukti] = useState<string | null>(null);
+  const [txDescription, setTxDescription] = useState('');
+  const [proofLink, setProofLink] = useState('');
 
   useEffect(() => {
     if (!unit.project_id) return;
@@ -117,7 +120,10 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
     setBuying(true);
     setError('');
     try {
-      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas);
+      await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas, {
+        transaction_description: txDescription.trim() || undefined,
+        proof_link: proofLink.trim() || undefined,
+      });
       onSuccess(unit.id, buyerId);
       onClose();
     } catch (err: unknown) {
@@ -178,6 +184,25 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
               NFT ini dijual di harga dasar — neraca tidak berubah untuk kedua pihak.
             </p>
           )}
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Keterangan (opsional)</p>
+            <Textarea
+              placeholder="Deskripsi singkat alasan pembelian..."
+              value={txDescription}
+              onChange={(e) => setTxDescription(e.target.value)}
+              rows={2}
+              className="text-sm resize-none"
+              disabled={buying}
+            />
+            <Input
+              placeholder="Link bukti transaksi (opsional)"
+              value={proofLink}
+              onChange={(e) => setProofLink(e.target.value)}
+              className="text-sm"
+              disabled={buying}
+            />
+          </div>
 
           {error && (
             <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
@@ -512,7 +537,6 @@ function NftUnitCard({
   unit, isLiked, likingId, buyingId, currentUserId, currentUserDisplayName,
   configLoaded, onLike, onBuy, onEditGambar,
 }: NftUnitCardProps) {
-  const [imgError, setImgError] = useState(false);
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [hasCommentPanelMounted, setHasCommentPanelMounted] = useState(false);
   const [localCount, setLocalCount] = useState(unit.comment_count);
@@ -531,18 +555,12 @@ function NftUnitCard({
       {/* Gambar */}
       <div className="aspect-video bg-muted relative overflow-hidden shrink-0">
         <Link href={`/nft/${unit.id}`} className="absolute inset-0 z-0" aria-label={unit.nama_nft} />
-        {unit.gambar_url && !imgError ? (
-          <img
-            src={unit.gambar_url}
-            alt={unit.nama_nft}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <ImageOff className="h-10 w-10" />
-          </div>
-        )}
+        <img
+          src={unit.gambar_url || getPlaceholder(unit.kategori)}
+          alt={unit.nama_nft}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(unit.kategori); }}
+        />
 
         {/* Status badge */}
         <div className="absolute top-2 left-2 z-10">

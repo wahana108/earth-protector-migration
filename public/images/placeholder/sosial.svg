@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#fbcfe8"/>
+  <!-- two people silhouettes -->
+  <!-- person left -->
+  <circle cx="155" cy="105" r="25" fill="#be185d"/>
+  <path d="M100,210 Q100,155 155,155 Q210,155 210,210 Z" fill="#be185d"/>
+  <!-- person right -->
+  <circle cx="245" cy="105" r="25" fill="#ec4899"/>
+  <path d="M190,210 Q190,155 245,155 Q300,155 300,210 Z" fill="#ec4899"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#831843" text-anchor="middle">Sosial</text>
+</svg>
