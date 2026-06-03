@@ -26,6 +26,7 @@ export type User = {
   isTopDeveloper?: boolean;
   validator_aktif?: ValidatorAktif[];
   pending_seller_actions?: number;
+  pending_buyback_actions?: number;
   total_poin_pending?: number;
 };
 

@@ -1115,7 +1115,7 @@ export async function createBuybackRequest(
   });
 
   batch.update(doc(db, 'nft_units', nftUnitId), { buyback_pending: true });
-  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(1) });
+  batch.update(doc(db, 'users', sellerId), { pending_buyback_actions: increment(1) });
 
   await batch.commit();
   return requestRef.id;
@@ -1148,7 +1148,7 @@ export async function confirmBuybackRequest(
     auto_complete_at: autoCompleteAt,
     updated_at: serverTimestamp(),
   });
-  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(-1) });
+  batch.update(doc(db, 'users', sellerId), { pending_buyback_actions: increment(-1) });
   await batch.commit();
 }
 
@@ -1169,7 +1169,7 @@ export async function rejectBuybackRequest(
   const batch = writeBatch(db);
   batch.update(requestRef, { status: 'rejected', rejection_reason: reason, updated_at: serverTimestamp() });
   batch.update(doc(db, 'nft_units', request.nft_unit_id as string), { buyback_pending: false });
-  batch.update(doc(db, 'users', sellerId), { pending_seller_actions: increment(-1) });
+  batch.update(doc(db, 'users', sellerId), { pending_buyback_actions: increment(-1) });
   await batch.commit();
 }
 
@@ -1246,7 +1246,7 @@ export async function cancelBuybackRequest(
   batch.update(requestRef, { status: 'cancelled', updated_at: serverTimestamp() });
   batch.update(doc(db, 'nft_units', request.nft_unit_id as string), { buyback_pending: false });
   if (wasPending) {
-    batch.update(doc(db, 'users', request.seller_id as string), { pending_seller_actions: increment(-1) });
+    batch.update(doc(db, 'users', request.seller_id as string), { pending_buyback_actions: increment(-1) });
   }
   await batch.commit();
 }

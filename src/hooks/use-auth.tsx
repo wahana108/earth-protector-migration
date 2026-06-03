@@ -56,6 +56,7 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
       buybackCount: data.buybackCount ?? 0,
       isTopDeveloper: data.isTopDeveloper ?? false,
       pending_seller_actions: (data.pending_seller_actions as number) ?? 0,
+      pending_buyback_actions: (data.pending_buyback_actions as number) ?? 0,
       total_poin_pending: (data.total_poin_pending as number) ?? 0,
     };
   }
