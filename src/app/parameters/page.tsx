@@ -39,6 +39,7 @@ type EditValues = {
   minimum_holding_days: number;
   purchase_autoclose_days: number;
   max_projects_per_user: number;
+  min_realisasi_pct_untuk_create: number;
   fase_aktif: number;
   ai_provider: string;
   anomali_flag: number;
@@ -61,7 +62,8 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
     minimum_holding_days: c.minimum_holding_days ?? 7,
     purchase_autoclose_days: c.purchase_autoclose_days ?? 7,
-    max_projects_per_user: c.max_projects_per_user ?? 5,
+    max_projects_per_user: c.max_projects_per_user ?? 10,
+    min_realisasi_pct_untuk_create: c.min_realisasi_pct_untuk_create ?? 20,
     fase_aktif: c.fase_aktif,
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
@@ -85,6 +87,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     minimum_holding_days: e.minimum_holding_days,
     purchase_autoclose_days: e.purchase_autoclose_days,
     max_projects_per_user: e.max_projects_per_user,
+    min_realisasi_pct_untuk_create: e.min_realisasi_pct_untuk_create,
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
@@ -450,6 +453,8 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <EditRow label="Maks. project per user" value={editValues.max_projects_per_user}
                     onChange={v => setField('max_projects_per_user', v as number)} />
+                  <EditRow label="Min. Realisasi untuk Buat Project (%)" value={editValues.min_realisasi_pct_untuk_create}
+                    onChange={v => setField('min_realisasi_pct_untuk_create', v as number)} />
                 </CardContent>
               </Card>
 
@@ -564,12 +569,31 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <ParamRow label="Auto-close Pembelian & Buyback"
                     value={`${config.purchase_autoclose_days ?? 7} hari`} />
-                  <ParamRow label="Maks. Project per User"
-                    value={`${config.max_projects_per_user ?? 5} project`} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Jika seller tidak mengkonfirmasi atau pembeli tidak menyelesaikan buyback
                       dalam batas waktu ini, sistem akan menyelesaikan transaksi secara otomatis.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Batas Project
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Maks. Project per User"
+                    value={`${config.max_projects_per_user ?? 10} project`} />
+                  <ParamRow label="Min. Realisasi untuk Buat Project"
+                    value={`${config.min_realisasi_pct_untuk_create ?? 20}%`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Project baru hanya bisa dibuat jika realisasi transaksi
+                      (terjual + buyback / total diterbitkan) memenuhi minimum ini.
+                      Project pertama selalu diizinkan.
                     </p>
                   </div>
                 </CardContent>

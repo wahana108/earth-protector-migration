@@ -10,6 +10,7 @@ import {
 import {
   PlusCircle, Loader2, Lock, Pencil,
   RefreshCcw, TrendingDown, TrendingUp, Minus, Upload, UserX, ShieldOff,
+  CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -24,9 +25,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
+import { getCommunityConfig } from '@/lib/community-config';
 import type { UserBlock } from '@/lib/types';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -683,6 +685,69 @@ function ProjectSaya({ projects, ownedCountByProject, onEditGambar }: ProjectSay
   );
 }
 
+// ─── Status Realisasi ─────────────────────────────────────────────────────────
+
+function StatusRealisasi({
+  realisasi, minPct,
+}: {
+  realisasi: RealisasiResult;
+  minPct: number;
+}) {
+  const { total_nft_diterbitkan, total_terjual, total_buyback, realisasi_pct, can_create } = realisasi;
+
+  if (total_nft_diterbitkan === 0) return null;
+
+  const barPct = Math.min(100, Math.round(realisasi_pct / minPct * 100));
+
+  return (
+    <Card>
+      <CardHeader className="pb-1">
+        <CardTitle className="text-xs font-medium text-muted-foreground">Status Realisasi Project</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <p className="text-muted-foreground">Diterbitkan</p>
+            <p className="font-semibold">{total_nft_diterbitkan}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Terjual</p>
+            <p className="font-semibold">{total_terjual}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Buyback</p>
+            <p className="font-semibold">{total_buyback}</p>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{realisasi_pct}%</span>
+            <span>min {minPct}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all',
+                can_create ? 'bg-green-500' : 'bg-red-500',
+              )}
+              style={{ width: `${barPct}%` }}
+            />
+          </div>
+        </div>
+        <div className={cn(
+          'flex items-center gap-1.5 text-xs',
+          can_create ? 'text-green-700' : 'text-red-600',
+        )}>
+          {can_create
+            ? <><CheckCircle2 className="h-3.5 w-3.5" /> Boleh buat project baru</>
+            : <><AlertTriangle className="h-3.5 w-3.5" /> Perlu {minPct - realisasi_pct}% lagi untuk buat project baru</>
+          }
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function DashboardSkeleton() {
@@ -716,6 +781,8 @@ export default function DashboardPage() {
   const [totalPoinPending, setTotalPoinPending] = useState(0);
   const [soldNfts, setSoldNfts] = useState(0);
   const [buybackCount, setBuybackCount] = useState(0);
+  const [realisasi, setRealisasi] = useState<RealisasiResult | null>(null);
+  const [minRealisasiPct, setMinRealisasiPct] = useState(20);
   const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
   const [logs, setLogs] = useState<NeracaLog[]>([]);
   const [myProjects, setMyProjects] = useState<Project[]>([]);
@@ -735,7 +802,7 @@ export default function DashboardPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [userSnap, unitsSnap, logsSnap, projectsSnap] = await Promise.all([
+      const [userSnap, unitsSnap, logsSnap, projectsSnap, realResult, cfg] = await Promise.all([
         getDoc(doc(db, 'users', user.id)),
         getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
         getDocs(query(
@@ -744,7 +811,11 @@ export default function DashboardPage() {
           limit(20),
         )),
         getDocs(query(collection(db, 'projects'), where('developer_id', '==', user.id))),
+        calculateRealisasiPct(user.id),
+        getCommunityConfig(),
       ]);
+      setRealisasi(realResult);
+      setMinRealisasiPct(cfg?.min_realisasi_pct_untuk_create ?? 20);
 
       if (userSnap.exists()) {
         const d = userSnap.data();
@@ -890,6 +961,9 @@ export default function DashboardPage() {
                 soldNfts={soldNfts}
                 buybackCount={buybackCount}
               />
+              {realisasi && (
+                <StatusRealisasi realisasi={realisasi} minPct={minRealisasiPct} />
+              )}
             </section>
 
             {/* ── 2. NFT Dimiliki ── */}

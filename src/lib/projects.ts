@@ -31,14 +31,88 @@ export type CreateProjectInput = {
   fee_project_pct?: number;
 };
 
+export type RealisasiResult = {
+  total_nft_diterbitkan: number;
+  total_terjual: number;
+  total_buyback: number;
+  realisasi_pct: number;
+  can_create: boolean;
+  reason: string | null;
+};
+
+export async function calculateRealisasiPct(userId: string): Promise<RealisasiResult> {
+  const [config, projectsSnap, userSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDocs(query(collection(db, 'projects'), where('developer_id', '==', userId))),
+    getDoc(doc(db, 'users', userId)),
+  ]);
+
+  const minPct = config?.min_realisasi_pct_untuk_create ?? 20;
+  const activeProjects = projectsSnap.docs.filter(
+    d => (d.data().status as string | undefined) !== 'deleted',
+  );
+
+  if (activeProjects.length === 0) {
+    return {
+      total_nft_diterbitkan: 0,
+      total_terjual: 0,
+      total_buyback: 0,
+      realisasi_pct: 100,
+      can_create: true,
+      reason: null,
+    };
+  }
+
+  const nftSnaps = await Promise.all(
+    activeProjects.map(p =>
+      getDocs(query(collection(db, 'nft_units'), where('project_id', '==', p.id))),
+    ),
+  );
+
+  let total_nft_diterbitkan = 0;
+  let total_terjual = 0;
+
+  activeProjects.forEach((p, i) => {
+    const jumlah = (p.data().jumlah_nft as number) ?? 0;
+    total_nft_diterbitkan += jumlah;
+    const developerId = p.data().developer_id as string;
+    nftSnaps[i].docs.forEach(u => {
+      if ((u.data().owner_id as string) !== developerId) total_terjual++;
+    });
+  });
+
+  const total_buyback = (userSnap.exists() ? (userSnap.data().buybackCount as number) : 0) ?? 0;
+
+  const realisasi_pct = total_nft_diterbitkan > 0
+    ? Math.round((total_terjual + total_buyback) / total_nft_diterbitkan * 100)
+    : 100;
+
+  const can_create = realisasi_pct >= minPct;
+  const reason = can_create ? null :
+    `Realisasi transaksi Anda saat ini ${realisasi_pct}%. Minimal ${minPct}% diperlukan untuk membuat project baru. Tingkatkan penjualan atau buyback project yang ada.`;
+
+  return { total_nft_diterbitkan, total_terjual, total_buyback, realisasi_pct, can_create, reason };
+}
+
 export async function createProject(input: CreateProjectInput): Promise<string> {
-  // Cek batas maksimum project per user
   const [config, existingSnap] = await Promise.all([
     getCommunityConfig(),
     getDocs(query(collection(db, 'projects'), where('developer_id', '==', input.developer_id))),
   ]);
-  const maxProjects = config?.max_projects_per_user ?? 5;
-  const activeCount = existingSnap.docs.filter(d => (d.data().status as string | undefined) !== 'deleted').length;
+
+  const activeProjects = existingSnap.docs.filter(
+    d => (d.data().status as string | undefined) !== 'deleted',
+  );
+  const activeCount = activeProjects.length;
+
+  // Project pertama selalu boleh; sesudahnya cek realisasi
+  if (activeCount >= 1) {
+    const realisasi = await calculateRealisasiPct(input.developer_id);
+    if (!realisasi.can_create) throw new Error(realisasi.reason!);
+  }
+
+  // Safety net: batas absolut
+  const maxProjects = config?.max_projects_per_user ?? 10;
   if (activeCount >= maxProjects) {
     throw new Error(`Batas maksimum project tercapai (maks ${maxProjects} project per user).`);
   }

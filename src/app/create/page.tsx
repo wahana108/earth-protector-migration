@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { createProject } from '@/lib/projects';
+import { createProject, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
 import { checkLinkBukti } from '@/lib/link-checker';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
@@ -73,6 +73,7 @@ export default function CreatePage() {
   const { user, emailVerified } = useAuth();
   const [config, setConfig] = useState<CommunityConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
+  const [realisasi, setRealisasi] = useState<RealisasiResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [successData, setSuccessData] = useState<{ projectId: string; jumlahNft: number } | null>(null);
@@ -100,16 +101,16 @@ export default function CreatePage() {
   const watchedFee = watch('fee_project_pct');
 
   useEffect(() => {
-    getCommunityConfig()
-      .then((cfg) => {
+    if (!user) return;
+    Promise.all([getCommunityConfig(), calculateRealisasiPct(user.id)])
+      .then(([cfg, real]) => {
         setConfig(cfg);
-        if (cfg) {
-          setValue('fee_project_pct', cfg.fee_project_pct.min);
-        }
+        setRealisasi(real);
+        if (cfg) setValue('fee_project_pct', cfg.fee_project_pct.min);
       })
       .catch(() => setConfig(null))
       .finally(() => setConfigLoading(false));
-  }, [setValue]);
+  }, [user, setValue]);
 
   // Debounced image preview
   useEffect(() => {
@@ -246,6 +247,11 @@ export default function CreatePage() {
     );
   }
 
+  const canCreate = !realisasi || realisasi.can_create;
+  const minPct = config?.min_realisasi_pct_untuk_create ?? 20;
+  const realisasiPct = realisasi?.realisasi_pct ?? 0;
+  const hasExistingProjects = realisasi && realisasi.total_nft_diterbitkan > 0;
+
   return (
     <MainLayout>
       <div className="max-w-2xl mx-auto space-y-6">
@@ -255,6 +261,46 @@ export default function CreatePage() {
             Dokumentasikan tindakan nyatamu dan jadikan NFT sebagai bukti kontribusi yang abadi.
           </p>
         </div>
+
+        {/* Banner: tidak bisa buat project */}
+        {realisasi && !realisasi.can_create && (
+          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-4 space-y-3">
+            <div className="flex items-start gap-2 text-red-800">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-sm">Buat Project Tidak Tersedia</p>
+                <p className="text-sm mt-0.5">
+                  Realisasi transaksi Anda: <strong>{realisasiPct}%</strong> (minimal {minPct}%)
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-red-700">
+                <span>{realisasiPct}% tercapai</span>
+                <span>min {minPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-red-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-red-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.round(realisasiPct / minPct * 100))}%` }}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-red-700">
+              Tingkatkan penjualan atau buyback project yang ada sebelum membuat project baru.
+              <br />
+              NFT terjual: <strong>{realisasi.total_terjual}</strong> · Buyback: <strong>{realisasi.total_buyback}</strong> · Total diterbitkan: <strong>{realisasi.total_nft_diterbitkan}</strong>
+            </p>
+          </div>
+        )}
+
+        {/* Info: realisasi cukup */}
+        {hasExistingProjects && realisasi.can_create && (
+          <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 text-sm text-green-800">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>Realisasi transaksi: <strong>{realisasiPct}%</strong> — Anda bisa membuat project baru</span>
+          </div>
+        )}
 
         <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
           <Info className="h-4 w-4 mt-0.5 shrink-0" />
@@ -268,6 +314,7 @@ export default function CreatePage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <fieldset disabled={!canCreate} className="space-y-6 disabled:opacity-60 disabled:pointer-events-none">
           {/* ── Informasi Project ── */}
           <Card>
             <CardHeader>
@@ -577,7 +624,7 @@ export default function CreatePage() {
             </p>
           )}
 
-          <Button type="submit" className="w-full gap-2" size="lg" disabled={submitting}>
+          <Button type="submit" className="w-full gap-2" size="lg" disabled={submitting || !canCreate}>
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -590,6 +637,7 @@ export default function CreatePage() {
               </>
             )}
           </Button>
+          </fieldset>
         </form>
       </div>
     </MainLayout>
