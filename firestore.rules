@@ -119,6 +119,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ─── user_blocks/{blockId} — personal blocklist ──────────────────────────────
+    match /user_blocks/{blockId} {
+      allow read: if isAuth() && (
+        resource.data.blocker_id == request.auth.uid ||
+        resource.data.blocked_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuth() &&
+        request.resource.data.blocker_id == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAuth() &&
+        resource.data.blocker_id == request.auth.uid;
+    }
+
     // ─── purchase_disputes/{disputeId} — laporan transaksi mencurigakan ────────
     match /purchase_disputes/{disputeId} {
       allow read: if isAuth() && (

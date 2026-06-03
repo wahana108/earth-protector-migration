@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
-  Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search,
+  Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -21,9 +21,16 @@ import {
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
+import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
+import type { UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type BlockAdminItem = UserBlock & {
+  blocker_name: string;
+  blocked_name: string;
+};
 
 type ProjectAdminItem = {
   id: string;
@@ -330,6 +337,10 @@ export default function AdminPage() {
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
   const [loadingDisputes, setLoadingDisputes] = useState(true);
 
+  // Blocks state
+  const [blocks, setBlocks] = useState<BlockAdminItem[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(true);
+
   // Projects state
   const [projects, setProjects] = useState<ProjectAdminItem[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -345,6 +356,7 @@ export default function AdminPage() {
     if (!isModerator) return;
     loadDisputes();
     loadProjects();
+    loadBlocks();
   }, [isModerator]);
 
   async function loadDisputes() {
@@ -435,6 +447,29 @@ export default function AdminPage() {
       }));
     } finally {
       setLoadingProjects(false);
+    }
+  }
+
+  async function loadBlocks() {
+    setLoadingBlocks(true);
+    try {
+      const rawBlocks = await getPendingBlocks();
+      if (rawBlocks.length === 0) { setBlocks([]); return; }
+
+      const allUserIds = [...new Set(rawBlocks.flatMap(b => [b.blocker_id, b.blocked_id]))];
+      const userSnaps = await Promise.all(allUserIds.map(id => getDoc(doc(db, 'users', id))));
+      const nameMap = new Map<string, string>();
+      userSnaps.forEach((s, i) => {
+        nameMap.set(allUserIds[i], s.exists() ? (s.data().displayName as string) || allUserIds[i].slice(0, 8) + '…' : '—');
+      });
+
+      setBlocks(rawBlocks.map(b => ({
+        ...b,
+        blocker_name: nameMap.get(b.blocker_id) ?? '—',
+        blocked_name: nameMap.get(b.blocked_id) ?? '—',
+      })));
+    } finally {
+      setLoadingBlocks(false);
     }
   }
 
@@ -531,6 +566,78 @@ export default function AdminPage() {
               <div className="space-y-3">
                 {disputes.map(d => (
                   <DisputeCard key={d.id} dispute={d} onResolved={handleResolved} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Blokir Aktif */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserX className="h-4 w-4" />
+              Blokir Aktif — Belum Ditinjau
+              {blocks.length > 0 && (
+                <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs ml-auto font-normal">
+                  {blocks.length} pending
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs leading-snug">
+              Blokir baru yang belum ditinjau. Admin bisa mengesahkan atau membatalkannya.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingBlocks ? (
+              <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Memuat data blokir…
+              </div>
+            ) : blocks.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">Tidak ada blokir yang perlu ditinjau.</p>
+            ) : (
+              <div className="space-y-3">
+                {blocks.map(b => (
+                  <div key={b.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm min-w-0">
+                        <p className="font-medium">
+                          <span className="text-foreground">{b.blocker_name}</span>
+                          <span className="text-muted-foreground mx-1.5">memblokir</span>
+                          <span className="text-foreground">{b.blocked_name}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 italic">"{b.reason}"</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(b.created_at)}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        onClick={async () => {
+                          await adminResolveBlock(b.id, 'upheld');
+                          setBlocks(prev => prev.filter(x => x.id !== b.id));
+                        }}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        Sahkan Blokir
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 border-red-200 text-red-700 hover:bg-red-50"
+                        onClick={async () => {
+                          await adminResolveBlock(b.id, 'reversed');
+                          setBlocks(prev => prev.filter(x => x.id !== b.id));
+                        }}
+                      >
+                        <ShieldOff className="h-3 w-3" />
+                        Batalkan Blokir
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

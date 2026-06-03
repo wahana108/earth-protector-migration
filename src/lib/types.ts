@@ -130,6 +130,16 @@ export type CommunityConfig = {
   updated_by: string;
 };
 
+export type UserBlock = {
+  id: string;
+  blocker_id: string;
+  blocked_id: string;
+  reason: string;
+  created_at: Date;
+  reviewed_by_admin: boolean;
+  admin_decision: 'pending' | 'upheld' | 'reversed' | null;
+};
+
 export type FeePool = {
   total_terkumpul: number;
   total_terdistribusi: number;

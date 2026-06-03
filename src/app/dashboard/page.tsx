@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import {
   PlusCircle, Loader2, Lock, Pencil,
-  RefreshCcw, TrendingDown, TrendingUp, Minus, Upload,
+  RefreshCcw, TrendingDown, TrendingUp, Minus, Upload, UserX, ShieldOff,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -25,6 +25,9 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase } from '@/lib/projects';
+import { getBlockList, unblockUser } from '@/lib/blocks';
+import { BlockUserDialog } from '@/components/block-user-dialog';
+import type { UserBlock } from '@/lib/types';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -559,7 +562,13 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback
 
 // ─── Section: Log Transaksi ───────────────────────────────────────────────────
 
-function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
+function LogTransaksi({
+  logs, currentUserId, onBlockRequest,
+}: {
+  logs: NeracaLog[];
+  currentUserId?: string;
+  onBlockRequest?: (userId: string) => void;
+}) {
   if (logs.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-6 text-center">
@@ -573,6 +582,7 @@ function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
       {logs.map((log) => {
         const isPos = log.delta > 0;
         const isNeg = log.delta < 0;
+        const canBlock = !!currentUserId && !!log.counterparty_id && log.counterparty_id !== currentUserId && !!onBlockRequest;
 
         return (
           <div key={log.id} className="flex items-center gap-3 px-4 py-3 bg-card text-sm">
@@ -590,12 +600,23 @@ function LogTransaksi({ logs }: { logs: NeracaLog[] }) {
               </p>
             </div>
 
-            <span className={cn(
-              'font-bold shrink-0',
-              isPos ? 'text-green-600' : isNeg ? 'text-destructive' : 'text-muted-foreground',
-            )}>
-              {formatDelta(log.delta)}
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className={cn(
+                'font-bold',
+                isPos ? 'text-green-600' : isNeg ? 'text-destructive' : 'text-muted-foreground',
+              )}>
+                {formatDelta(log.delta)}
+              </span>
+              {canBlock && (
+                <button
+                  onClick={() => onBlockRequest!(log.counterparty_id)}
+                  className="text-muted-foreground/30 hover:text-destructive transition-colors p-0.5"
+                  title="Blokir counterparty"
+                >
+                  <UserX className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
@@ -703,6 +724,8 @@ export default function DashboardPage() {
   const [editProjectTarget, setEditProjectTarget] = useState<Project | null>(null);
   const [buybackTarget, setBuybackTarget] = useState<NFTUnit | null>(null);
   const [transferPoolTarget, setTransferPoolTarget] = useState<NFTUnit | null>(null);
+  const [blockedUsers, setBlockedUsers] = useState<(UserBlock & { blocked_name: string })[]>([]);
+  const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -763,6 +786,20 @@ export default function DashboardPage() {
       setMyProjects(
         projectsSnap.docs.map((d) => toProject(d.id, d.data() as Record<string, unknown>)),
       );
+
+      // Load block list
+      const blocks = await getBlockList(user.id);
+      if (blocks.length > 0) {
+        const blockedIds = [...new Set(blocks.map(b => b.blocked_id))];
+        const blockedSnaps = await Promise.all(blockedIds.map(id => getDoc(doc(db, 'users', id))));
+        const nameMap = new Map<string, string>();
+        blockedSnaps.forEach((s, i) => {
+          nameMap.set(blockedIds[i], s.exists() ? (s.data().displayName as string) || blockedIds[i].slice(0, 8) + '…' : '—');
+        });
+        setBlockedUsers(blocks.map(b => ({ ...b, blocked_name: nameMap.get(b.blocked_id) ?? '—' })));
+      } else {
+        setBlockedUsers([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -881,10 +918,54 @@ export default function DashboardPage() {
                   (20 terakhir)
                 </span>
               </h2>
-              <LogTransaksi logs={logs} />
+              <LogTransaksi
+                logs={logs}
+                currentUserId={user?.id}
+                onBlockRequest={(uid) => setBlockTarget({ userId: uid, name: uid.slice(0, 8) + '…' })}
+              />
             </section>
 
-            {/* ── 4. Project Saya ── */}
+            {/* ── 4. Daftar Blokir ── */}
+            <section className="space-y-3">
+              <h2 className="font-semibold text-lg flex items-center gap-2">
+                <UserX className="h-5 w-5" />
+                Daftar Blokir
+                {blockedUsers.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">({blockedUsers.length})</span>
+                )}
+              </h2>
+              {blockedUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 border-2 border-dashed rounded-xl text-center">
+                  Kamu belum memblokir siapapun.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {blockedUsers.map(b => (
+                    <div key={b.id} className="flex items-start gap-3 rounded-xl border bg-card p-3">
+                      <ShieldOff className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{b.blocked_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">Alasan: {b.reason}</p>
+                        <p className="text-xs text-muted-foreground">{relativeTime(b.created_at)}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs shrink-0"
+                        onClick={async () => {
+                          await unblockUser(b.id);
+                          setBlockedUsers(prev => prev.filter(x => x.id !== b.id));
+                        }}
+                      >
+                        Buka Blokir
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── 5. Project Saya ── */}
             {myProjects.length > 0 && (
               <section className="space-y-3">
                 <h2 className="font-semibold text-lg">
@@ -930,6 +1011,20 @@ export default function DashboardPage() {
           userId={user.id}
           onClose={() => setTransferPoolTarget(null)}
           onSuccess={() => handleTransferPoolSuccess(transferPoolTarget.id)}
+        />
+      )}
+
+      {/* Block user dialog */}
+      {blockTarget && user && (
+        <BlockUserDialog
+          targetUserId={blockTarget.userId}
+          targetName={blockTarget.name}
+          currentUserId={user.id}
+          onClose={() => setBlockTarget(null)}
+          onBlocked={() => {
+            setBlockTarget(null);
+            loadData();
+          }}
         />
       )}
     </MainLayout>

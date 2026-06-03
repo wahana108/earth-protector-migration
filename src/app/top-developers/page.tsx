@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   collection, getDocs, query, where,
 } from 'firebase/firestore';
-import { AlertTriangle, Users } from 'lucide-react';
+import { AlertTriangle, Users, UserX } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,6 +14,8 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
+import { BlockUserDialog } from '@/components/block-user-dialog';
 import { cn } from '@/lib/utils';
 
 function formatIDR(n: number) {
@@ -110,12 +112,14 @@ function BuybackBar({ pct }: { pct: number }) {
 
 // ─── Developer Card ───────────────────────────────────────────────────────────
 
-function DeveloperCard({ dev, rank }: { dev: DeveloperRow; rank: number }) {
+function DeveloperCard({ dev, rank, currentUserId }: { dev: DeveloperRow; rank: number; currentUserId?: string }) {
   const displayName = dev.displayName ?? dev.id.slice(0, 8) + '…';
   const initial = displayName.charAt(0).toUpperCase();
   const isPosNeraca = dev.total_poin >= 0;
+  const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
 
   return (
+    <>
     <Card className={cn(
       dev.is_flagged && 'border-destructive/40 bg-destructive/[0.03]',
     )}>
@@ -167,7 +171,7 @@ function DeveloperCard({ dev, rank }: { dev: DeveloperRow; rank: number }) {
             </div>
           </div>
 
-          {/* Neraca + counter */}
+          {/* Neraca + counter + blokir */}
           <div className="flex-shrink-0 text-right space-y-1.5 min-w-[90px]">
             <div>
               <p className={cn(
@@ -182,10 +186,31 @@ function DeveloperCard({ dev, rank }: { dev: DeveloperRow; rank: number }) {
               <p>Jual: <span className="font-medium text-foreground">{dev.soldNfts}</span></p>
               <p>Buyback: <span className="font-medium text-foreground">{dev.buybackCount}</span></p>
             </div>
+            {currentUserId && currentUserId !== dev.id && (
+              <button
+                onClick={() => setBlockTarget({ userId: dev.id, name: displayName })}
+                className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-destructive transition-colors ml-auto"
+                title="Blokir developer ini"
+              >
+                <UserX className="h-3 w-3" />
+                Blokir
+              </button>
+            )}
           </div>
         </div>
       </CardContent>
     </Card>
+
+    {blockTarget && currentUserId && (
+      <BlockUserDialog
+        targetUserId={blockTarget.userId}
+        targetName={blockTarget.name}
+        currentUserId={currentUserId}
+        onClose={() => setBlockTarget(null)}
+        onBlocked={() => setBlockTarget(null)}
+      />
+    )}
+  </>
   );
 }
 
@@ -218,6 +243,7 @@ function PageSkeleton() {
 // ─── Halaman ──────────────────────────────────────────────────────────────────
 
 export default function DeveloperRankingPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<DeveloperRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -252,7 +278,7 @@ export default function DeveloperRankingPage() {
           <>
             <div className="space-y-3">
               {rows.map((dev, index) => (
-                <DeveloperCard key={dev.id} dev={dev} rank={index + 1} />
+                <DeveloperCard key={dev.id} dev={dev} rank={index + 1} currentUserId={user?.id} />
               ))}
             </div>
             <p className="text-xs text-center text-muted-foreground pt-2">

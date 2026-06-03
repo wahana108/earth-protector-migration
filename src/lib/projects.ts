@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 import { checkLinkBukti } from './link-checker';
+import { isBlocked } from './blocks';
 import type { ProjectCategory } from './types';
 
 export class BuyError extends Error {
@@ -222,6 +223,16 @@ export async function buyNftUnit(
   let projectIdCapture = '';
   let hargaJualCapture = 0;
 
+  // Cek blokir sebelum transaksi
+  const preSnap = await getDoc(nftRef);
+  if (preSnap.exists()) {
+    const preSellerId = preSnap.data().owner_id as string;
+    if (preSellerId !== buyerId) {
+      const blocked = await isBlocked(buyerId, preSellerId);
+      if (blocked) throw new BuyError('Tidak bisa bertransaksi dengan user yang diblokir.');
+    }
+  }
+
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
     const nftSnap = await tx.get(nftRef);
@@ -360,6 +371,16 @@ export async function buybackNftUnit(
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
   let developerIdCapture = '';
+
+  // Cek blokir sebelum transaksi
+  const preNftSnap = await getDoc(nftRef);
+  if (preNftSnap.exists()) {
+    const preDeveloperId = preNftSnap.data().developer_id as string;
+    if (preDeveloperId !== ownerId) {
+      const blocked = await isBlocked(ownerId, preDeveloperId);
+      if (blocked) throw new BuybackError('Tidak bisa bertransaksi dengan user yang diblokir.');
+    }
+  }
 
   await runTransaction(db, async (tx) => {
     // ── Semua read sebelum write ───────────────────────────────────────────

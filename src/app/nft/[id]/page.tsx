@@ -4,7 +4,7 @@ import { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
-  ArrowLeft, ExternalLink, Heart, Loader2, ShoppingCart, Flag, Trash2,
+  ArrowLeft, ExternalLink, Heart, Loader2, ShoppingCart, Flag, Trash2, UserX,
 } from 'lucide-react';
 import {
   collection, doc, getDoc, getDocs, query, orderBy, limit, Timestamp,
@@ -24,6 +24,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { buyNftUnit, BuyError, toggleNftLike } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
+import { BlockUserDialog } from '@/components/block-user-dialog';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -220,11 +221,12 @@ function BuyDialog({
 
 interface CommentSectionProps {
   nftId: string;
+  nftOwnerId?: string;
   currentUserId: string | undefined;
   currentUserDisplayName: string | null;
 }
 
-function CommentSection({ nftId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
+function CommentSection({ nftId, nftOwnerId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -233,6 +235,7 @@ function CommentSection({ nftId, currentUserId, currentUserDisplayName }: Commen
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reportedSet, setReportedSet] = useState<Set<string>>(new Set());
   const reportedInitRef = useRef(false);
+  const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
 
   useEffect(() => {
     fetchComments(nftId).then(setComments).finally(() => setLoading(false));
@@ -255,7 +258,7 @@ function CommentSection({ nftId, currentUserId, currentUserDisplayName }: Commen
     setError('');
     try {
       const name = currentUserDisplayName ?? 'User';
-      const newComment = await addComment(nftId, currentUserId, name, text.trim());
+      const newComment = await addComment(nftId, currentUserId, name, text.trim(), nftOwnerId);
       setComments(prev => [newComment, ...prev]);
       setText('');
     } catch {
@@ -384,19 +387,28 @@ function CommentSection({ nftId, currentUserId, currentUserDisplayName }: Commen
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       ) : currentUserId ? (
-                        <button
-                          onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
-                          disabled={reportedSet.has(c.id)}
-                          className={cn(
-                            'p-0.5 transition-colors',
-                            reportedSet.has(c.id)
-                              ? 'text-yellow-500 cursor-default'
-                              : 'text-muted-foreground/40 hover:text-yellow-500',
-                          )}
-                          title={reportedSet.has(c.id) ? 'Sudah dilaporkan' : 'Laporkan komentar'}
-                        >
-                          <Flag className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
+                            disabled={reportedSet.has(c.id)}
+                            className={cn(
+                              'p-0.5 transition-colors',
+                              reportedSet.has(c.id)
+                                ? 'text-yellow-500 cursor-default'
+                                : 'text-muted-foreground/40 hover:text-yellow-500',
+                            )}
+                            title={reportedSet.has(c.id) ? 'Sudah dilaporkan' : 'Laporkan komentar'}
+                          >
+                            <Flag className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setBlockTarget({ userId: c.user_id, name: c.display_name })}
+                            className="p-0.5 text-muted-foreground/40 hover:text-destructive transition-colors"
+                            title="Blokir pengguna ini"
+                          >
+                            <UserX className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -408,6 +420,16 @@ function CommentSection({ nftId, currentUserId, currentUserDisplayName }: Commen
             </div>
           ))}
         </div>
+      )}
+
+      {blockTarget && currentUserId && (
+        <BlockUserDialog
+          targetUserId={blockTarget.userId}
+          targetName={blockTarget.name}
+          currentUserId={currentUserId}
+          onClose={() => setBlockTarget(null)}
+          onBlocked={() => setBlockTarget(null)}
+        />
       )}
     </section>
   );
@@ -764,6 +786,7 @@ export default function NftDetailPage({
         {/* Komentar */}
         <CommentSection
           nftId={id}
+          nftOwnerId={unit.owner_id}
           currentUserId={user?.id}
           currentUserDisplayName={currentUserDisplayName}
         />

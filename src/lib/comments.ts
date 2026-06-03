@@ -5,6 +5,7 @@ import {
   serverTimestamp, Timestamp, increment,
 } from 'firebase/firestore';
 import type { Comment } from './types';
+import { isBlocked } from './blocks';
 
 export type FlaggedComment = {
   id: string;
@@ -41,7 +42,12 @@ export async function addComment(
   userId: string,
   displayName: string,
   text: string,
+  nftOwnerId?: string,
 ): Promise<Comment> {
+  if (nftOwnerId && nftOwnerId !== userId) {
+    const blocked = await isBlocked(userId, nftOwnerId);
+    if (blocked) throw new Error('Tidak bisa berkomentar di NFT user yang diblokir.');
+  }
   const batch = writeBatch(db);
   const commentRef = doc(collection(db, 'nft_units', nftUnitId, 'comments'));
 
