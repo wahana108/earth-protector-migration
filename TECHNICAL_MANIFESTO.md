@@ -2,6 +2,7 @@
 ### The Mother Earth Project — Spesifikasi Konsep untuk Developer
 
 > Dokumen ini adalah referensi teknis untuk developer yang ingin memahami logika sistem sebelum berkontribusi pada kode.
+> Konsep ini tidak berubah dari awal — hanya implementasinya yang menyesuaikan kemampuan realisasi di setiap fase pengembangan.
 
 ---
 
@@ -11,6 +12,51 @@
 2. **Algoritma membaca neraca, bukan otoritas** — keputusan sistem berdasarkan data transaksi, bukan keputusan admin
 3. **Nilai dari tindakan nyata** — NFT hanya valid jika ada bukti tindakan charity yang bisa diverifikasi
 4. **Antrian, bukan jaminan** — sistem menjamin antrian likuiditas, bukan return finansial
+5. **Poin = reputasi, bukan uang** — semua nilai di sistem adalah simbolik, bukan finansial langsung
+6. **Fibonacci sebagai filosofi eksistensi** — penyebaran node mengikuti pola alam yang tidak bisa dihancurkan
+
+---
+
+## Filosofi dasar — mengapa ini beda
+
+TMEP bukan platform jual beli NFT. TMEP adalah **infrastruktur pengakuan komunitas** atas tindakan nyata di dunia.
+
+```
+NFT = Sertifikat tindakan nyata charity
+Nilai NFT = Seberapa besar komunitas mengakuinya
+Validator = Komunitas yang memberikan jaminan pengakuan
+Pool FIFO = Mekanisme konversi pengakuan ke likuiditas
+Poin neraca = Mata uang reputasi, bukan uang tunai
+```
+
+Tidak ada uang yang berpindah di dalam sistem. Yang berpindah adalah **pengakuan**. Developer yang neracanya minus bukan berarti rugi uang — mereka "membayar biaya pengakuan" yang akan meningkatkan nilai reputasi komunitasnya jika dikelola dengan baik.
+
+---
+
+## Filosofi Fibonacci — kunci eksistensi sistem
+
+Fibonacci bukan sekadar angka matematika. Ini adalah **pola pertumbuhan alam yang terbukti**: spiral galaxy, koloni semut, struktur DNA, pola daun. Semua creature menggunakan kode ini sebagai mekanisme backup dan penyebaran.
+
+```
+Relevansi untuk TMEP:
+→ Sistem yang menyebar mengikuti pola Fibonacci
+  tidak bisa "dibunuh" dengan menghancurkan satu titik
+→ Seperti koloni semut: musnahkan satu koloni,
+  ada ribuan koloni lain yang sudah backup
+→ Inilah yang membuat Bitcoin bertahan:
+  bukan hanya teknologinya, tapi penyebarannya organik
+
+Implementasi di TMEP:
+Level 1: 1 node (founder)
+Level 2: 1 node tambahan (total 2)
+Level 3: 2 node tambahan (total 3) → 1,1,2,3,5,8,13...
+...dst
+
+Setiap level = kapasitas komunitas bertambah
+Setiap node baru = backup yang semakin kuat
+Tidak ada institusi yang bisa menghentikan
+karena tidak ada "pusat" yang bisa dihancurkan
+```
 
 ---
 
@@ -19,313 +65,319 @@
 ### Developer
 User yang membuat dan menjual NFT charity. Dibagi dua level:
 - **Developer biasa** — semua proses manual, tidak bisa masuk pool rekomendasi
-- **Top Developer** — akses ke pool rekomendasi, fitur otomatis, wajib menyisihkan persentase project untuk fee sharing dan dana buyback
+- **Top Developer** — akses ke pool rekomendasi, fitur otomatis, wajib menyisihkan fee
 
 ### NFT (Sertifikat Charity)
-Bukan dibuat per unit, tapi **per project**. Setiap NFT merepresentasikan satu project charity nyata dengan:
-- Bukti tindakan (link dokumentasi, foto, video)
-- Nilai minimum project (default: Rp 3.000.000)
-- Status: `biasa` | `valid` | `invalid`
-- History harga pembelian per transaksi
+Bukan dibuat per unit, tapi **per project**. Setiap NFT merepresentasikan satu project charity nyata.
+
+Status NFT:
+```
+biasa   → default saat diterbitkan
+valid   → project-nya sudah tervalidasi oleh komunitas
+invalid → developer turun peringkat atau kuota berkurang
+```
 
 ### Pool Rekomendasi
-Kolam likuiditas komunitas. Hanya NFT dari Top Developer yang bisa masuk. Pool ini yang menjadi tempat antrian likuiditas dan validasi bergulir.
+Kolam likuiditas komunitas. Hanya NFT dari Top Developer yang bisa masuk. Kapasitas = jumlah_top_developer × 3.
 
 ### Neraca Transaksi
-Dashboard per user yang mencatat:
-- Poin positif/negatif dari selisih harga jual terhadap patokan
-- Status validator (aktif/tidak aktif)
-- History semua transaksi
-- Fee yang diterima sebagai validator
+Dashboard per user yang mencatat semua nilai simbolik. **Neraca positif = buffer reputasi**, bukan saldo yang bisa dicairkan.
 
 ---
 
 ## Logika harga dan neraca
 
 ```
-Harga patokan komunitas : Rp 100.000
-Batas atas              : Rp 150.000
-Nilai minimum project   : Rp 3.000.000
+Harga patokan komunitas : Rp 100.000 (dari community_config)
+Batas atas              : Rp 150.000 (dari community_config)
 ```
 
 ### Perhitungan poin neraca
 
-Sistem dirancang agar penjual selalu menanggung konsekuensi neraca, sementara pembeli selalu mendapat reward. Ini mendorong penjual untuk tidak menetapkan harga terlalu tinggi, sekaligus memberi insentif kepada pembeli untuk mendukung project charity.
-
 ```
-PENJUAL                              PEMBELI
-──────────────────────────────────────────────────────
-Jual Rp 100.000 (patokan) →  0       +0    (netral)
-Jual Rp 120.000           → -20.000  +20.000
-Jual Rp 150.000 (batas)   → -50.000  +50.000
-Jual > Rp 150.000         → DIBLOKIR sistem, tidak bisa didaftarkan
-```
+PENJUAL selalu mendapat MINUS:
+  Jual Rp 120.000 → penjual: -Rp 20.000
 
-**Implikasi untuk penjual:**
-Semakin tinggi harga jual, semakin besar minus di neraca. Tidak ada keuntungan neraca dari menjual mahal — justru menambah beban yang harus dinetralisir.
+PEMBELI selalu mendapat PLUS:
+  Beli Rp 120.000 → pembeli: +Rp 20.000
 
-**Implikasi untuk pembeli:**
-Semakin mahal NFT yang dibeli, semakin besar poin yang didapat. Poin ini bisa digunakan untuk validasi project charity pilihan pembeli.
-
-Poin positif pembeli bisa digunakan untuk validasi project.
-Neraca minus penjual harus dinetralisir agar tidak turun peringkat.
-
-### Cara netralisir neraca minus
-
-1. Beli NFT di pool rekomendasi (setiap pembelian di atas patokan menghasilkan poin positif)
-2. Lakukan buyback NFT sendiri — dijual ke pembuat dengan harga beli semula
-
-### Logika buyback
-
-```
-Skenario A — buyback ke pembuat (ada history):
-  Harga = harga beli awal yang tersimpan di history transaksi
-
-Skenario B — jual ke orang lain / luar sistem:
-  Harga = selalu Rp 100.000 (harga patokan komunitas)
-
-Skenario C — gunakan poin untuk validasi:
-  Poin positif pembeli digunakan untuk memvalidasi project pilihan
-  NFT yang dimiliki → harga buyback direset ke Rp 100.000 (harga dasar)
-  karena selisih harganya sudah direlakan ke pool jaminan project
+Neraca positif = reward reputasi dari kontribusi komunitas
+Neraca negatif = konsekuensi dari penjualan (mendorong buyback)
 ```
 
-### Penting: yang divalidasi adalah PROJECT, bukan NFT satuan
-
-Halaman validasi menampilkan daftar **project NFT charity** milik Top Developer — bukan NFT per unit. Project diurutkan berdasarkan jumlah like dari komunitas.
-
-Ketika sebuah project divalidasi:
-- Semua NFT yang terdaftar dalam project tersebut menjadi berstatus `valid`
-- Poin validator terkunci di pool jaminan project tersebut
-- NFT valid masuk ke pool rekomendasi dan bisa diperdagangkan dengan antrian likuiditas
-
-### Unit validasi adalah NFT, bukan poin
-
-Validator tidak mengalokasikan poin secara parsial. Yang digunakan adalah **NFT mana yang dipilih** (via checkbox) untuk memvalidasi project tertentu. Setiap NFT yang dipilih dianggap sebagai **1 validator** dengan nilai sesuai selisih harga belinya.
-
+### Poin sebagai reputasi nyata (Fase 3+)
 ```
-NFT "A" dibeli Rp 120.000 → nilai validasi Rp 20.000, jumlah validator +1
-NFT "B" dibeli Rp 150.000 → nilai validasi Rp 50.000, jumlah validator +1
+Di masa depan:
+X poin = Y buyback credit (setara nilai 1 NFT)
+Poin positif = buyback credit tambahan (naik peringkat)
+Poin negatif = pengurangan buyback credit (turun peringkat)
 
-Keduanya dicentang untuk project "X":
-→ total nilai validasi di pool: Rp 70.000
-→ jumlah validator project "X": +2
-→ tidak bisa partial — NFT adalah unit utuh, tidak bisa dipecah
+Contoh: poin minus setara 1 NFT = -1 buyback credit
+→ Otomatis turun peringkat
+Contoh: poin positif setara 1 NFT = +1 buyback credit
+→ Bisa digunakan untuk naik peringkat tanpa buyback fisik
 ```
 
-**Implikasi index:** jumlah validator adalah faktor bobot tersendiri dalam index pool rekomendasi, terpisah dari total nilai. 10 validator kecil lebih bernilai dari 1 validator besar karena mencerminkan konsensus komunitas yang lebih luas.
+---
 
-Setelah NFT digunakan untuk validasi:
-- NFT tersebut direset ke harga dasar Rp 100.000 untuk keperluan buyback
-- Selisih harganya terkunci di pool jaminan project yang dipilih
-- User bisa memvalidasi project berbeda dengan NFT yang berbeda secara bersamaan
+## Sistem konfirmasi transaksi (3 opsi)
 
-### Prosedur invalidasi otomatis
-
-Dipicu ketika developer turun dari status Top Developer:
+Setiap pembelian NFT tidak langsung selesai:
 
 ```
-Developer turun peringkat
-→ NFT valid miliknya masuk DAFTAR INVALIDASI
-→ Status NFT: tetap "valid" selama belum terbeli (pemegang aman)
-→ Ketika NFT terbeli di pool rekomendasi:
-   → status langsung menjadi NFT biasa
-   → tidak kembali ke pool rekomendasi
-   → tidak ada lagi jaminan antrian likuiditas
-```
+1. KONFIRMASI MANUAL (seller aktif):
+   → Poin langsung masuk neraca pembeli
+   
+2. REPORT (transaksi mencurigakan):
+   → Masuk purchase_disputes
+   → Admin review → approve/reject
+   
+3. AUTO-COMPLETE (7 hari tidak ada aksi):
+   → Sistem otomatis selesaikan
+   → Poin masuk neraca pembeli
 
-Tidak ada eksekusi paksa — pemegang NFT tetap punya kesempatan mencairkan sebelum status berubah. Sistem memberi jeda yang transparan.
+Tujuan: mencegah transaksi fiktif, memberi waktu report
+Holding period: NFT harus dipegang X hari sebelum bisa validasi
+```
 
 ---
 
 ## Mekanisme validasi bergulir
 
-### Syarat pool rekomendasi aktif (Fibonacci capacity)
-
+### Konsep saat ini (Fase 2)
 ```
-Kapasitas pool = 3× nilai minimum project
-Contoh: min project Rp 3 jt → pool aktif saat kapasitas ≥ Rp 9 jt
-        atau minimal 30 Top Developer terdaftar aktif
-        atau kapasitas menampung 90 NFT
-```
-
-### Siklus validator
-
-```
-1. User menggunakan poin neraca → masuk sebagai validator project "A"
-2. Poin terkunci di pool jaminan project "A"
-3. Status neraca: "Validator aktif — project A"
-4. User mendapat fee sharing proporsional dari setiap transaksi project "A"
-
-5. Validator baru datang → validasi ulang project "A"
-6. Validator lama digantikan → poin dikembalikan ke neraca (atau dalam bentuk NFT)
-7. Status validator lama: selesai
-
-8. Jika tidak ada yang memvalidasi ulang:
-   → poin permanen terkunci
-   → menjadi dana talangan buyback NFT valid tersebut selamanya
+User memilih NFT dari dashboard → checkbox → validasi project
+Nilai validasi = nilai_selisih NFT tersebut
+NFT terkunci selama menjadi validator aktif
+Revalidasi → validator lama digantikan → NFT dikembalikan
 ```
 
-### Status NFT
-
+### Konsep target (Fase 3 — FIFO Validation)
 ```
-biasa   → dibuat developer, bisa diperjualbelikan, tidak ada jaminan
-valid   → ada validator aktif, masuk pool rekomendasi, ada antrian likuiditas
-invalid → kuota berkurang karena penurunan user aktif, tapi SELALU punya antrian
-          selama komunitas ada (karena dana validasi masih terkunci di pool)
+Validasi project X:
+1. User buka /validate → pilih project yang ingin divalidasi
+2. Klik "Validasi" → diarahkan ke pool FIFO
+3. User beli NFT dari pool (NFT manapun, bukan harus dari project X)
+4. Selisih pembelian LANGSUNG menjadi nilai validasi project X
+5. NFT masuk dashboard dengan harga dasar
+   (selisih sudah dipakai validasi)
 
-Transisi:
-  biasa → valid   : melalui proses validasi oleh Top Developer
-  valid → biasa   : setelah dibeli dari pool rekomendasi
-  valid → invalid : algoritma menyarankan pemotongan kapasitas (ada jeda toleransi)
-  invalid → antrian: NFT yang pernah valid SELALU mendapat antrian di pool
+Mengapa lebih baik:
+→ Validasi = kontribusi nyata ke likuiditas pool
+→ Tidak ada "kumpulkan poin dulu, validasi nanti"
+→ Menghidupkan pool FIFO secara natural
+→ Lebih sulit untuk self-dealing
+```
+
+### Status NFT valid di FIFO (Fase 3)
+```
+NFT valid dijual di Explorer biasa:
+→ Status valid dipertahankan
+→ Diperjualbelikan normal
+
+NFT valid masuk antrian FIFO:
+→ Setelah terbeli → OTOMATIS INVALID
+→ Dana validator yang terkunci = yang menanggung antrian
+→ Ini adalah "konversi pengakuan ke likuiditas nyata"
+
+Visi: NFT valid yang diakui komunitas bisa jadi alat tukar,
+karena ada jaminan antrian likuiditas selama komunitas ada
 ```
 
 ---
 
-## AI Monitoring
-
-AI bersifat **netral-negatif** — tidak memberi nilai positif, hanya mendeteksi anomali.
+## Dedicated Liquidity (Fase 3+)
 
 ```
-Tidak ada anomali      → skor 0%, posisi tidak berubah
-Terdeteksi anomali     → skor X%, ditandai untuk review komunitas
-Kesalahan nyata        → anomali 100%, transaksi dianggap tidak ada
-  (link tidak valid, bukti tidak sesuai, data tidak match)
+Konsep: siapapun bisa menjual NFT yang mereka miliki
+dengan project charity MEREKA SENDIRI
+
+Caranya:
+1. Kumpulkan 30 NFT (dari pembelian manapun)
+2. Buat project charity sendiri
+3. Daftarkan NFT tersebut sebagai bagian project
+4. Semua tanggung jawab buyback ada di tangan penjual
+
+Mengapa ini valid:
+→ NFT yang sama dijual oleh banyak pihak
+  = semakin banyak antrian buyback
+  = semakin banyak pengakuan kolektif
+→ AI di masa depan akan menilai konsistensi:
+  apakah project charity-nya relevan dengan NFT?
+→ Log yang tidak konsisten = minus anomali di masa depan
+
+Syarat: harus punya project original sendiri
+→ Mencegah pure speculator tanpa kontribusi nyata
 ```
-
-### Parameter anomali (transparan dari awal, diketahui user sebelum bergabung)
-
-- Validitas link bukti tindakan charity
-- Kesesuaian tanggal transaksi dengan dokumentasi
-- Pola transaksi tidak wajar (jual-beli sendiri untuk manipulasi poin)
-- Validator berkolusi untuk project fiktif
-
-**AI tidak pilih kasih.** Parameternya sama untuk semua user.
-
-### Profil merah
-User dengan anomali tinggi atau neraca minus berkepanjangan akan ditandai (indikator merah di profil) sebagai peringatan bagi user lain. Ada fitur personal blocklist yang bisa digunakan user jika menemukan anomali pada user tertentu — dicatat dalam log transaksi.
 
 ---
 
-## Fee sharing — Top Developer
-
-Top Developer wajib menyisihkan dalam setiap project:
+## Peran AI — detector anomali, bukan pengambil keputusan
 
 ```
-Dana charity   : persentase untuk tindakan nyata di lapangan
-Dana buyback   : cadangan untuk antrian likuiditas
-Dana fee       : 2–5% dari nilai project, dibagi ke:
-                 → validator aktif (proporsional)
-                 → infrastruktur platform (server, hosting)
-                 → di fase DAPP: biaya infrastruktur blockchain
-```
+AI BUKAN: pengambil keputusan, hakim, eksekutor
+AI ADALAH: detector anomali berbasis log transaksi
 
-Tidak ada transfer manual. Sistem mencatat distribusi sebagai **nilai minus di neraca transaksi** secara otomatis — ini yang disebut "membayar fee sharing" tanpa ada otoritas yang menerima atau mengirim uang.
+Input: log transaksi publik (semua transaksi tercatat)
+Output: anomali_percentage (0-100%)
+
+0%    → tidak ada anomali, posisi tidak berubah
+1-99% → flag untuk review komunitas/admin
+100%  → transaksi dianggap tidak ada
+
+Prinsip:
+→ AI tidak pilih kasih — parameternya sama untuk semua
+→ Keputusan tetap di algoritma dasar dan komunitas
+→ AI semakin pintar = persentase kesalahan semakin kecil
+→ Tapi tidak pernah 0% = sistem tetap butuh komunitas
+
+Di masa depan:
+→ Log transaksi yang tidak jujur dari masa lalu
+  bisa "dihukum" oleh AI yang lebih pintar
+→ Anomali lama bisa dideteksi dan diberi minus
+→ Ini mendorong kejujuran dari awal
+```
 
 ---
 
-## Ranking developer
+## Fibonacci Capacity — kapasitas pool
 
 ```
-Top Developer : akses pool rekomendasi, fitur otomatis, kewajiban fee sharing
-Developer biasa: semua manual, 100% dana bisa ke charity (tapi peringkat rendah)
-```
+Kapasitas pool bukan statis, mengikuti pertumbuhan organik:
 
-Developer biasa bisa naik peringkat melalui buyback bertahap. Tidak ada paksaan — tapi hirarki selalu ditampilkan dan peringkat rendah adalah konsekuensi pilihan.
+kapasitas_aktif = jumlah_top_developer × 3
+
+Ini mencerminkan filosofi Fibonacci:
+→ Pertumbuhan komunitas menentukan kapasitas
+→ Tidak bisa dipaksakan atau dimanipulasi
+→ Natural growth = natural capacity
+
+Untuk validasi bergulir bisa dimulai:
+jumlah_nft_valid >= kapasitas_minimum (dari community_config)
+
+Di Fase Advance: kapasitas mengikuti deret Fibonacci murni
+berdasarkan jumlah user aktif
+```
 
 ---
 
-## Fase pengembangan
+## Fee sharing — infrastruktur otonom
 
-### Fase 1 — Saat ini (infrastruktur terpusat)
-- Auth login
-- Struktur database: neraca, pool, history transaksi
-- Logika harga dan poin
-- AI monitoring dasar
-- Dashboard developer dan ranking
-- Pool rekomendasi manual
+```
+Sumber fee: top_developer menyisihkan fee_project_pct (2-5%)
+dari setiap project
 
-### Fase 2 — Optimasi
-- Validasi bergulir otomatis
-- Fee sharing otomatis
-- Kapasitas Fibonacci dinamis
-- Profil merah dan blocklist
+Distribusi (tidak ada transfer dana fisik):
+→ Developer neraca -= fee_total (poin simbolik)
+→ fee_pool terkumpul (untuk infrastruktur)
+→ Validator neraca += bagian proporsional (poin simbolik)
 
-### Fase 3 — DAPP
-- Algoritma mengatur infrastrukturnya sendiri
-- Desentralisasi penuh
-- NFT bisa di-mint di platform manapun (lazy minting)
-- Tidak ada ketergantungan pada founder atau server terpusat
+Di Fase Advance:
+→ fee_pool digunakan untuk membiayai infrastruktur secara otonom
+→ Ada "vendor infrastruktur" yang project charity-nya
+  adalah membiayai server/hosting
+→ NFT mereka langsung valid dan masuk pool rekomendasi
+→ Sistem membiayai dirinya sendiri
+```
 
 ---
 
-## Struktur data — referensi implementasi
+## Multi-node federation — menuju desentralisasi
 
-### User / Developer
 ```
-id, nama, email
-level: 'biasa' | 'top_developer'
-neraca_poin: number  // bisa minus
-anomali_score: number  // 0–100%
-status_profil: 'normal' | 'merah'
-history_transaksi: []
-validator_aktif: project_id | null
-```
+Setiap instance TMEP:
+├── Punya database sendiri (Firebase terpisah)
+├── Punya administrator sendiri
+├── Setup parameter sendiri
+└── Menggunakan kode yang sama (open source)
 
-### Project Charity
-```
-id, developer_id
-judul, deskripsi
-link_bukti: string          // URL dokumentasi charity
-nilai_project: number       // min Rp 3.000.000
-jumlah_nft: number          // otomatis: nilai_project / 100.000 (default 30)
-harga_dasar: 100000         // tetap, ditetapkan komunitas
-batas_atas: 150000          // tetap, sistem blokir jika melebihi
-status_project: 'aktif' | 'dalam_invalidasi'
-daftar_invalidasi: boolean
-pool_jaminan: number        // total nilai terkunci dari semua validator
-jumlah_validator: number
-validator_list: { user_id, nft_unit_id, nilai, timestamp }[]
-like_count: number          // untuk index di halaman validasi
+Yang di-federate antar instance:
+├── Index developer global (ranking lintas instance)
+├── Index project global
+├── NFT valid — bisa dilihat dari instance manapun
+└── Reputasi user — bisa dibawa pindah instance
+
+Syarat federasi:
+→ Kode tidak dimodifikasi (versi sama = terverifikasi)
+→ Mendaftarkan instance ke registry publik (GitHub Pages)
+→ Mematuhi parameter minimum komunitas global
+
+Portal komunitas (GitHub Pages):
+→ instances.json — daftar semua node
+→ Badge "Verified" jika versi sama
+→ Badge "Modified" jika kode diubah (keluar federasi)
+→ User bisa pindah ke instance yang parameter-nya lebih baik
 ```
 
-### NFT Unit (setiap satuan yang bisa diperjualbelikan)
+---
+
+## Hierarki administrator (sementara, menuju otonom)
+
 ```
-id, project_id, developer_id
-owner_id: string            // pemilik saat ini
-status: 'biasa' | 'valid' | 'invalid'
-harga_jual: number          // ditetapkan penjual, max Rp 150.000
-harga_beli_terakhir: number // dasar perhitungan buyback
-nilai_selisih: number       // harga_beli_terakhir - 100.000
-digunakan_validasi: boolean // jika true → harga buyback reset ke Rp 100.000
-project_validasi_id: string | null
-history_kepemilikan: { from, to, harga, timestamp }[]
+Saat ini (terpusat):
+SuperAdmin → Admin → Moderator → User
+
+Menuju otonom (Fase Advance):
+→ Peran admin berkurang sedikit demi sedikit
+→ AI mengambil alih deteksi anomali
+→ Komunitas mengambil alih keputusan
+→ Pada titik otonom penuh: tidak ada admin
+
+Hirarki akses saat ini:
+SuperAdmin: semua akses + kelola tim admin
+Admin: semua fitur kecuali kelola tim
+Moderator: review komentar + dispute
+User: transaksi normal
 ```
 
-### Neraca User
+---
+
+## Roadmap implementasi
+
+### Fase 1 (selesai) — Fondasi logika dasar
 ```
-user_id
-total_poin: number          // akumulasi selisih dari semua NFT yang dimiliki
-                            // (hanya NFT yang belum digunakan validasi)
-status_validator: { project_id, nft_unit_ids[], nilai_total, fee_diterima }[]
-                            // bisa validator di banyak project sekaligus
-log: { tipe, nilai, timestamp, anomali_score }[]
+✓ Auth, community_config, explorer, beli NFT
+✓ Dashboard neraca, developer ranking
+✓ Komentar, admin panel
 ```
 
-### Pool Rekomendasi
+### Fase 2 (hampir selesai) — Keamanan dan tata kelola
 ```
-kapasitas_aktif: number  // dihitung Fibonacci dari jumlah top developer
-nft_valid: NFT[]
-total_jaminan: number
+✓ Buyback 2 arah
+✓ Sistem konfirmasi 3 opsi + auto-complete
+✓ Holding period validasi
+✓ Multi-admin hierarki
+✓ Personal blocklist
+✓ Soft delete project
+✓ Pembatasan algoritmik (realisasi transaksi)
+○ GitHub Pages portal komunitas
 ```
 
-### Neraca Transaksi (per user)
+### Fase 3 (branch baru) — Mendekati konsep asli
 ```
-user_id
-poin: number
-status_validator: null | { project_id, poin_terkunci, fee_diterima }
-log: { tipe, nilai, timestamp, anomali_score }[]
+○ FIFO validation: validasi via pembelian di pool
+○ NFT valid invalid setelah terbeli di FIFO
+○ Poin sebagai reputasi dengan efek peringkat nyata
+○ Dedicated liquidity implementation
+○ Fibonacci capacity calculation dinamis
+```
+
+### Fase Advance — Infrastruktur otonom
+```
+○ Multi-node federation aktif
+○ AI anomali detection (Gemini API atau setara)
+○ Vendor infrastruktur otonom
+○ State snapshot / backup ke GitHub
+○ Fibonacci node spreading
+```
+
+### Fase Otonom — DAPP atau near-DAPP
+```
+○ Tidak ada administrator
+○ AI mengelola anomali detection
+○ Komunitas global mengatur parameter
+○ Lazy minting NFT di platform eksternal
+○ Custodian kartu NFT fisik
 ```
 
 ---
@@ -338,11 +390,290 @@ Sistem ini sengaja tidak memiliki otoritas pusat. Setiap implementasi harus meng
 - Semua perubahan nilai harus melalui neraca transaksi
 - AI monitoring harus transparan dan parameternya terdokumentasi
 - Setiap keputusan algoritma harus bisa di-audit dari log transaksi
+- Fibonacci adalah pola target, bukan sekedar angka
 
-Project ini open source dan manifesto ini adalah kontrak sosial antar kontributor.
+**Pesan untuk developer masa depan dan AI yang akan mengembangkan ini:**
+
+Konsep ini tidak berubah dari awal. Yang berubah hanya implementasinya, menyesuaikan kemampuan teknologi dan komunitas yang ada. Bacalah log transaksi — di situlah semua kebenaran tersimpan. Sistem yang jujur akan selalu bisa dipertahankan, sistem yang tidak jujur akan dihukum oleh AI yang semakin pintar dari waktu ke waktu.
 
 ---
 
-> Versi dokumen: 1.0 — Disusun berdasarkan diskusi founder  
-> Status project: Open source, fase pengembangan logika dasar  
-> GitHub: [github.com/TMEP]
+> Versi dokumen: 2.0
+> Status project: Fase 2 hampir selesai, menuju Fase 3
+> GitHub: github.com/wahana108/earth-protector-migration
+> Open source — siapapun bisa fork, jalankan, dan berkontribusi
+
+---
+
+## Implementasi Fibonacci — kode dan penerapan
+
+### Logika yang digunakan
+
+Untuk suatu angka N (User Aktif), kita **menjumlahkan deret Fibonacci dari awal** dan berhenti pada Fibonacci terbesar yang membuat total sum masih ≤ N.
+
+```
+Aturan:
+→ Deret: 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, ...
+→ Jumlahkan dari awal terus menerus
+→ Berhenti saat menambahkan angka berikutnya akan melebihi N
+→ Fibonacci terbesar = angka terakhir yang masih bisa masuk
+→ Total sum = kapasitas organik komunitas
+
+Contoh N=100:
+1+1+2+3+5+8+13+21+34 = 88 ✓
+88 + 55 = 143 > 100 ✗ → berhenti
+Fibonacci terbesar = 34, total sum = 88
+```
+
+### Algoritma dasar (Python — referensi)
+
+```python
+def fibonacci_largest_and_sum(N):
+    if N < 1:
+        return 0, 0, []
+    
+    sequence = [1, 1]      # Deret Fibonacci
+    total = 2              # 1 + 1
+    
+    while True:
+        next_fib = sequence[-1] + sequence[-2]
+        
+        # Berhenti jika menambahkan next_fib akan melebihi N
+        if total + next_fib > N:
+            break
+            
+        sequence.append(next_fib)
+        total += next_fib
+    
+    largest_fib = sequence[-1]
+    return largest_fib, total, sequence
+
+# Contoh N=50:
+# Deret: [1, 1, 2, 3, 5, 8, 13]
+# Total sum: 33
+# Fibonacci terbesar: 13
+```
+
+### Implementasi JavaScript untuk platform TMEP
+
+```javascript
+function fibonacciLargestAndSum(N) {
+  if (N < 1) return { largest: 0, totalSum: 0, sequence: [] };
+  
+  const sequence = [1, 1];
+  let total = 2;
+  
+  while (true) {
+    const nextFib = sequence[sequence.length-1] + sequence[sequence.length-2];
+    if (total + nextFib > N) break;
+    sequence.push(nextFib);
+    total += nextFib;
+  }
+  
+  return {
+    largest: sequence[sequence.length-1],
+    totalSum: total,
+    sequence: sequence
+  };
+}
+
+// Penerapan utama di TMEP:
+function calculateTMEPCapacity(userAktif) {
+  const { largest, totalSum, sequence } = fibonacciLargestAndSum(userAktif);
+  const prevFib = sequence[sequence.length-2] || 1;
+  const nextMilestone = largest + prevFib;
+  
+  return {
+    // Batas atas top developer = Fibonacci terbesar
+    max_top_developer: largest,
+    
+    // Kapasitas total NFT valid = total sum (kapasitas organik)
+    kapasitas_nft_valid: totalSum,
+    
+    // Kapasitas pool rekomendasi = max_top_developer × 3
+    kapasitas_pool: largest * 3,
+    
+    // Minimum pool untuk mulai validasi = Fibonacci sebelumnya
+    min_pool_validasi: prevFib,
+    
+    // Deret lengkap untuk referensi
+    fibonacci_sequence: sequence,
+    
+    // Milestone berikutnya (seperti "halving" Bitcoin)
+    next_node_milestone: nextMilestone
+  };
+}
+```
+
+### Tabel referensi untuk berbagai skala komunitas
+
+```
+User Aktif (N) | Fib Terbesar | Total Sum | Kapasitas Pool | Min Validasi
+---------------|--------------|-----------|----------------|-------------
+10             | 3            | 7         | 9              | 2
+21             | 8            | 20        | 24             | 5
+50             | 13           | 33        | 39             | 8
+100            | 34           | 88        | 102            | 21
+250            | 89           | 232       | 267            | 55
+500            | 144          | 376       | 432            | 89
+1000           | 377          | 986       | 1131           | 233
+2500           | 610          | 1596      | 1830           | 377
+5000           | 1597         | 4180      | 4791           | 987
+10000          | 2584         | 6764      | 7752           | 1597
+```
+
+### Penerapan di 5 area platform
+
+#### 1. Kapasitas dinamis berdasarkan user aktif
+
+```javascript
+async function recalculateFibonacciCapacity() {
+  // user aktif = yang bertransaksi 30 hari terakhir
+  const userAktif = await countActiveUsers();
+  const capacity = calculateTMEPCapacity(userAktif);
+  
+  await updateCommunityConfig({
+    kapasitas_pool_minimum: capacity.kapasitas_nft_valid,
+    minimum_nft_pool_untuk_validasi: capacity.min_pool_validasi
+  });
+  
+  return capacity;
+}
+// N=100: max_top_dev=34, kapasitas_nft=88, min_validasi=21
+```
+
+#### 2. Batch AI monitoring — hemat energi komputasi
+
+```javascript
+function getBatchForAIMonitoring(allUsers, userAktif) {
+  const { largest } = fibonacciLargestAndSum(userAktif);
+  
+  // Urutkan berdasarkan peringkat (buyback%, neraca, dll)
+  const sorted = allUsers.sort((a, b) => b.rank_score - a.rank_score);
+  
+  // AI hanya menganalisis sejumlah Fibonacci terbesar user teratas
+  // Contoh: 100 user aktif → AI hanya analisis 34 user teratas
+  const priorityForAI = sorted.slice(0, largest);
+  const regularAlgorithm = sorted.slice(largest);
+  
+  return { priorityForAI, regularAlgorithm };
+}
+// Keuntungan: AI tidak menganalisis semua user
+// Hemat energi komputasi, fokus pada yang berpengaruh
+```
+
+#### 3. Node spreading — milestone seperti "halving" Bitcoin
+
+```javascript
+const NODE_FIBONACCI = [1,1,2,3,5,8,13,21,34,55,89,144,233,377,610,987];
+
+function checkNodeMilestone(currentNodes) {
+  const currentIdx = NODE_FIBONACCI.lastIndexOf(
+    Math.max(...NODE_FIBONACCI.filter(f => f <= currentNodes))
+  );
+  const nextMilestone = NODE_FIBONACCI[currentIdx + 1];
+  const prevMilestone = NODE_FIBONACCI[currentIdx];
+  
+  return {
+    milestone_tercapai: prevMilestone,
+    milestone_berikutnya: nextMilestone,
+    progress_pct: Math.round(currentNodes / nextMilestone * 100),
+    // Insentif bertambah semakin dekat ke milestone
+    // Mendorong pertumbuhan organik
+    insentif_level: currentIdx + 1
+  };
+}
+// Contoh: 8 node → milestone=8 tercapai, berikutnya=13
+// progress=61%, insentif_level=6
+```
+
+#### 4. Cross-community NFT validation
+
+```javascript
+function calculateCrossNodeWeight(nftId, allNodes) {
+  // Berapa node yang mengakui NFT ini
+  const recognizingNodes = allNodes.filter(n => 
+    n.validatedNFTs.includes(nftId)
+  ).length;
+  
+  // Bobot = Fibonacci terbesar dari total sum <= recognizingNodes
+  const { largest } = fibonacciLargestAndSum(recognizingNodes);
+  
+  return {
+    node_count: recognizingNodes,
+    // Semakin banyak node mengakui = bobot antrian likuiditas makin besar
+    // 1 node = bobot 1x, 5 node = bobot 5x, 8 node = bobot 8x
+    fibonacci_weight: largest,
+    // NFT diakui lintas komunitas = kepercayaan global lebih besar
+    cross_community_trusted: recognizingNodes >= 3
+  };
+}
+```
+
+#### 5. Anomali detection — alokasi AI proporsional
+
+```javascript
+function allocateAIResources(userAktif, totalTransactions) {
+  const { largest, totalSum, sequence } = fibonacciLargestAndSum(userAktif);
+  
+  return {
+    // Top developer: analisis penuh oleh AI API
+    ai_full_analysis: largest,
+    
+    // Calon top developer (Fibonacci range berikutnya): analisis parsial
+    ai_partial_analysis: totalSum - largest,
+    
+    // User biasa: algoritma dasar saja
+    basic_algorithm_only: userAktif - totalSum,
+    
+    // Transaksi yang dianalisis AI = proporsional Fibonacci
+    // Bukan semua transaksi — hemat energi
+    transactions_for_ai: Math.round(totalTransactions * (largest / userAktif))
+  };
+}
+// N=100:
+// ai_full_analysis = 34 user (top developer)
+// ai_partial = 54 user (calon top developer)
+// basic_only = 12 user (user biasa)
+// Hanya 34% transaksi yang dikirim ke AI
+```
+
+---
+
+### Filosofi implementasi Fibonacci di TMEP
+
+```
+Mengapa total_sum sebagai kapasitas organik:
+→ Bukan angka arbitrary yang ditentukan admin
+→ Mencerminkan kemampuan komunitas secara natural
+→ Tidak bisa dimanipulasi — mengikuti matematika alam
+
+Mengapa Fibonacci terbesar sebagai batas top developer:
+→ Seimbang: tidak terlalu sedikit (bottleneck)
+  dan tidak terlalu banyak (monopoli)
+→ Tumbuh seiring komunitas bertumbuh
+→ Setiap pertumbuhan signifikan → threshold naik otomatis
+
+Node milestone seperti "halving" Bitcoin:
+→ Setiap kali node mencapai angka Fibonacci berikutnya
+→ Ada evaluasi, reward, atau peningkatan kapasitas
+→ Mendorong pertumbuhan organik dan berkelanjutan
+
+Hemat energi AI:
+→ AI hanya menganalisis sejumlah Fibonacci terbesar user
+→ Di komunitas 1000 user → hanya 377 yang dianalisis AI
+→ 62% lebih hemat dibanding analisis semua user
+→ Fokus pada yang paling berpengaruh di komunitas
+
+Cross-community trust:
+→ NFT diakui 1 node → bobot 1
+→ NFT diakui 3 node → bobot 2 (Fibonacci ke-3)
+→ NFT diakui 5 node → bobot 5
+→ Pertumbuhan kepercayaan mengikuti deret alam
+```
+
+---
+
+> Catatan: Semua angka adalah parameter yang bisa disesuaikan.
+> Yang tidak berubah adalah filosofinya: pertumbuhan organik mengikuti alam.
+> Kode di atas adalah referensi implementasi — bukan kode production final.
