@@ -21,6 +21,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   purchase_autoclose_days: 7,
   max_projects_per_user: 10,
   min_realisasi_pct_untuk_create: 20,
+  super_admin_email: process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '',
   admin_emails: [],
   moderator_emails: [],
   fase_aktif: 1,

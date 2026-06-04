@@ -123,6 +123,7 @@ export type CommunityConfig = {
   purchase_autoclose_days: number;
   max_projects_per_user: number;
   min_realisasi_pct_untuk_create: number;
+  super_admin_email: string;
   admin_emails: string[];
   moderator_emails: string[];
   fase_aktif: number;

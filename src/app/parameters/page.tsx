@@ -20,7 +20,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import type { CommunityConfig, FeePool } from '@/lib/types';
 
-const SUPER_ADMIN_EMAIL = 'ramawan@live.com';
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 // ─── Tipe flat untuk form edit ───────────────────────────────────────────────
 type EditValues = {

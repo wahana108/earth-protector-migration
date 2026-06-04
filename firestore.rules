@@ -13,14 +13,21 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
-    // Super admin hardcoded + dynamic admin list dari community_config
+    // Super admin dibaca dari community_config/v1.super_admin_email
+    function isSuperAdmin() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/community_config/v1) &&
+        get(/databases/$(database)/documents/community_config/v1)
+          .data.super_admin_email == request.auth.token.email;
+    }
+
+    // Admin = super admin ATAU ada di admin_emails
     function isAdmin() {
-      return isAuth() && (
-        request.auth.token.email == 'ramawan@live.com' ||
-        (exists(/databases/$(database)/documents/community_config/v1) &&
+      return isSuperAdmin() ||
+        (isAuth() &&
+         exists(/databases/$(database)/documents/community_config/v1) &&
          get(/databases/$(database)/documents/community_config/v1)
-           .data.admin_emails.hasAny([request.auth.token.email]))
-      );
+           .data.admin_emails.hasAny([request.auth.token.email]));
     }
 
     function isModerator() {
@@ -180,10 +187,12 @@ service cloud.firestore {
 
     // ─── community_config/{docId} ────────────────────────────────────────────
     // Kontrak sosial komunitas — publik untuk dibaca (halaman /parameters).
-    // Write: hanya admin (ramawan@live.com) untuk inisialisasi dan update.
+    // Create: siapa pun yang login bisa buat doc awal (bootstrap fresh deploy).
+    // Update/Delete: hanya super admin atau admin.
     match /community_config/{docId} {
-      allow read:  if true;
-      allow write: if isAdmin();
+      allow read:   if true;
+      allow create: if isAuth();
+      allow update, delete: if isSuperAdmin() || isAdmin();
     }
 
     // ─── projects/{projectId} ────────────────────────────────────────────────
