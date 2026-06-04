@@ -23,7 +23,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { buyNftUnit, BuyError, toggleNftLike } from '@/lib/projects';
-import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
+import { fetchComments, addComment, deleteComment, reportComment, pinComment, unpinComment } from '@/lib/comments';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -223,23 +223,36 @@ function BuyDialog({
 interface CommentSectionProps {
   nftId: string;
   nftOwnerId?: string;
+  projectDeveloperId: string;
   currentUserId: string | undefined;
   currentUserDisplayName: string | null;
 }
 
-function CommentSection({ nftId, nftOwnerId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
+function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
   const [reportedSet, setReportedSet] = useState<Set<string>>(new Set());
   const reportedInitRef = useRef(false);
   const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
 
+  const isProjectDeveloper = !!currentUserId && currentUserId === projectDeveloperId;
+
   useEffect(() => {
-    fetchComments(nftId).then(setComments).finally(() => setLoading(false));
+    fetchComments(nftId)
+      .then(fetched => {
+        const sorted = [...fetched].sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return b.timestamp.getTime() - a.timestamp.getTime();
+        });
+        setComments(sorted);
+      })
+      .finally(() => setLoading(false));
   }, [nftId]);
 
   useEffect(() => {
@@ -284,6 +297,40 @@ function CommentSection({ nftId, nftOwnerId, currentUserId, currentUserDisplayNa
       localStorage.setItem(`tmep_reported_${commentId}`, '1');
       setReportedSet(prev => new Set(prev).add(commentId));
     } catch { /* silent */ }
+  }
+
+  async function handlePin(commentId: string) {
+    if (!currentUserId) return;
+    setPinningId(commentId);
+    try {
+      await pinComment(commentId, nftId, projectDeveloperId, currentUserId);
+      setComments(prev => {
+        const updated = prev.map(c => ({ ...c, is_pinned: c.id === commentId }));
+        return [...updated].sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return b.timestamp.getTime() - a.timestamp.getTime();
+        });
+      });
+    } catch { /* silent */ }
+    finally { setPinningId(null); }
+  }
+
+  async function handleUnpin(commentId: string) {
+    if (!currentUserId) return;
+    setPinningId(commentId);
+    try {
+      await unpinComment(commentId, nftId, projectDeveloperId, currentUserId);
+      setComments(prev => {
+        const updated = prev.map(c => c.id === commentId ? { ...c, is_pinned: false } : c);
+        return [...updated].sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return b.timestamp.getTime() - a.timestamp.getTime();
+        });
+      });
+    } catch { /* silent */ }
+    finally { setPinningId(null); }
   }
 
   return (
@@ -346,7 +393,13 @@ function CommentSection({ nftId, nftOwnerId, currentUserId, currentUserDisplayNa
       ) : (
         <div className="space-y-5">
           {comments.map(c => (
-            <div key={c.id} className="flex gap-3 text-sm">
+            <div
+              key={c.id}
+              className={cn(
+                'flex gap-3 text-sm rounded-md px-2 py-1 -mx-2',
+                c.is_pinned && 'border-l-2 border-primary bg-primary/5',
+              )}
+            >
               <div className="h-8 w-8 rounded-full bg-muted border flex items-center justify-center shrink-0 text-xs font-semibold text-muted-foreground uppercase">
                 {c.display_name.charAt(0)}
               </div>
@@ -378,7 +431,20 @@ function CommentSection({ nftId, nftOwnerId, currentUserId, currentUserDisplayNa
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="font-semibold">{c.display_name}</span>
                     <span className="text-xs text-muted-foreground">{relativeTime(c.timestamp)}</span>
-                    <div className="ml-auto shrink-0">
+                    {c.is_pinned && (
+                      <span className="text-xs text-primary font-medium">📌 Disematkan</span>
+                    )}
+                    <div className="ml-auto shrink-0 flex items-center gap-1">
+                      {isProjectDeveloper && (
+                        <button
+                          onClick={() => c.is_pinned ? handleUnpin(c.id) : handlePin(c.id)}
+                          disabled={pinningId === c.id}
+                          className="p-0.5 text-muted-foreground/40 hover:text-primary transition-colors text-xs"
+                          title={c.is_pinned ? 'Lepas sematan' : 'Sematkan komentar'}
+                        >
+                          {c.is_pinned ? '📌 Lepas' : '📌 Sematkan'}
+                        </button>
+                      )}
                       {c.user_id === currentUserId ? (
                         <button
                           onClick={() => setDeletingId(c.id)}
@@ -793,6 +859,7 @@ export default function NftDetailPage({
         <CommentSection
           nftId={id}
           nftOwnerId={unit.owner_id}
+          projectDeveloperId={unit.developer_id}
           currentUserId={user?.id}
           currentUserDisplayName={currentUserDisplayName}
         />

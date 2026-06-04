@@ -265,6 +265,7 @@ export type Comment = {
   text: string;
   timestamp: Date;
   anomali_flag: boolean;
+  is_pinned?: boolean;
 };
 
 export type NFTUnit = {

@@ -309,6 +309,9 @@ service cloud.firestore {
         allow update: if (isAuth() &&
             request.resource.data.diff(resource.data)
               .affectedKeys().hasOnly(['anomali_flag']))
+          || (isAuth() &&
+              request.resource.data.diff(resource.data)
+                .affectedKeys().hasOnly(['is_pinned']))
           || isMe(resource.data.user_id)
           || isAdmin();
         allow delete: if isMe(resource.data.user_id) || isAdmin();

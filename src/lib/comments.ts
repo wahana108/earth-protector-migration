@@ -4,6 +4,7 @@ import {
   orderBy, limit, where, writeBatch, updateDoc,
   serverTimestamp, Timestamp, increment,
 } from 'firebase/firestore';
+
 import type { Comment } from './types';
 import { isBlocked } from './blocks';
 
@@ -33,8 +34,38 @@ export async function fetchComments(nftUnitId: string): Promise<Comment[]> {
       text: data.text as string,
       timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
       anomali_flag: (data.anomali_flag as boolean) ?? false,
+      is_pinned: (data.is_pinned as boolean) ?? false,
     };
   });
+}
+
+export async function pinComment(
+  commentId: string,
+  nftUnitId: string,
+  projectDeveloperId: string,
+  requesterId: string,
+): Promise<void> {
+  if (requesterId !== projectDeveloperId) throw new Error('Hanya developer project yang bisa menyematkan komentar.');
+
+  const commentsRef = collection(db, 'nft_units', nftUnitId, 'comments');
+  const pinnedSnap = await getDocs(query(commentsRef, where('is_pinned', '==', true)));
+
+  const batch = writeBatch(db);
+  pinnedSnap.docs.forEach(d => {
+    batch.update(d.ref, { is_pinned: false });
+  });
+  batch.update(doc(commentsRef, commentId), { is_pinned: true });
+  await batch.commit();
+}
+
+export async function unpinComment(
+  commentId: string,
+  nftUnitId: string,
+  projectDeveloperId: string,
+  requesterId: string,
+): Promise<void> {
+  if (requesterId !== projectDeveloperId) throw new Error('Hanya developer project yang bisa melepas sematan.');
+  await updateDoc(doc(db, 'nft_units', nftUnitId, 'comments', commentId), { is_pinned: false });
 }
 
 export async function addComment(
