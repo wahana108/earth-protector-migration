@@ -40,6 +40,7 @@ const TODAY = new Date().toISOString().split('T')[0];
 
 const schema = z.object({
   nama_project: z.string().min(10, 'Min 10 karakter').max(100, 'Max 100 karakter'),
+  deskripsi: z.string().max(300, 'Max 300 karakter').optional(),
   deskripsi_project: z.string().min(50, 'Min 50 karakter'),
   gambar_url: z.string().url('Harus URL yang valid'),
   link_bukti: z.string().url('Harus URL yang valid'),
@@ -170,6 +171,7 @@ export default function CreatePage() {
         developer_id: user.id,
         nama_project: data.nama_project,
         deskripsi_project: data.deskripsi_project,
+        deskripsi: data.deskripsi,
         gambar_url: data.gambar_url,
         link_bukti: data.link_bukti,
         tanggal_tindakan: data.tanggal_tindakan,
@@ -333,6 +335,23 @@ export default function CreatePage() {
                 />
                 {errors.nama_project && (
                   <p className="text-sm text-destructive">{errors.nama_project.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="deskripsi">
+                  Deskripsi &amp; Link Pembelian{' '}
+                  <span className="text-muted-foreground text-xs font-normal">(opsional)</span>
+                </Label>
+                <Textarea
+                  id="deskripsi"
+                  placeholder="Jelaskan project Anda dan cantumkan link pembelian NFT jika ada (opsional, max 300 karakter)"
+                  rows={2}
+                  maxLength={300}
+                  {...register('deskripsi')}
+                />
+                {errors.deskripsi && (
+                  <p className="text-sm text-destructive">{errors.deskripsi.message}</p>
                 )}
               </div>
 

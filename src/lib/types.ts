@@ -222,6 +222,7 @@ export type Project = {
   jumlah_nft_terjual?: number;
   link_bukti_status?: 'aktif' | 'tidak_aktif' | 'belum_dicek';
   link_bukti_last_checked?: Date | null;
+  deskripsi?: string;
   status_project: 'aktif' | 'dalam_invalidasi';
   daftar_invalidasi: boolean;
   pool_jaminan: number;
@@ -273,6 +274,7 @@ export type NFTUnit = {
   owner_id: string;
   nama_nft: string;
   nama_project: string;
+  deskripsi?: string;
   gambar_url: string;
   kategori: ProjectCategory;
   status: NFTStatus;

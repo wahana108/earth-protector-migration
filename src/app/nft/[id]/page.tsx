@@ -55,6 +55,7 @@ type PageData = {
   unit: NFTUnit;
   projectNama: string;
   projectLinkBukti: string;
+  projectDeskripsi: string;
   ownerName: string;
 };
 
@@ -501,6 +502,7 @@ export default function NftDetailPage({
           unit,
           projectNama: (projectData.nama_project as string) || unit.nama_project,
           projectLinkBukti: (projectData.link_bukti as string) || '',
+          projectDeskripsi: (projectData.deskripsi as string) || '',
           ownerName: (ownerData.displayName as string) || 'User',
         });
         setLikeCount(unit.like_count);
@@ -594,7 +596,7 @@ export default function NftDetailPage({
   if (missing) return notFound();
   if (!data) return null;
 
-  const { unit, projectNama, projectLinkBukti, ownerName } = data;
+  const { unit, projectNama, projectLinkBukti, projectDeskripsi, ownerName } = data;
   const isOwn = !!user && user.id === unit.owner_id;
   const canBuy = !!user && !isOwn && unit.for_sale && !!config;
   const kategoriLabel = KATEGORI_LABELS[unit.kategori] ?? unit.kategori;
@@ -645,6 +647,10 @@ export default function NftDetailPage({
               {projectNama}
             </Link>
           </p>
+
+          {projectDeskripsi && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{projectDeskripsi}</p>
+          )}
 
           {/* Harga, selisih, owner */}
           <div className="rounded-lg border p-3 space-y-2 text-sm">

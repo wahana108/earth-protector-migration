@@ -20,6 +20,7 @@ export type CreateProjectInput = {
   developer_id: string;
   nama_project: string;
   deskripsi_project: string;
+  deskripsi?: string;
   gambar_url: string;
   link_bukti: string;
   tanggal_tindakan: string;
@@ -131,6 +132,7 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     developer_id: input.developer_id,
     nama_project: input.nama_project,
     deskripsi_project: input.deskripsi_project,
+    deskripsi: input.deskripsi ?? '',
     gambar_url: input.gambar_url,
     link_bukti: input.link_bukti,
     tanggal_tindakan: input.tanggal_tindakan,
@@ -163,6 +165,7 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
       owner_id: input.developer_id,
       nama_nft: `${input.nama_project} #${paddedNum}`,
       nama_project: input.nama_project,
+      deskripsi: input.deskripsi ?? '',
       gambar_url: input.gambar_url,
       kategori: input.kategori,
       status: 'biasa',

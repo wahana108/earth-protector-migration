@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   ClipboardCheck,
   Globe,
+  HelpCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -48,6 +49,7 @@ const navItems = [
   { href: '/transactions', label: 'Transaksi', icon: ArrowLeftRight },
   { href: '/top-developers', label: 'Developer Ranking', icon: Award },
   { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },
+  { href: '/help', label: 'Bantuan', icon: HelpCircle },
 ];
 
 export function SidebarNav() {

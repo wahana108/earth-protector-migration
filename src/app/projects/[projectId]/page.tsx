@@ -309,6 +309,9 @@ export default function ProjectDetailPage({
           </div>
 
           <h1 className="text-2xl font-bold leading-snug">{project.nama_project}</h1>
+          {project.deskripsi && (
+            <p className="text-sm text-foreground leading-relaxed">{project.deskripsi}</p>
+          )}
           <p className="text-muted-foreground leading-relaxed">{project.deskripsi_project}</p>
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
