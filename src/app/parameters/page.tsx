@@ -178,6 +178,9 @@ export default function ParametersPage() {
           setFeePool({
             total_terkumpul: (fd.total_terkumpul as number) ?? 0,
             total_terdistribusi: (fd.total_terdistribusi as number) ?? 0,
+            total_digunakan: (fd.total_digunakan as number) ?? 0,
+            sertifikat_aktif_id: (fd.sertifikat_aktif_id as string | null) ?? null,
+            total_sertifikat_diterbitkan: (fd.total_sertifikat_diterbitkan as number) ?? 0,
             updated_at: (fd.updated_at as Timestamp)?.toDate?.() ?? new Date(),
           });
         }

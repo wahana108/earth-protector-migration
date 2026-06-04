@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   Globe,
   HelpCircle,
+  Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -46,6 +47,7 @@ const navItems = [
   { href: '/buyback-requests', label: 'Permintaan Buyback', icon: ShoppingBag },
   { href: '/purchase-confirmations', label: 'Konfirmasi Penjualan', icon: ClipboardCheck },
   { href: '/instances', label: 'Komunitas', icon: Globe },
+  { href: '/infrastructure', label: 'Dana Sistem', icon: Building2 },
   { href: '/transactions', label: 'Transaksi', icon: ArrowLeftRight },
   { href: '/top-developers', label: 'Developer Ranking', icon: Award },
   { href: '/parameters', label: 'Parameters', icon: SlidersHorizontal },

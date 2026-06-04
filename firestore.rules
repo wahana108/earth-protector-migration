@@ -234,16 +234,18 @@ service cloud.firestore {
     // Delete: tidak diizinkan (unit adalah rekaman permanen).
     match /nft_units/{nftUnitId} {
       allow read:   if true;
-      allow create: if isAuth() &&
-        request.resource.data.developer_id == request.auth.uid &&
-        request.resource.data.owner_id == request.auth.uid;
+      allow create: if (isAuth() &&
+          request.resource.data.developer_id == request.auth.uid &&
+          request.resource.data.owner_id == request.auth.uid) ||
+        // Infrastructure certificates: diterbitkan oleh siapapun yang auth (dipicu fee event)
+        (isAuth() && request.resource.data.is_infrastructure == true);
       allow update: if isAdmin() ||
         (isAuth() && resource.data.owner_id == request.auth.uid) ||
         (isAuth() && resource.data.developer_id == request.auth.uid) ||
         // Buy flow: siapapun yang auth boleh ambil NFT for_sale (in_pool opsional untuk beli_pool)
         (isAuth() && resource.data.for_sale == true &&
           request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at', 'purchase_status', 'purchase_auto_complete_at'])) ||
+            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at', 'purchase_status', 'purchase_auto_complete_at', 'purchase_confirmed_at'])) ||
         // Purchase confirmation flow: developer konfirmasi atau auto-complete
         (isAuth() &&
           request.resource.data.diff(resource.data)
@@ -332,6 +334,14 @@ service cloud.firestore {
     match /fee_pool/{docId} {
       allow read: if true;
       allow write: if isAuth();
+    }
+
+    // ─── contributor_certificates/{certId} ───────────────────────────────────
+    // Rekaman publik kontributor infrastruktur. Dibuat saat pembelian Infrastructure Certificate.
+    match /contributor_certificates/{certId} {
+      allow read:           if true;
+      allow create:         if isAuth();
+      allow update, delete: if isAdmin();
     }
 
     // ─── collectionGroup: neraca_log ─────────────────────────────────────────

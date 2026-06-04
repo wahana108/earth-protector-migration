@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
   Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
+  Building2, Plus, X,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -22,6 +23,8 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
 import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
+import { checkAndIssueCertificate, getInfrastructureFundStatus, type InfrastructureFundStatus } from '@/lib/infrastructure';
+import { updateCommunityConfig } from '@/lib/community-config';
 import type { UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
@@ -347,6 +350,14 @@ export default function AdminPage() {
   const [projectFilter, setProjectFilter] = useState<'semua' | 'aktif' | 'deleted'>('aktif');
   const [projectSearch, setProjectSearch] = useState('');
 
+  // Infrastructure Fund state
+  const [infraStatus, setInfraStatus] = useState<InfrastructureFundStatus | null>(null);
+  const [loadingInfra, setLoadingInfra] = useState(true);
+  const [issuingCert, setIssuingCert] = useState(false);
+  const [issueResult, setIssueResult] = useState<string | null>(null);
+  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' }>>([]);
+  const [savingCosts, setSavingCosts] = useState(false);
+
   useEffect(() => {
     if (authLoading) return;
     if (!isModerator) router.replace('/');
@@ -357,7 +368,51 @@ export default function AdminPage() {
     loadDisputes();
     loadProjects();
     loadBlocks();
+    loadInfra();
   }, [isModerator]);
+
+  async function loadInfra() {
+    setLoadingInfra(true);
+    try {
+      const [status, config] = await Promise.all([
+        getInfrastructureFundStatus(),
+        import('@/lib/community-config').then(m => m.getCommunityConfig()),
+      ]);
+      setInfraStatus(status);
+      setInfraCosts(config?.infrastructure_costs ?? []);
+    } finally {
+      setLoadingInfra(false);
+    }
+  }
+
+  async function handleIssueCertificate() {
+    if (!user) return;
+    setIssuingCert(true);
+    setIssueResult(null);
+    try {
+      const nftId = await checkAndIssueCertificate(user.id);
+      if (nftId) {
+        setIssueResult(`Sertifikat berhasil diterbitkan (NFT ID: ${nftId.slice(0, 8)}…)`);
+        await loadInfra();
+      } else {
+        setIssueResult('Tidak dapat menerbitkan: dana belum cukup atau sudah ada sertifikat aktif.');
+      }
+    } catch (e) {
+      setIssueResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
+    } finally {
+      setIssuingCert(false);
+    }
+  }
+
+  async function handleSaveCosts() {
+    if (!user) return;
+    setSavingCosts(true);
+    try {
+      await updateCommunityConfig(user.id, { infrastructure_costs: infraCosts });
+    } finally {
+      setSavingCosts(false);
+    }
+  }
 
   async function loadDisputes() {
     setLoadingDisputes(true);
@@ -691,6 +746,145 @@ export default function AdminPage() {
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Infrastructure Fund */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Infrastructure Fund
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Kelola dana sistem dari fee sharing. Terbitkan sertifikat kontribusi infrastruktur.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {loadingInfra ? (
+                <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat data…
+                </div>
+              ) : infraStatus ? (
+                <>
+                  {/* Status ringkasan */}
+                  <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground mb-0.5">Terkumpul</p>
+                      <p className="font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_terkumpul)}</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground mb-0.5">Digunakan</p>
+                      <p className="font-bold text-orange-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_digunakan)}</p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs text-muted-foreground mb-0.5">Sisa</p>
+                      <p className="font-bold text-green-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Math.max(0, infraStatus.sisa))}</p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Sertifikat diterbitkan: <span className="font-medium text-foreground">{infraStatus.total_sertifikat_diterbitkan}</span>
+                    {infraStatus.sertifikat_aktif_id && (
+                      <span className="ml-2 text-green-700 font-medium">• 1 aktif di pool</span>
+                    )}
+                  </div>
+
+                  {/* Tombol terbitkan */}
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      className="gap-2"
+                      disabled={
+                        issuingCert ||
+                        infraStatus.sisa < infraStatus.harga_dasar ||
+                        infraStatus.sertifikat_aktif_id !== null
+                      }
+                      onClick={handleIssueCertificate}
+                    >
+                      {issuingCert
+                        ? <><Loader2 className="h-4 w-4 animate-spin" />Menerbitkan…</>
+                        : <><Building2 className="h-4 w-4" />Terbitkan Sertifikat Sekarang</>
+                      }
+                    </Button>
+                    {infraStatus.sertifikat_aktif_id && (
+                      <p className="text-xs text-muted-foreground">Sudah ada sertifikat aktif di pool.</p>
+                    )}
+                    {infraStatus.sisa < infraStatus.harga_dasar && !infraStatus.sertifikat_aktif_id && (
+                      <p className="text-xs text-muted-foreground">
+                        Dana belum cukup ({new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.harga_dasar - Math.max(0, infraStatus.sisa))} lagi).
+                      </p>
+                    )}
+                    {issueResult && (
+                      <p className={`text-xs rounded-md px-3 py-2 ${issueResult.startsWith('Gagal') || issueResult.startsWith('Tidak') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-400'}`}>
+                        {issueResult}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Dana sistem belum memiliki catatan.</p>
+              )}
+
+              {/* Form kebutuhan biaya */}
+              <div className="space-y-3 pt-2 border-t">
+                <p className="text-xs font-medium">Kebutuhan Operasional Node</p>
+                <div className="space-y-2">
+                  {infraCosts.map((item, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input
+                        className="flex-1 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Nama (contoh: Vercel Hosting)"
+                        value={item.nama}
+                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, nama: e.target.value } : c))}
+                      />
+                      <input
+                        type="number"
+                        className="w-24 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Jumlah"
+                        value={item.jumlah}
+                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, jumlah: Number(e.target.value) } : c))}
+                      />
+                      <select
+                        className="h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={item.periode}
+                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, periode: e.target.value as 'bulan' | 'tahun' } : c))}
+                      >
+                        <option value="bulan">/bulan</option>
+                        <option value="tahun">/tahun</option>
+                      </select>
+                      <button
+                        className="h-7 w-7 flex items-center justify-center rounded-md border text-muted-foreground hover:text-destructive hover:border-red-300 transition-colors"
+                        onClick={() => setInfraCosts(prev => prev.filter((_, idx) => idx !== i))}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setInfraCosts(prev => [...prev, { nama: '', jumlah: 0, periode: 'bulan' }])}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Tambah Baris
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={savingCosts}
+                    onClick={handleSaveCosts}
+                  >
+                    {savingCosts ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    Simpan
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

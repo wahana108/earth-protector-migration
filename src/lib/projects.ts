@@ -5,6 +5,7 @@ import {
   setDoc, increment, arrayUnion, Timestamp,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
+import { checkAndIssueCertificate } from './infrastructure';
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
 import type { ProjectCategory } from './types';
@@ -299,6 +300,7 @@ export async function buyNftUnit(
   let nftStatusCapture: string = '';
   let projectIdCapture = '';
   let hargaJualCapture = 0;
+  let isInfrastructureCapture = false;
 
   // Cek blokir sebelum transaksi
   const preSnap = await getDoc(nftRef);
@@ -335,26 +337,82 @@ export async function buyNftUnit(
     nftStatusCapture = (nft.status as string) ?? 'biasa';
     projectIdCapture = project_id;
     hargaJualCapture = harga_jual;
+    const isInfrastructure = (nft.is_infrastructure as boolean) ?? false;
+    isInfrastructureCapture = isInfrastructure;
 
     const sellerRef = doc(db, 'users', sellerId);
     const buyerRef = doc(db, 'users', buyerId);
     const projectRef = doc(db, 'projects', project_id);
+    const feePoolRef = doc(db, 'fee_pool', 'v1');
 
     const sellerSnap = await tx.get(sellerRef);
     const buyerSnap = await tx.get(buyerRef);
     const projectSnap = await tx.get(projectRef);
+    const feePoolSnap = isInfrastructure ? await tx.get(feePoolRef) : null;
 
-    if (!sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
+    if (!isInfrastructure && !sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
     if (!buyerSnap.exists()) throw new BuyError('Data pembeli tidak ditemukan.');
 
     const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
-    const buyerBuybackCount: number = buyerSnap.data().buybackCount ?? 0;
-    const sellerSoldNfts: number = sellerSnap.data().soldNfts ?? 0;
+    const buyerBuybackCount: number = (buyerSnap.data().buybackCount as number) ?? 0;
+    const buyerPoin: number = (buyerSnap.data().total_poin as number) ?? 0;
+    const sellerSoldNfts: number = sellerSnap.exists() ? ((sellerSnap.data().soldNfts as number) ?? 0) : 0;
     const link_bukti = projectSnap.exists()
       ? (projectSnap.data().link_bukti as string) ?? ''
       : '';
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
+
+    // Infrastructure purchase: direct completion, no seller neraca, update fee_pool
+    if (isInfrastructure) {
+      const currentDipakai = feePoolSnap?.exists()
+        ? ((feePoolSnap.data().total_digunakan as number) ?? 0) : 0;
+
+      tx.update(nftRef, {
+        owner_id: buyerId,
+        for_sale: false,
+        harga_beli_terakhir: harga_jual,
+        purchased_at: serverTimestamp(),
+        purchase_status: 'completed',
+        purchase_confirmed_at: serverTimestamp(),
+        in_pool: false,
+      });
+      tx.update(buyerRef, { total_poin: buyerPoin + nilai_selisih });
+      tx.set(feePoolRef, {
+        total_digunakan: currentDipakai + harga_jual,
+        sertifikat_aktif_id: null,
+      }, { merge: true });
+      tx.update(poolRef, { jumlah_nft_valid: increment(-1) });
+      tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+        type: 'beli',
+        nft_unit_id: nftUnitId,
+        nama_nft,
+        harga_transaksi: harga_jual,
+        nilai_selisih,
+        delta: nilai_selisih,
+        counterparty_id: sellerId,
+        project_id,
+        link_bukti: '',
+        timestamp: serverTimestamp(),
+      });
+      tx.set(doc(collection(db, 'nft_units', nftUnitId, 'history_kepemilikan')), {
+        dari: sellerId,
+        ke: buyerId,
+        harga: harga_jual,
+        timestamp: serverTimestamp(),
+        ...(options?.transaction_description && { transaction_description: options.transaction_description }),
+        ...(options?.proof_link && { proof_link: options.proof_link }),
+      });
+      tx.set(doc(collection(db, 'contributor_certificates')), {
+        user_id: buyerId,
+        nft_unit_id: nftUnitId,
+        certificate_code: (nft.certificate_code as string) ?? '',
+        nilai: harga_jual,
+        created_at: serverTimestamp(),
+        purchased_at: serverTimestamp(),
+      });
+      return;
+    }
 
     // 4. Update nft_unit — pindah kepemilikan, tandai purchase pending
     const autoCloseDays = options?.purchase_autoclose_days ?? 7;
@@ -416,6 +474,11 @@ export async function buyNftUnit(
     });
   });
 
+  // Infrastructure purchase: cek penerbitan sertifikat berikutnya (non-critical)
+  if (isInfrastructureCapture) {
+    try { await checkAndIssueCertificate(developerIdCapture); } catch { /* silent */ }
+    return;
+  }
   // Cek dan update level developer asli NFT setelah soldNfts bertambah (non-critical)
   if (developerIdCapture) {
     try { await checkAndUpdateDeveloperLevel(developerIdCapture); } catch { /* silent */ }
@@ -1070,6 +1133,9 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
   }
 
   await batch.commit();
+
+  // Cek penerbitan sertifikat infrastruktur jika fee terkumpul cukup (non-critical)
+  try { await checkAndIssueCertificate(); } catch { /* silent */ }
 }
 
 // ─── Buyback 2 Arah (Two-Way Handshake) ──────────────────────────────────────

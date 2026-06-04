@@ -129,6 +129,7 @@ export type CommunityConfig = {
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
+  infrastructure_costs?: Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' }>;
   updated_at: Date;
   updated_by: string;
 };
@@ -146,7 +147,20 @@ export type UserBlock = {
 export type FeePool = {
   total_terkumpul: number;
   total_terdistribusi: number;
+  total_digunakan: number;
+  sertifikat_aktif_id: string | null;
+  total_sertifikat_diterbitkan: number;
   updated_at: Date;
+};
+
+export type ContributorCertificate = {
+  id: string;
+  user_id: string;
+  nft_unit_id: string;
+  certificate_code: string;
+  nilai: number;
+  created_at: Date;
+  purchased_at: Date;
 };
 
 export type ProjectCategory =
@@ -301,4 +315,6 @@ export type NFTUnit = {
   fifo_skip_count?: number;
   last_skipped_by?: string;
   last_skip_reason?: string;
+  is_infrastructure?: boolean;
+  certificate_code?: string;
 };

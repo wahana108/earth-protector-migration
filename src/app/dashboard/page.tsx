@@ -10,7 +10,7 @@ import {
 import {
   PlusCircle, Loader2, Lock, Pencil,
   RefreshCcw, TrendingDown, TrendingUp, Minus, Upload, UserX, ShieldOff,
-  CheckCircle2, AlertTriangle,
+  CheckCircle2, AlertTriangle, Award,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -26,10 +26,11 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
+import { getUserCertificates } from '@/lib/infrastructure';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { getCommunityConfig } from '@/lib/community-config';
-import type { UserBlock } from '@/lib/types';
+import type { UserBlock, ContributorCertificate } from '@/lib/types';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -793,6 +794,7 @@ export default function DashboardPage() {
   const [transferPoolTarget, setTransferPoolTarget] = useState<NFTUnit | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<(UserBlock & { blocked_name: string })[]>([]);
   const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
+  const [certificates, setCertificates] = useState<ContributorCertificate[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -802,7 +804,7 @@ export default function DashboardPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [userSnap, unitsSnap, logsSnap, projectsSnap, realResult, cfg] = await Promise.all([
+      const [userSnap, unitsSnap, logsSnap, projectsSnap, realResult, cfg, certs] = await Promise.all([
         getDoc(doc(db, 'users', user.id)),
         getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
         getDocs(query(
@@ -813,7 +815,9 @@ export default function DashboardPage() {
         getDocs(query(collection(db, 'projects'), where('developer_id', '==', user.id))),
         calculateRealisasiPct(user.id),
         getCommunityConfig(),
+        getUserCertificates(user.id),
       ]);
+      setCertificates(certs);
       setRealisasi(realResult);
       setMinRealisasiPct(cfg?.min_realisasi_pct_untuk_create ?? 20);
 
@@ -1055,6 +1059,54 @@ export default function DashboardPage() {
                 />
               </section>
             )}
+
+            {/* ── 6. Sertifikat Kontributor ── */}
+            <section className="space-y-3">
+              <h2 className="font-semibold text-lg flex items-center gap-2">
+                <Award className="h-5 w-5 text-yellow-500" />
+                Sertifikat Kontributor
+                {certificates.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({certificates.length})
+                  </span>
+                )}
+              </h2>
+              {certificates.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 border-2 border-dashed rounded-xl text-center">
+                  Belum ada sertifikat kontributor.{' '}
+                  <Link href="/infrastructure" className="underline underline-offset-2">
+                    Pelajari Infrastructure Fund
+                  </Link>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {certificates.map(cert => (
+                    <div
+                      key={cert.id}
+                      className="flex items-center gap-3 rounded-xl border bg-gradient-to-br from-yellow-50/50 to-amber-50/50 dark:from-yellow-950/20 dark:to-amber-950/20 p-3"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center shrink-0">
+                        <Award className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-mono text-sm font-semibold leading-snug">{cert.certificate_code}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(cert.purchased_at)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <Badge className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-400">
+                          Infrastructure Contributor
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(cert.nilai)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>
