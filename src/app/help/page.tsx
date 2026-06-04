@@ -12,6 +12,7 @@ import {
 
 const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration';
 const GITHUB_INSTANCES = 'https://github.com/wahana108/earth-nft-instances';
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 export default function HelpPage() {
   return (
@@ -221,6 +222,89 @@ export default function HelpPage() {
               </AccordionItem>
 
             </Accordion>
+          </CardContent>
+        </Card>
+
+        {/* ── Credits ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Credits</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 text-sm">
+
+            <div className="space-y-2">
+              <h3 className="font-semibold text-foreground">Dibangun dengan</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>Next.js — React Framework</li>
+                <li>Firebase — Backend &amp; Database</li>
+                <li>Vercel — Hosting</li>
+                <li>Tailwind CSS + shadcn/ui — UI Components</li>
+                <li>Claude AI by Anthropic — AI Development Assistant</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-semibold text-foreground">Ekosistem</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>
+                  <a
+                    href={GITHUB_PLATFORM}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    GitHub — Open Source Repository
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={GITHUB_INSTANCES}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    earth-nft-instances — Community Registry
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {SUPER_ADMIN_EMAIL && (
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Visi Pengembang</h3>
+                <p className="text-muted-foreground/80 text-xs">{SUPER_ADMIN_EMAIL}</p>
+                <blockquote className="border-l-2 border-primary pl-3 text-muted-foreground leading-relaxed italic">
+                  &ldquo;Platform ini adalah lapisan media sosial yang mengindex tindakan charity.
+                  Visi jangka panjang adalah sistem otonom berbasis konsensus komunitas dengan
+                  tata kelola AI dan arsitektur yang mendekati DAPP.&rdquo;
+                </blockquote>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <h3 className="font-semibold text-foreground">Roadmap</h3>
+              <ul className="space-y-1.5 text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold shrink-0">✓</span>
+                  <span>Fase 1–2: Fondasi, keamanan, dan mekanisme konsensus komunitas (selesai)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold shrink-0">→</span>
+                  <span>Fase 3: FIFO Validation</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold shrink-0">→</span>
+                  <span>Fase Advance: Fibonacci Capacity + AI Anomali</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold shrink-0">→</span>
+                  <span>Fase Otonom: Near-DAPP Architecture</span>
+                </li>
+              </ul>
+            </div>
+
           </CardContent>
         </Card>
 

@@ -6,8 +6,11 @@ import { SidebarNav } from './sidebar-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
-import { MailWarning, ShoppingBag, RefreshCcw, X } from 'lucide-react';
+import { MailWarning, ShoppingBag, RefreshCcw, X, Github, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+
+const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration';
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -128,6 +131,38 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
             {children}
           </main>
+
+          <footer className="border-t bg-muted/20 px-6 py-6 text-xs text-muted-foreground">
+            <div className="max-w-2xl mx-auto flex flex-col items-center gap-3 text-center">
+              <div>
+                <span className="text-sm font-medium text-foreground">🌿 The Mother Earth Project</span>
+                <p className="mt-0.5">Platform NFT Charity Open Source</p>
+              </div>
+              <p className="text-muted-foreground/70">Built with Next.js · Firebase · Vercel</p>
+              <div className="flex items-center gap-4 flex-wrap justify-center">
+                <a
+                  href={GITHUB_PLATFORM}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  <Github className="h-3 w-3" />
+                  GitHub
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+                <Link href="/instances" className="hover:text-foreground transition-colors">
+                  Komunitas
+                </Link>
+                <Link href="/help" className="hover:text-foreground transition-colors">
+                  Bantuan
+                </Link>
+              </div>
+              <p className="text-muted-foreground/60">Open Source · MIT License</p>
+              {SUPER_ADMIN_EMAIL && (
+                <p className="text-muted-foreground/60">Vision by {SUPER_ADMIN_EMAIL}</p>
+              )}
+            </div>
+          </footer>
         </div>
       </div>
     </SidebarProvider>
