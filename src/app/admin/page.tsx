@@ -355,7 +355,7 @@ export default function AdminPage() {
   const [loadingInfra, setLoadingInfra] = useState(true);
   const [issuingCert, setIssuingCert] = useState(false);
   const [issueResult, setIssueResult] = useState<string | null>(null);
-  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' }>>([]);
+  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; link?: string }>>([]);
   const [savingCosts, setSavingCosts] = useState(false);
 
   useEffect(() => {
@@ -833,34 +833,44 @@ export default function AdminPage() {
                 <p className="text-xs font-medium">Kebutuhan Operasional Node</p>
                 <div className="space-y-2">
                   {infraCosts.map((item, i) => (
-                    <div key={i} className="flex gap-2 items-center">
+                    <div key={i} className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          className="flex-1 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder="Nama (contoh: Vercel Hosting)"
+                          value={item.nama}
+                          onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, nama: e.target.value } : c))}
+                        />
+                        <input
+                          type="number"
+                          className="w-20 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder="Jumlah"
+                          value={item.jumlah}
+                          onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, jumlah: Number(e.target.value) } : c))}
+                        />
+                        <select
+                          className="h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          value={item.periode}
+                          onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, periode: e.target.value as typeof item.periode } : c))}
+                        >
+                          <option value="bulan">/bulan</option>
+                          <option value="tahun">/tahun</option>
+                          <option value="sekali">sekali</option>
+                          <option value="gratis">gratis</option>
+                        </select>
+                        <button
+                          className="h-7 w-7 flex items-center justify-center rounded-md border text-muted-foreground hover:text-destructive hover:border-red-300 transition-colors shrink-0"
+                          onClick={() => setInfraCosts(prev => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
                       <input
-                        className="flex-1 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder="Nama (contoh: Vercel Hosting)"
-                        value={item.nama}
-                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, nama: e.target.value } : c))}
+                        className="w-full h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Link Pembayaran (opsional) — contoh: https://vercel.com/pricing"
+                        value={item.link ?? ''}
+                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, link: e.target.value || undefined } : c))}
                       />
-                      <input
-                        type="number"
-                        className="w-24 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder="Jumlah"
-                        value={item.jumlah}
-                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, jumlah: Number(e.target.value) } : c))}
-                      />
-                      <select
-                        className="h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        value={item.periode}
-                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, periode: e.target.value as 'bulan' | 'tahun' } : c))}
-                      >
-                        <option value="bulan">/bulan</option>
-                        <option value="tahun">/tahun</option>
-                      </select>
-                      <button
-                        className="h-7 w-7 flex items-center justify-center rounded-md border text-muted-foreground hover:text-destructive hover:border-red-300 transition-colors"
-                        onClick={() => setInfraCosts(prev => prev.filter((_, idx) => idx !== i))}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -869,7 +879,7 @@ export default function AdminPage() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs gap-1"
-                    onClick={() => setInfraCosts(prev => [...prev, { nama: '', jumlah: 0, periode: 'bulan' }])}
+                    onClick={() => setInfraCosts(prev => [...prev, { nama: '', jumlah: 0, periode: 'bulan' as const }])}
                   >
                     <Plus className="h-3 w-3" />
                     Tambah Baris

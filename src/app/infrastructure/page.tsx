@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import {
-  Building2, TrendingUp, Server, Award, Loader2, ExternalLink,
+  Building2, TrendingUp, Server, Award, Loader2, ExternalLink, ArrowUpRight,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -37,7 +37,7 @@ export default function InfrastructurePage() {
   const [status, setStatus] = useState<InfrastructureFundStatus | null>(null);
   const [activeNft, setActiveNft] = useState<NFTUnit | null>(null);
   const [contributors, setContributors] = useState<ContributorCertificate[]>([]);
-  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' }>>([]);
+  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; link?: string }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -173,11 +173,26 @@ export default function InfrastructurePage() {
                 ) : (
                   <div className="divide-y rounded-lg border overflow-hidden">
                     {infraCosts.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between px-4 py-3 bg-card text-sm">
-                        <span>{item.nama}</span>
-                        <span className="font-medium">
-                          {item.jumlah === 0 ? (
+                      <div key={i} className="flex items-center justify-between px-4 py-3 bg-card text-sm gap-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{item.nama}</span>
+                          {item.link && (
+                            <a
+                              href={item.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
+                            >
+                              Info
+                              <ArrowUpRight className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                        <span className="font-medium shrink-0">
+                          {item.periode === 'gratis' || item.jumlah === 0 ? (
                             <Badge variant="secondary" className="text-xs">Gratis</Badge>
+                          ) : item.periode === 'sekali' ? (
+                            `${formatIDR(item.jumlah)} (sekali)`
                           ) : (
                             `${formatIDR(item.jumlah)}/${item.periode}`
                           )}

@@ -129,7 +129,7 @@ export type CommunityConfig = {
   fase_aktif: number;
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
-  infrastructure_costs?: Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' }>;
+  infrastructure_costs?: Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; link?: string }>;
   updated_at: Date;
   updated_by: string;
 };
