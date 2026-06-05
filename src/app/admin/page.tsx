@@ -413,7 +413,13 @@ export default function AdminPage() {
     if (!user) return;
     setSavingCosts(true);
     try {
-      await updateCommunityConfig(user.id, { infrastructure_costs: infraCosts });
+      const cleanedCosts = infraCosts.map(item => ({
+        nama: item.nama || '',
+        jumlah: item.jumlah || 0,
+        periode: item.periode || 'bulan' as const,
+        ...(item.info ? { info: item.info } : {}),
+      }));
+      await updateCommunityConfig(user.id, { infrastructure_costs: cleanedCosts });
     } finally {
       setSavingCosts(false);
     }
