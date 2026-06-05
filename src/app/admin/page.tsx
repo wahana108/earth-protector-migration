@@ -355,7 +355,7 @@ export default function AdminPage() {
   const [loadingInfra, setLoadingInfra] = useState(true);
   const [issuingCert, setIssuingCert] = useState(false);
   const [issueResult, setIssueResult] = useState<string | null>(null);
-  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; link?: string }>>([]);
+  const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
   const [savingCosts, setSavingCosts] = useState(false);
 
   useEffect(() => {
@@ -379,7 +379,12 @@ export default function AdminPage() {
         import('@/lib/community-config').then(m => m.getCommunityConfig()),
       ]);
       setInfraStatus(status);
-      setInfraCosts(config?.infrastructure_costs ?? []);
+      setInfraCosts(
+        (config?.infrastructure_costs ?? []).map(c => ({
+          ...c,
+          info: (c.info ?? (c as Record<string, unknown>).link as string | undefined) || undefined,
+        })),
+      );
     } finally {
       setLoadingInfra(false);
     }
@@ -867,9 +872,9 @@ export default function AdminPage() {
                       </div>
                       <input
                         className="w-full h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder="Link Pembayaran (opsional) — contoh: https://vercel.com/pricing"
-                        value={item.link ?? ''}
-                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, link: e.target.value || undefined } : c))}
+                        placeholder="Info Pembayaran (opsional) — contoh: Transfer ke BCA 1234567890 a/n Ramawan, atau https://vercel.com/billing"
+                        value={item.info ?? ''}
+                        onChange={e => setInfraCosts(prev => prev.map((c, idx) => idx === i ? { ...c, info: e.target.value || undefined } : c))}
                       />
                     </div>
                   ))}
