@@ -84,6 +84,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     comment_count: (data.comment_count as number) ?? 0,
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
     purchased_at: (data.purchased_at as Timestamp)?.toDate?.() ?? undefined,
+    purchased_from: (data.purchased_from as NFTUnit['purchased_from']) ?? undefined,
   };
 }
 
@@ -155,7 +156,8 @@ async function fetchEligibleNFTs(userId: string): Promise<NFTUnit[]> {
       !u.for_sale &&
       !u.digunakan_validasi &&
       !u.pernah_digunakan_validasi &&
-      u.nilai_selisih > 0,
+      u.nilai_selisih > 0 &&
+      u.purchased_from === 'pool',
     );
 }
 
@@ -276,7 +278,8 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
       <div className="border-t px-4 py-6 text-center text-sm text-muted-foreground">
         <p className="font-medium">Tidak ada NFT yang bisa digunakan validasi.</p>
         <p className="mt-1 text-xs">
-          NFT harus: tidak dijual, belum dipakai validasi, dan memiliki nilai selisih &gt; 0.
+          NFT harus: dibeli dari Pool Rekomendasi (FIFO), tidak dijual, belum dipakai validasi,
+          dan memiliki nilai selisih &gt; 0.
         </p>
       </div>
     );
@@ -294,6 +297,14 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
           dan NFT mereka dikembalikan ke kondisi semula.
         </div>
       )}
+
+      {/* Info syarat validasi */}
+      <div className="mx-4 mt-4 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2.5 text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+        Hanya NFT yang dibeli dari{' '}
+        <span className="font-semibold">Pool Rekomendasi (FIFO)</span>{' '}
+        yang dapat digunakan untuk validasi. Ini memastikan nilai validasi berasal
+        dari kontribusi likuiditas nyata ke komunitas.
+      </div>
 
       {/* Header panel */}
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">

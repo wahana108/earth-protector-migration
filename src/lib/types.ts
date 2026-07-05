@@ -317,4 +317,5 @@ export type NFTUnit = {
   last_skip_reason?: string;
   is_infrastructure?: boolean;
   certificate_code?: string;
+  purchased_from?: 'pool' | 'explorer';
 };

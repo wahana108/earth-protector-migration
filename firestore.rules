@@ -245,7 +245,7 @@ service cloud.firestore {
         // Buy flow: siapapun yang auth boleh ambil NFT for_sale (in_pool opsional untuk beli_pool)
         (isAuth() && resource.data.for_sale == true &&
           request.resource.data.diff(resource.data)
-            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at', 'purchase_status', 'purchase_auto_complete_at', 'purchase_confirmed_at'])) ||
+            .affectedKeys().hasOnly(['owner_id', 'for_sale', 'harga_beli_terakhir', 'in_pool', 'purchased_at', 'purchase_status', 'purchase_auto_complete_at', 'purchase_confirmed_at', 'purchased_from'])) ||
         // Purchase confirmation flow: developer konfirmasi atau auto-complete
         (isAuth() &&
           request.resource.data.diff(resource.data)

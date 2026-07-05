@@ -83,6 +83,7 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
     created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
     purchase_status: (data.purchase_status as NFTUnit['purchase_status']) ?? undefined,
     purchase_auto_complete_at: (data.purchase_auto_complete_at as Timestamp)?.toDate?.() ?? undefined,
+    purchased_from: (data.purchased_from as NFTUnit['purchased_from']) ?? undefined,
   };
 }
 
@@ -404,6 +405,11 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onTransfe
                 {unit.for_sale && !locked && (
                   <Badge variant="outline" className="text-xs text-green-600 border-green-300 shrink-0">
                     Dijual
+                  </Badge>
+                )}
+                {unit.purchased_from === 'pool' && !locked && (
+                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 shrink-0">
+                    Pool ✓
                   </Badge>
                 )}
               </div>

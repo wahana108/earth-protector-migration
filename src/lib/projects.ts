@@ -376,6 +376,7 @@ export async function buyNftUnit(
         purchase_status: 'completed',
         purchase_confirmed_at: serverTimestamp(),
         in_pool: false,
+        purchased_from: 'pool',
       });
       tx.update(buyerRef, { total_poin: buyerPoin + nilai_selisih });
       tx.set(feePoolRef, {
@@ -423,6 +424,7 @@ export async function buyNftUnit(
       purchased_at: serverTimestamp(),
       purchase_status: 'pending',
       purchase_auto_complete_at: Timestamp.fromMillis(Date.now() + autoCloseDays * 86400000),
+      purchased_from: isPoolPurchase ? 'pool' : 'explorer',
       ...(isPoolPurchase ? { in_pool: false } : {}),
     });
 
@@ -755,6 +757,11 @@ export async function validateProject(
       if (nft.digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah dipakai validasi.`);
       if (nft.pernah_digunakan_validasi) throw new ValidasiError(`NFT ${nft.nama_nft} sudah pernah digunakan validasi sebelumnya.`);
       if ((nft.nilai_selisih as number) <= 0) throw new ValidasiError(`NFT ${nft.nama_nft} tidak memiliki nilai selisih.`);
+      if ((nft.purchased_from as string | undefined) !== 'pool') {
+        throw new ValidasiError(
+          `NFT ${nft.nama_nft as string} tidak dibeli dari Pool Rekomendasi dan tidak dapat digunakan untuk validasi.`,
+        );
+      }
 
       // Holding period check
       if (minimumHoldingDays > 0 && nft.purchased_at) {
