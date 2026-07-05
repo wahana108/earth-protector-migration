@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useRef } from 'react';
+import { use, useEffect, useState, useRef, Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
@@ -810,11 +810,8 @@ export default function NftDetailPage({
                 </thead>
                 <tbody>
                   {history.map((h, i) => (
-                    <>
-                      <tr
-                        key={h.id}
-                        className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
-                      >
+                    <Fragment key={h.id}>
+                      <tr className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}>
                         <td className="px-3 py-2 font-medium">{h.dari_name}</td>
                         <td className="px-3 py-2 font-medium">{h.ke_name}</td>
                         <td className="px-3 py-2 text-right">{formatIDR(h.harga)}</td>
@@ -823,10 +820,7 @@ export default function NftDetailPage({
                         </td>
                       </tr>
                       {(h.transaction_description || h.proof_link) && (
-                        <tr
-                          key={`${h.id}-note`}
-                          className={cn('border-t border-dashed', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}
-                        >
+                        <tr className={cn('border-t border-dashed', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}>
                           <td colSpan={4} className="px-3 pb-2 pt-0.5">
                             {h.transaction_description && (
                               <p className="text-xs text-muted-foreground italic">
@@ -847,7 +841,7 @@ export default function NftDetailPage({
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

@@ -375,7 +375,6 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onTransfe
     <div className="space-y-3">
       {units.map((unit) => {
         const locked = unit.digunakan_validasi;
-        const canBuyback = !locked && unit.owner_id !== unit.developer_id;
 
         return (
           <div
