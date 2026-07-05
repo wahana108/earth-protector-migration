@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar, buybackNftUnit, BuybackError, transferToPool, TransferPoolError, autoCompletePurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, transferToPool, TransferPoolError, autoCompletePurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
 import { getUserCertificates } from '@/lib/infrastructure';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
@@ -132,97 +132,6 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
 };
-
-// ─── Buyback Dialog ───────────────────────────────────────────────────────────
-
-interface BuybackDialogProps {
-  unit: NFTUnit;
-  ownerId: string;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-function BuybackDialog({ unit, ownerId, onClose, onSuccess }: BuybackDialogProps) {
-  const { emailVerified } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleConfirm() {
-    if (!emailVerified) {
-      setError('Verifikasi email Anda terlebih dahulu sebelum melakukan transaksi. Cek inbox email Anda atau klik \'Kirim Ulang\' di banner atas.');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      await buybackNftUnit(unit.id, ownerId);
-      onSuccess();
-      onClose();
-    } catch (err: unknown) {
-      setError(
-        err instanceof BuybackError
-          ? err.message
-          : 'Gagal melakukan buyback. Coba lagi.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Konfirmasi Buyback</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-1">
-          <div className="rounded-lg border p-3 space-y-2 text-sm">
-            <p className="font-semibold leading-snug">{unit.nama_nft}</p>
-            <p className="text-muted-foreground text-xs">{unit.nama_project}</p>
-            <div className="pt-2 border-t space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Harga buyback</span>
-                <span className="font-bold">{formatIDR(unit.harga_beli_terakhir)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Efek neracamu</span>
-                <span className={cn(
-                  'font-semibold',
-                  unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground',
-                )}>
-                  {unit.nilai_selisih > 0
-                    ? `−${formatIDR(unit.nilai_selisih)}`
-                    : 'Tidak ada perubahan'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            NFT akan dikembalikan ke developer. Tindakan ini tidak dapat dibatalkan.
-          </p>
-
-          {error && (
-            <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
-              {error}
-            </p>
-          )}
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Batal
-          </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
-            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Konfirmasi Buyback
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────
 
@@ -447,11 +356,10 @@ interface DaftarNFTProps {
   toggling: string | null;
   isTopDeveloper: boolean;
   onToggleForSale: (unit: NFTUnit) => void;
-  onBuyback: (unit: NFTUnit) => void;
   onTransferPool: (unit: NFTUnit) => void;
 }
 
-function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback, onTransferPool }: DaftarNFTProps) {
+function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onTransferPool }: DaftarNFTProps) {
   if (units.length === 0) {
     return (
       <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
@@ -524,20 +432,11 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onBuyback
                   : unit.for_sale ? 'Stop Jual' : 'Jual'
                 }
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs px-3"
-                disabled={!canBuyback}
-                onClick={() => canBuyback && onBuyback(unit)}
-                title={
-                  locked ? 'NFT sedang dipakai validasi' :
-                  !canBuyback ? 'NFT masih di tangan developer' :
-                  'Kembalikan NFT ke developer'
-                }
-              >
-                <RefreshCcw className="h-3 w-3 mr-1" />
-                Buyback
+              <Button size="sm" variant="outline" className="h-7 text-xs px-3" asChild>
+                <Link href="/buyback">
+                  <RefreshCcw className="h-3 w-3 mr-1" />
+                  Buyback
+                </Link>
               </Button>
               <Button
                 size="sm"
@@ -790,7 +689,6 @@ export default function DashboardPage() {
   const [isTopDeveloper, setIsTopDeveloper] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [editProjectTarget, setEditProjectTarget] = useState<Project | null>(null);
-  const [buybackTarget, setBuybackTarget] = useState<NFTUnit | null>(null);
   const [transferPoolTarget, setTransferPoolTarget] = useState<NFTUnit | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<(UserBlock & { blocked_name: string })[]>([]);
   const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
@@ -908,11 +806,6 @@ export default function DashboardPage() {
     );
   }
 
-  function handleBuybackSuccess() {
-    setBuybackTarget(null);
-    loadData();
-  }
-
   function handleTransferPoolSuccess(unitId: string) {
     setTransferPoolTarget(null);
     setOwnedUnits(prev =>
@@ -983,7 +876,6 @@ export default function DashboardPage() {
                 toggling={toggling}
                 isTopDeveloper={isTopDeveloper}
                 onToggleForSale={handleToggleForSale}
-                onBuyback={setBuybackTarget}
                 onTransferPool={setTransferPoolTarget}
               />
             </section>
@@ -1117,16 +1009,6 @@ export default function DashboardPage() {
           project={editProjectTarget}
           onClose={() => setEditProjectTarget(null)}
           onSaved={handleProjectGambarSaved}
-        />
-      )}
-
-      {/* Buyback dialog */}
-      {buybackTarget && user && (
-        <BuybackDialog
-          unit={buybackTarget}
-          ownerId={user.id}
-          onClose={() => setBuybackTarget(null)}
-          onSuccess={handleBuybackSuccess}
         />
       )}
 
