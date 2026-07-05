@@ -554,10 +554,14 @@ export default function ParametersPage() {
                 <CardContent className="divide-y divide-border">
                   <ParamRow label="Min. NFT di Pool"
                     value={`${config.minimum_nft_pool_untuk_validasi ?? 90} NFT`} />
+                  <ParamRow label="Holding Period NFT"
+                    value={`${config.minimum_holding_days ?? 7} hari`} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Validasi bergulir hanya bisa dimulai jika pool rekomendasi
                       sudah terisi minimal sejumlah NFT ini.
+                      NFT harus dipegang minimal sejumlah hari setelah pembelian
+                      sebelum bisa digunakan validasi.
                     </p>
                   </div>
                 </CardContent>
