@@ -22,7 +22,7 @@ const googleProvider = new GoogleAuthProvider();
 
 if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFirestoreEmulator(db, "127.0.0.1", 8082);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
 }
 
