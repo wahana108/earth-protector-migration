@@ -46,7 +46,7 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions'])) ||
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions', 'pending_buyback_actions'])) ||
         // Validasi flow: pemilik akun mencatat partisipasi validasi
         (isMe(userId) &&
           request.resource.data.diff(resource.data)

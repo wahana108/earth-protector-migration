@@ -127,6 +127,7 @@ function RequestDialog({
       onSuccess();
       onClose();
     } catch (err) {
+      console.error('[createBuybackRequest]', err);
       setError(err instanceof BuybackRequestError ? err.message : 'Gagal membuat permintaan. Coba lagi.');
     } finally {
       setLoading(false);
