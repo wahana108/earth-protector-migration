@@ -17,6 +17,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { cn } from '@/lib/utils';
+import { getCommunityConfig } from '@/lib/community-config';
+import { calculateEffectiveBuyback } from '@/lib/ranking';
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -35,15 +37,20 @@ type DeveloperRow = {
   soldNfts: number;
   buybackCount: number;
   buyback_pct: number | null;
+  effective_buyback_pct: number | null;
+  penalty: number;
   has_anomali: boolean;
   is_flagged: boolean;
 };
 
 async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
-  const [usersSnap, anomaliSnap] = await Promise.all([
+  const [usersSnap, anomaliSnap, config] = await Promise.all([
     getDocs(collection(db, 'users')),
     getDocs(query(collection(db, 'projects'), where('anomali_flag', '==', true))),
+    getCommunityConfig(),
   ]);
+
+  const hargaDasar = config?.harga_dasar ?? 100000;
 
   const anomaliDevIds = new Set(
     anomaliSnap.docs.map((d) => d.data().developer_id as string),
@@ -55,6 +62,9 @@ async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
     const buybackCount = (data.buybackCount as number) ?? 0;
     const total_poin = (data.total_poin as number) ?? 0;
     const buyback_pct = soldNfts > 0 ? Math.round((buybackCount / soldNfts) * 100) : null;
+    const penalty = total_poin < 0 ? Math.floor(Math.abs(total_poin) / hargaDasar) : 0;
+    const effectiveBuyback = calculateEffectiveBuyback(buybackCount, total_poin, hargaDasar);
+    const effective_buyback_pct = soldNfts > 0 ? Math.round((effectiveBuyback / soldNfts) * 100) : null;
     const has_anomali = anomaliDevIds.has(d.id);
 
     return {
@@ -66,17 +76,23 @@ async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
       soldNfts,
       buybackCount,
       buyback_pct,
+      effective_buyback_pct,
+      penalty,
       has_anomali,
       is_flagged: total_poin < 0 || has_anomali,
     };
   });
 
-  // Urut berdasarkan buyback_pct DESC; user tanpa penjualan (null) di paling bawah
+  // Urut: effective_buyback_pct DESC → total_poin DESC → soldNfts DESC
   rows.sort((a, b) => {
-    if (a.buyback_pct === null && b.buyback_pct === null) return 0;
-    if (a.buyback_pct === null) return 1;
-    if (b.buyback_pct === null) return -1;
-    return b.buyback_pct - a.buyback_pct;
+    if (a.effective_buyback_pct === null && b.effective_buyback_pct === null)
+      return b.total_poin - a.total_poin;
+    if (a.effective_buyback_pct === null) return 1;
+    if (b.effective_buyback_pct === null) return -1;
+    if (b.effective_buyback_pct !== a.effective_buyback_pct)
+      return b.effective_buyback_pct - a.effective_buyback_pct;
+    if (b.total_poin !== a.total_poin) return b.total_poin - a.total_poin;
+    return b.soldNfts - a.soldNfts;
   });
 
   return rows;
@@ -162,9 +178,16 @@ function DeveloperCard({ dev, rank, currentUserId }: { dev: DeveloperRow; rank: 
             )}
 
             <div>
-              <p className="text-xs text-muted-foreground mb-1">% Buyback</p>
-              {dev.buyback_pct !== null ? (
-                <BuybackBar pct={dev.buyback_pct} />
+              <p className="text-xs text-muted-foreground mb-1">% Buyback Efektif</p>
+              {dev.effective_buyback_pct !== null ? (
+                <>
+                  <BuybackBar pct={dev.effective_buyback_pct} />
+                  {dev.penalty > 0 && (
+                    <p className="text-xs text-destructive mt-0.5">
+                      Penalti neraca: -{dev.penalty} poin buyback
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground italic">Belum ada penjualan</p>
               )}
@@ -282,7 +305,7 @@ export default function DeveloperRankingPage() {
               ))}
             </div>
             <p className="text-xs text-center text-muted-foreground pt-2">
-              {rows.length} developer · Diurutkan berdasarkan % buyback
+              {rows.length} developer · Diurutkan berdasarkan % buyback efektif · tiebreaker neraca
             </p>
           </>
         )}

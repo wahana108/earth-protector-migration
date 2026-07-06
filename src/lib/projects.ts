@@ -8,6 +8,7 @@ import { getCommunityConfig } from './community-config';
 import { checkAndIssueCertificate } from './infrastructure';
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
+import { calculateEffectiveBuyback } from './ranking';
 import type { ProjectCategory } from './types';
 
 export class BuyError extends Error {
@@ -241,12 +242,14 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   const userData = userSnap.data();
   const soldNfts: number = (userData.soldNfts as number) ?? 0;
   const buybackCount: number = (userData.buybackCount as number) ?? 0;
+  const totalPoin: number = (userData.total_poin as number) ?? 0;
+  const effectiveBuyback = calculateEffectiveBuyback(buybackCount, totalPoin, config.harga_dasar);
   const currentLevel: string = (userData.level as string) ?? 'developer_biasa';
 
   const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
   const meetsBuybackRate =
     soldNfts >= 1 &&
-    Math.floor((buybackCount / soldNfts) * 100) >= config.minimum_buyback_pct;
+    Math.floor((effectiveBuyback / soldNfts) * 100) >= config.minimum_buyback_pct;
 
   const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
 
@@ -1757,12 +1760,14 @@ export async function recalculateAllDeveloperLevels(
     const d = userDoc.data();
     const soldNfts: number = (d.soldNfts as number) ?? 0;
     const buybackCount: number = (d.buybackCount as number) ?? 0;
+    const totalPoin: number = (d.total_poin as number) ?? 0;
+    const effectiveBuyback = calculateEffectiveBuyback(buybackCount, totalPoin, config.harga_dasar);
     const currentLevel: string = (d.level as string) ?? 'developer_biasa';
 
     const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
     const meetsBuybackRate =
       soldNfts >= 1 &&
-      Math.floor((buybackCount / soldNfts) * 100) >= config.minimum_buyback_pct;
+      Math.floor((effectiveBuyback / soldNfts) * 100) >= config.minimum_buyback_pct;
 
     const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
 
