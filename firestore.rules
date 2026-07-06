@@ -344,6 +344,16 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ─── recalculate_requests/{docId} ────────────────────────────────────────
+    // Flag untuk memicu recalculate developer levels via GitHub Actions cron.
+    // Sengaja terbuka untuk write tanpa auth (dipakai dari API route server-side).
+    // Dibatasi ketat: hanya docId='flag', hanya field requested_at.
+    match /recalculate_requests/{docId} {
+      allow read: if true;
+      allow write: if docId == 'flag' &&
+        request.resource.data.keys().hasOnly(['requested_at']);
+    }
+
     // ─── collectionGroup: neraca_log ─────────────────────────────────────────
     // Diperlukan agar halaman /transactions bisa query semua log lintas user.
     // Sesuai prinsip transparansi TMEP: semua user yang login bisa melihat

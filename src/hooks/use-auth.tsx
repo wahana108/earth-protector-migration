@@ -12,6 +12,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { User } from "@/lib/types";
 import { getCommunityConfig } from "@/lib/community-config";
+import { maybeAutoRecalculate } from "@/lib/projects";
 import {
   signInWithEmail,
   signUpWithEmail,
@@ -76,6 +77,8 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
     isTopDeveloper: false,
   };
   await setDoc(userRef, defaultData);
+  // User baru mengubah N komunitas → kuota Fibonacci bisa berubah
+  maybeAutoRecalculate().catch(() => {});
 
   return {
     id: firebaseUser.uid,

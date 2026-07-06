@@ -20,6 +20,7 @@ import { BlockUserDialog } from '@/components/block-user-dialog';
 import { cn } from '@/lib/utils';
 import { getCommunityConfig } from '@/lib/community-config';
 import { calculateEffectiveBuyback, fibonacciLargestAndSum } from '@/lib/ranking';
+import { maybeAutoRecalculate } from '@/lib/projects';
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -315,6 +316,7 @@ export default function DeveloperRankingPage() {
     fetchDeveloperRows()
       .then(setFetchResult)
       .finally(() => setLoading(false));
+    maybeAutoRecalculate().catch(() => {}); // fire-and-forget background
   }, []);
 
   const rows = fetchResult?.rows ?? [];

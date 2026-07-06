@@ -1863,14 +1863,57 @@ export async function recalculateAllDeveloperLevels(
     onProgress?.(processed, totalUsers);
   }
 
-  // Sync pool metadata — kuota terisi aktual
+  // Sync pool metadata — kuota terisi aktual + catat waktu recalculate
   const finalKapasitas = topDevIds.size * 3;
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
   await setDoc(poolRef, {
     jumlah_top_developer: topDevIds.size,
     kapasitas_aktif: finalKapasitas,
     is_aktif: finalKapasitas >= config.kapasitas_pool_minimum,
+    last_recalculated_at: serverTimestamp(),
   }, { merge: true });
 
   return stats;
+}
+
+// ─── Auto Recalculate (lazy evaluation) ──────────────────────────────────────
+
+// Flag mencegah double-run dalam satu server/browser instance.
+let _autoRecalcRunning = false;
+
+// Jalankan recalculateAllDeveloperLevels jika:
+//   a. last_recalculated_at null atau > 24 jam, ATAU
+//   b. flag requested_at > last_recalculated_at (ada cron request yang belum dieksekusi)
+// Kegagalan tidak mengganggu pemanggil — fire-and-forget safe.
+export async function maybeAutoRecalculate(): Promise<void> {
+  if (_autoRecalcRunning) return;
+  try {
+    const [poolSnap, flagSnap] = await Promise.all([
+      getDoc(doc(db, 'pool_rekomendasi', 'v1')),
+      getDoc(doc(db, 'recalculate_requests', 'flag')),
+    ]);
+
+    const lastAt = poolSnap.exists()
+      ? (poolSnap.data().last_recalculated_at as Timestamp | null | undefined)
+      : null;
+
+    const requestedAt = flagSnap.exists()
+      ? (flagSnap.data().requested_at as Timestamp | null | undefined)
+      : null;
+
+    const now = Date.now();
+    const hoursSince = lastAt ? (now - lastAt.toMillis()) / 1000 / 3600 : Infinity;
+
+    const staleByTime = hoursSince >= 24;
+    const cronPending = !!requestedAt && (!lastAt || requestedAt.toMillis() > lastAt.toMillis());
+
+    if (!staleByTime && !cronPending) return;
+
+    _autoRecalcRunning = true;
+    await recalculateAllDeveloperLevels();
+  } catch {
+    // silent — tidak mengganggu alur pemanggil
+  } finally {
+    _autoRecalcRunning = false;
+  }
 }
