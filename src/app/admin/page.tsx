@@ -968,6 +968,14 @@ export default function AdminPage() {
                     <p className="text-xs text-muted-foreground leading-tight">tidak<br />berubah</p>
                   </div>
                 </div>
+                <div className="rounded-md bg-muted/50 border px-4 py-2.5 text-sm text-muted-foreground">
+                  Kuota Fibonacci:{' '}
+                  <strong className="text-foreground">{result.kuota}</strong> slot
+                  (dari {result.total} user) — Terisi:{' '}
+                  <strong className="text-foreground">{result.terisi}</strong>,
+                  Kandidat menunggu:{' '}
+                  <strong className="text-foreground">{result.waiting}</strong>
+                </div>
               </div>
             )}
           </CardContent>

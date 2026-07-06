@@ -8,6 +8,7 @@ import { AlertTriangle, Users, UserX } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -18,7 +19,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { cn } from '@/lib/utils';
 import { getCommunityConfig } from '@/lib/community-config';
-import { calculateEffectiveBuyback } from '@/lib/ranking';
+import { calculateEffectiveBuyback, fibonacciLargestAndSum } from '@/lib/ranking';
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -39,11 +40,19 @@ type DeveloperRow = {
   buyback_pct: number | null;
   effective_buyback_pct: number | null;
   penalty: number;
+  tier: 1 | 2 | 3;    // 1=top_developer, 2=kandidat, 3=lainnya
+  qualifies: boolean;  // lolos syarat individu (soldNfts + effective_pct)
   has_anomali: boolean;
   is_flagged: boolean;
 };
 
-async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
+type FetchResult = {
+  rows: DeveloperRow[];
+  minSoldNfts: number;
+  minBuybackPct: number;
+};
+
+async function fetchDeveloperRows(): Promise<FetchResult> {
   const [usersSnap, anomaliSnap, config] = await Promise.all([
     getDocs(collection(db, 'users')),
     getDocs(query(collection(db, 'projects'), where('anomali_flag', '==', true))),
@@ -67,6 +76,13 @@ async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
     const effective_buyback_pct = soldNfts > 0 ? Math.round((effectiveBuyback / soldNfts) * 100) : null;
     const has_anomali = anomaliDevIds.has(d.id);
 
+    const qualifies =
+      soldNfts >= (config?.minimum_soldNfts_top_developer ?? 24) &&
+      soldNfts >= 1 &&
+      (effective_buyback_pct ?? 0) >= (config?.minimum_buyback_pct ?? 50);
+    const levelStored = (data.level as string) ?? 'developer_biasa';
+    const tier: 1 | 2 | 3 = levelStored === 'top_developer' ? 1 : qualifies ? 2 : 3;
+
     return {
       id: d.id,
       displayName: (data.displayName as string | null) ?? null,
@@ -78,13 +94,16 @@ async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
       buyback_pct,
       effective_buyback_pct,
       penalty,
+      tier,
+      qualifies,
       has_anomali,
       is_flagged: total_poin < 0 || has_anomali,
     };
   });
 
-  // Urut: effective_buyback_pct DESC → total_poin DESC → soldNfts DESC
+  // Urut: tier ASC → effective_buyback_pct DESC → total_poin DESC → soldNfts DESC
   rows.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
     if (a.effective_buyback_pct === null && b.effective_buyback_pct === null)
       return b.total_poin - a.total_poin;
     if (a.effective_buyback_pct === null) return 1;
@@ -95,7 +114,11 @@ async function fetchDeveloperRows(): Promise<DeveloperRow[]> {
     return b.soldNfts - a.soldNfts;
   });
 
-  return rows;
+  return {
+    rows,
+    minSoldNfts: config?.minimum_soldNfts_top_developer ?? 24,
+    minBuybackPct: config?.minimum_buyback_pct ?? 50,
+  };
 }
 
 // ─── Buyback Progress Bar ─────────────────────────────────────────────────────
@@ -128,7 +151,13 @@ function BuybackBar({ pct }: { pct: number }) {
 
 // ─── Developer Card ───────────────────────────────────────────────────────────
 
-function DeveloperCard({ dev, rank, currentUserId }: { dev: DeveloperRow; rank: number; currentUserId?: string }) {
+function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct }: {
+  dev: DeveloperRow;
+  rank: number;
+  currentUserId?: string;
+  minSoldNfts: number;
+  minBuybackPct: number;
+}) {
   const displayName = dev.displayName ?? dev.id.slice(0, 8) + '…';
   const initial = displayName.charAt(0).toUpperCase();
   const isPosNeraca = dev.total_poin >= 0;
@@ -156,6 +185,12 @@ function DeveloperCard({ dev, rank, currentUserId }: { dev: DeveloperRow; rank: 
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-sm truncate">{displayName}</p>
+              {dev.tier === 1 && (
+                <Badge className="bg-green-600 text-white text-xs shrink-0">Top Developer</Badge>
+              )}
+              {dev.tier === 2 && (
+                <Badge variant="secondary" className="text-xs shrink-0">Kandidat</Badge>
+              )}
               {dev.has_anomali && (
                 <TooltipProvider>
                   <Tooltip>
@@ -175,6 +210,12 @@ function DeveloperCard({ dev, rank, currentUserId }: { dev: DeveloperRow; rank: 
 
             {dev.email && (
               <p className="text-xs text-muted-foreground truncate">{dev.email}</p>
+            )}
+
+            {dev.tier === 3 && dev.soldNfts > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Syarat: terjual {dev.soldNfts}/{minSoldNfts} · buyback efektif {dev.effective_buyback_pct ?? 0}%/{minBuybackPct}%
+              </p>
             )}
 
             <div>
@@ -267,14 +308,20 @@ function PageSkeleton() {
 
 export default function DeveloperRankingPage() {
   const { user } = useAuth();
-  const [rows, setRows] = useState<DeveloperRow[]>([]);
+  const [fetchResult, setFetchResult] = useState<FetchResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDeveloperRows()
-      .then(setRows)
+      .then(setFetchResult)
       .finally(() => setLoading(false));
   }, []);
+
+  const rows = fetchResult?.rows ?? [];
+  const minSoldNfts = fetchResult?.minSoldNfts ?? 24;
+  const minBuybackPct = fetchResult?.minBuybackPct ?? 50;
+  const kuota = fibonacciLargestAndSum(rows.length).largest;
+  const terisi = rows.filter(r => r.tier === 1).length;
 
   return (
     <MainLayout>
@@ -282,7 +329,7 @@ export default function DeveloperRankingPage() {
         <div>
           <h1 className="text-3xl font-bold mb-1">Developer Ranking</h1>
           <p className="text-muted-foreground text-sm">
-            Semua developer diurutkan berdasarkan persentase buyback.
+            Diurutkan per tier: pemegang slot → kandidat → lainnya.
             Merah menandakan neraca negatif atau ada project dengan anomali.
           </p>
         </div>
@@ -299,13 +346,25 @@ export default function DeveloperRankingPage() {
           </div>
         ) : (
           <>
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+              <span>Slot Top Developer: <strong className="text-foreground">{terisi}/{kuota}</strong> terisi</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span>kuota Fibonacci dari <strong className="text-foreground">{rows.length}</strong> user komunitas</span>
+            </div>
             <div className="space-y-3">
               {rows.map((dev, index) => (
-                <DeveloperCard key={dev.id} dev={dev} rank={index + 1} currentUserId={user?.id} />
+                <DeveloperCard
+                  key={dev.id}
+                  dev={dev}
+                  rank={index + 1}
+                  currentUserId={user?.id}
+                  minSoldNfts={minSoldNfts}
+                  minBuybackPct={minBuybackPct}
+                />
               ))}
             </div>
             <p className="text-xs text-center text-muted-foreground pt-2">
-              {rows.length} developer · Diurutkan berdasarkan % buyback efektif · tiebreaker neraca
+              {rows.length} developer · tier: Top Developer → Kandidat → Lainnya · tiebreaker neraca
             </p>
           </>
         )}

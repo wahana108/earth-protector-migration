@@ -2,13 +2,13 @@ import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
   getDocs, getDoc, query, where, updateDoc, runTransaction,
-  setDoc, increment, arrayUnion, Timestamp,
+  setDoc, increment, arrayUnion, Timestamp, getCountFromServer,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 import { checkAndIssueCertificate } from './infrastructure';
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
-import { calculateEffectiveBuyback } from './ranking';
+import { calculateEffectiveBuyback, fibonacciLargestAndSum } from './ranking';
 import type { ProjectCategory } from './types';
 
 export class BuyError extends Error {
@@ -232,10 +232,11 @@ export async function updateNftUnitGambar(
 export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void> {
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
 
-  const [config, userSnap, poolSnap] = await Promise.all([
+  const [config, userSnap, poolSnap, userCountSnap] = await Promise.all([
     getCommunityConfig(),
     getDoc(doc(db, 'users', userId)),
     getDoc(poolRef),
+    getCountFromServer(collection(db, 'users')),
   ]);
   if (!config || !userSnap.exists()) return;
 
@@ -245,20 +246,30 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   const totalPoin: number = (userData.total_poin as number) ?? 0;
   const effectiveBuyback = calculateEffectiveBuyback(buybackCount, totalPoin, config.harga_dasar);
   const currentLevel: string = (userData.level as string) ?? 'developer_biasa';
+  const currentTopCount: number = poolSnap.exists()
+    ? ((poolSnap.data().jumlah_top_developer as number) ?? 0)
+    : 0;
 
   const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
   const meetsBuybackRate =
     soldNfts >= 1 &&
     Math.floor((effectiveBuyback / soldNfts) * 100) >= config.minimum_buyback_pct;
+  const qualifies = meetsMinSold && meetsBuybackRate;
 
-  const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
+  // Quota-aware: pragmatis per-transaksi menggunakan pool count + Fibonacci
+  let newLevel: string;
+  if (!qualifies) {
+    newLevel = 'developer_biasa';
+  } else if (currentLevel === 'top_developer') {
+    newLevel = 'top_developer'; // pertahankan slot yang sudah dimiliki
+  } else {
+    const totalUsers = userCountSnap.data().count;
+    const { largest: kuota } = fibonacciLargestAndSum(totalUsers);
+    newLevel = currentTopCount < kuota ? 'top_developer' : 'developer_biasa';
+  }
 
   if (currentLevel === newLevel) return;
 
-  // Hitung kapasitas pool baru berdasarkan perubahan jumlah top developer
-  const currentTopCount: number = poolSnap.exists()
-    ? ((poolSnap.data().jumlah_top_developer as number) ?? 0)
-    : 0;
   const levelDelta = newLevel === 'top_developer' ? 1 : -1;
   const newTopCount = Math.max(0, currentTopCount + levelDelta);
   const newKapasitas = newTopCount * 3;
@@ -284,10 +295,13 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   }
 
   // Log perubahan level di neraca_log
+  const logLabel = qualifies && newLevel === 'top_developer'
+    ? `Level ${currentLevel} → ${newLevel} (slot Fibonacci terisi)`
+    : `Level ${currentLevel} → ${newLevel}`;
   batch.set(doc(collection(db, 'users', userId, 'neraca_log')), {
     type: 'level_change',
     nft_unit_id: '',
-    nama_nft: `Level ${currentLevel} → ${newLevel}`,
+    nama_nft: logLabel,
     harga_transaksi: 0,
     nilai_selisih: 0,
     delta: 0,
@@ -1734,10 +1748,14 @@ export type RecalcStats = {
   upgraded: number;
   downgraded: number;
   unchanged: number;
+  kuota: number;
+  terisi: number;
+  kandidat: number;
+  waiting: number;
 };
 
-// Evaluasi ulang level semua user sesuai parameter komunitas saat ini.
-// Hanya user yang levelnya perlu berubah yang ditulis ke Firestore.
+// Evaluasi ulang level semua user dengan kuota Fibonacci.
+// Otoritatif: mengumpulkan semua kandidat, ranking, lalu assign slot.
 // onProgress dipanggil setelah tiap user agar UI bisa menampilkan live progress.
 export async function recalculateAllDeveloperLevels(
   onProgress?: (processed: number, total: number) => void,
@@ -1748,31 +1766,93 @@ export async function recalculateAllDeveloperLevels(
   ]);
   if (!config) throw new Error('Community config tidak ditemukan.');
 
-  const stats: RecalcStats = {
-    total: usersSnap.size,
-    upgraded: 0,
-    downgraded: 0,
-    unchanged: 0,
-  };
-  let processed = 0;
+  const totalUsers = usersSnap.size;
+  const { largest: kuota } = fibonacciLargestAndSum(totalUsers);
 
-  for (const userDoc of usersSnap.docs) {
+  // Evaluasi syarat individu semua user
+  type UserEval = {
+    id: string;
+    currentLevel: string;
+    effectivePct: number;
+    totalPoin: number;
+    soldNfts: number;
+    qualifies: boolean;
+  };
+
+  const allUsers: UserEval[] = usersSnap.docs.map(userDoc => {
     const d = userDoc.data();
     const soldNfts: number = (d.soldNfts as number) ?? 0;
     const buybackCount: number = (d.buybackCount as number) ?? 0;
     const totalPoin: number = (d.total_poin as number) ?? 0;
     const effectiveBuyback = calculateEffectiveBuyback(buybackCount, totalPoin, config.harga_dasar);
-    const currentLevel: string = (d.level as string) ?? 'developer_biasa';
-
-    const meetsMinSold = soldNfts >= config.minimum_soldNfts_top_developer;
-    const meetsBuybackRate =
+    const effectivePct = soldNfts > 0 ? Math.floor((effectiveBuyback / soldNfts) * 100) : 0;
+    const qualifies =
+      soldNfts >= config.minimum_soldNfts_top_developer &&
       soldNfts >= 1 &&
-      Math.floor((effectiveBuyback / soldNfts) * 100) >= config.minimum_buyback_pct;
+      effectivePct >= config.minimum_buyback_pct;
+    return {
+      id: userDoc.id,
+      currentLevel: (d.level as string) ?? 'developer_biasa',
+      effectivePct,
+      totalPoin,
+      soldNfts,
+      qualifies,
+    };
+  });
 
-    const newLevel = meetsMinSold && meetsBuybackRate ? 'top_developer' : 'developer_biasa';
+  // Ranking kandidat, ambil kuota teratas
+  const candidates = allUsers
+    .filter(u => u.qualifies)
+    .sort((a, b) => {
+      if (b.effectivePct !== a.effectivePct) return b.effectivePct - a.effectivePct;
+      if (b.totalPoin !== a.totalPoin) return b.totalPoin - a.totalPoin;
+      return b.soldNfts - a.soldNfts;
+    });
 
-    if (currentLevel !== newLevel) {
-      await checkAndUpdateDeveloperLevel(userDoc.id);
+  const topDevIds = new Set(candidates.slice(0, kuota).map(u => u.id));
+
+  const stats: RecalcStats = {
+    total: totalUsers,
+    upgraded: 0,
+    downgraded: 0,
+    unchanged: 0,
+    kuota,
+    terisi: topDevIds.size,
+    kandidat: candidates.length,
+    waiting: Math.max(0, candidates.length - topDevIds.size),
+  };
+
+  let processed = 0;
+
+  for (const u of allUsers) {
+    const newLevel = topDevIds.has(u.id) ? 'top_developer' : 'developer_biasa';
+
+    if (u.currentLevel !== newLevel) {
+      // Tulis langsung tanpa memanggil checkAndUpdateDeveloperLevel
+      // agar kuota tidak dievaluasi ulang secara independen per user
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', u.id), { level: newLevel });
+
+      if (u.currentLevel === 'top_developer' && newLevel === 'developer_biasa') {
+        const projectsSnap = await getDocs(
+          query(collection(db, 'projects'), where('developer_id', '==', u.id)),
+        );
+        projectsSnap.docs.forEach(d => batch.update(d.ref, { daftar_invalidasi: true }));
+      }
+
+      batch.set(doc(collection(db, 'users', u.id, 'neraca_log')), {
+        type: 'level_change',
+        nft_unit_id: '',
+        nama_nft: `Level ${u.currentLevel} → ${newLevel}`,
+        harga_transaksi: 0,
+        nilai_selisih: 0,
+        delta: 0,
+        counterparty_id: '',
+        timestamp: serverTimestamp(),
+      });
+
+      await batch.commit();
+
       if (newLevel === 'top_developer') stats.upgraded++;
       else stats.downgraded++;
     } else {
@@ -1780,22 +1860,16 @@ export async function recalculateAllDeveloperLevels(
     }
 
     processed++;
-    onProgress?.(processed, stats.total);
+    onProgress?.(processed, totalUsers);
   }
 
-  // Sync pool metadata setelah semua level terupdate — hitung ulang dari data aktual
-  const finalUsersSnap = await getDocs(collection(db, 'users'));
-  const topCount = finalUsersSnap.docs.filter(
-    d => (d.data().level as string) === 'top_developer',
-  ).length;
-  const finalKapasitas = topCount * 3;
-  const finalIsAktif = finalKapasitas >= config.kapasitas_pool_minimum;
-
+  // Sync pool metadata — kuota terisi aktual
+  const finalKapasitas = topDevIds.size * 3;
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
   await setDoc(poolRef, {
-    jumlah_top_developer: topCount,
+    jumlah_top_developer: topDevIds.size,
     kapasitas_aktif: finalKapasitas,
-    is_aktif: finalIsAktif,
+    is_aktif: finalKapasitas >= config.kapasitas_pool_minimum,
   }, { merge: true });
 
   return stats;
