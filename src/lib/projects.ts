@@ -113,10 +113,20 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     if (!realisasi.can_create) throw new Error(realisasi.reason!);
   }
 
-  // Safety net: batas absolut
+  // Safety net: batas absolut jumlah project
   const maxProjects = config?.max_projects_per_user ?? 10;
   if (activeCount >= maxProjects) {
     throw new Error(`Batas maksimum project tercapai (maks ${maxProjects} project per user).`);
+  }
+
+  // Batas atas nilai project
+  const nilaiMaks = config?.nilai_maksimum_project ?? 10000000;
+  if (input.nilai_project > nilaiMaks) {
+    const maxNft = Math.floor(nilaiMaks / (config?.harga_dasar ?? 100000));
+    const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+    throw new Error(
+      `Nilai project melebihi batas maksimum komunitas (${fmt.format(nilaiMaks)} = ${maxNft} NFT). Ini melindungi kapasitas sistem.`,
+    );
   }
 
   const jumlah_nft = Math.floor(input.nilai_project / input.harga_dasar);
@@ -665,6 +675,22 @@ export async function transferToPool(nftUnitId: string, userId: string): Promise
   if (!userSnap.exists()) throw new TransferPoolError('Data user tidak ditemukan.');
   if ((userSnap.data().level as string) !== 'top_developer') {
     throw new TransferPoolError('Hanya Top Developer yang bisa transfer ke pool.');
+  }
+
+  // Cek batas NFT di pool per developer
+  const [poolNftsSnap, transferCfg] = await Promise.all([
+    getDocs(query(
+      collection(db, 'nft_units'),
+      where('developer_id', '==', userId),
+      where('in_pool', '==', true),
+    )),
+    getCommunityConfig(),
+  ]);
+  const maxInPool = transferCfg?.max_nft_in_pool_per_developer ?? 3;
+  if (poolNftsSnap.size >= maxInPool) {
+    throw new TransferPoolError(
+      `Batas maksimum NFT di pool tercapai (${maxInPool} NFT per developer). Tunggu NFT terjual dari antrian sebelum menambahkan lagi.`,
+    );
   }
 
   const nama_nft = nft.nama_nft as string;

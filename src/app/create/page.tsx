@@ -154,6 +154,12 @@ export default function CreatePage() {
       setError('nilai_project', { message: `Minimum ${formatIDR(config.nilai_minimum_project)}` });
       return;
     }
+    const nilaiMaks = config.nilai_maksimum_project ?? 10000000;
+    if (data.nilai_project > nilaiMaks) {
+      const maxNft = Math.floor(nilaiMaks / config.harga_dasar);
+      setError('nilai_project', { message: `Maks ${formatIDR(nilaiMaks)} (${maxNft} NFT)` });
+      return;
+    }
     if (data.harga_jual < config.harga_dasar) {
       setError('harga_jual', { message: `Minimum ${formatIDR(config.harga_dasar)}` });
       return;
@@ -558,8 +564,14 @@ export default function CreatePage() {
                     placeholder={String(config.nilai_minimum_project)}
                     {...register('nilai_project')}
                   />
-                  {errors.nilai_project && (
+                  {errors.nilai_project ? (
                     <p className="text-sm text-destructive">{errors.nilai_project.message}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Min {formatIDR(config.nilai_minimum_project)} —{' '}
+                      Maks {formatIDR(config.nilai_maksimum_project ?? 10000000)}{' '}
+                      ({Math.floor((config.nilai_maksimum_project ?? 10000000) / config.harga_dasar)} NFT)
+                    </p>
                   )}
                 </div>
 

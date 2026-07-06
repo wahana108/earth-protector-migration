@@ -111,6 +111,7 @@ export type CommunityConfig = {
   harga_dasar: number;
   batas_atas: number;
   nilai_minimum_project: number;
+  nilai_maksimum_project: number;
   minimum_buyback_pct: number;
   fee_project_pct: { min: number; max: number };
   fee_trigger_per_nft: number;
@@ -118,6 +119,7 @@ export type CommunityConfig = {
   minimum_top_developer: number;
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
+  max_nft_in_pool_per_developer: number;
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
   purchase_autoclose_days: number;

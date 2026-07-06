@@ -27,6 +27,7 @@ type EditValues = {
   harga_dasar: number;
   batas_atas: number;
   nilai_minimum_project: number;
+  nilai_maksimum_project: number;
   minimum_buyback_pct: number;
   fee_min: number;
   fee_max: number;
@@ -35,6 +36,7 @@ type EditValues = {
   minimum_top_developer: number;
   minimum_soldNfts_top_developer: number;
   kapasitas_pool_minimum: number;
+  max_nft_in_pool_per_developer: number;
   minimum_nft_pool_untuk_validasi: number;
   minimum_holding_days: number;
   purchase_autoclose_days: number;
@@ -51,6 +53,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     harga_dasar: c.harga_dasar,
     batas_atas: c.batas_atas,
     nilai_minimum_project: c.nilai_minimum_project,
+    nilai_maksimum_project: c.nilai_maksimum_project ?? 10000000,
     minimum_buyback_pct: c.minimum_buyback_pct,
     fee_min: c.fee_project_pct.min,
     fee_max: c.fee_project_pct.max,
@@ -59,6 +62,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     minimum_top_developer: c.minimum_top_developer,
     minimum_soldNfts_top_developer: c.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: c.kapasitas_pool_minimum,
+    max_nft_in_pool_per_developer: c.max_nft_in_pool_per_developer ?? 3,
     minimum_nft_pool_untuk_validasi: c.minimum_nft_pool_untuk_validasi ?? 90,
     minimum_holding_days: c.minimum_holding_days ?? 7,
     purchase_autoclose_days: c.purchase_autoclose_days ?? 7,
@@ -76,6 +80,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     harga_dasar: e.harga_dasar,
     batas_atas: e.batas_atas,
     nilai_minimum_project: e.nilai_minimum_project,
+    nilai_maksimum_project: e.nilai_maksimum_project,
     minimum_buyback_pct: e.minimum_buyback_pct,
     fee_project_pct: { min: e.fee_min, max: e.fee_max },
     fee_trigger_per_nft: e.fee_trigger_per_nft,
@@ -83,6 +88,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     minimum_top_developer: e.minimum_top_developer,
     minimum_soldNfts_top_developer: e.minimum_soldNfts_top_developer,
     kapasitas_pool_minimum: e.kapasitas_pool_minimum,
+    max_nft_in_pool_per_developer: e.max_nft_in_pool_per_developer,
     minimum_nft_pool_untuk_validasi: e.minimum_nft_pool_untuk_validasi,
     minimum_holding_days: e.minimum_holding_days,
     purchase_autoclose_days: e.purchase_autoclose_days,
@@ -366,6 +372,8 @@ export default function ParametersPage() {
                     onChange={v => setField('batas_atas', v as number)} />
                   <EditRow label="Min. Project (Rp)" value={editValues.nilai_minimum_project}
                     onChange={v => setField('nilai_minimum_project', v as number)} />
+                  <EditRow label="Maks. Project (Rp)" value={editValues.nilai_maksimum_project}
+                    onChange={v => setField('nilai_maksimum_project', v as number)} />
                   <EditRow label="Min. Buyback (%)" value={editValues.minimum_buyback_pct}
                     onChange={v => setField('minimum_buyback_pct', v as number)} />
                   <EditRow label="Fee Min (%)" value={editValues.fee_min}
@@ -386,6 +394,8 @@ export default function ParametersPage() {
                     onChange={v => setField('minimum_top_developer', v as number)} />
                   <EditRow label="Min. Kapasitas Pool" value={editValues.kapasitas_pool_minimum}
                     onChange={v => setField('kapasitas_pool_minimum', v as number)} />
+                  <EditRow label="Maks. NFT di Pool per Developer" value={editValues.max_nft_in_pool_per_developer}
+                    onChange={v => setField('max_nft_in_pool_per_developer', v as number)} />
                   <EditRow label="Fase Aktif" value={editValues.fase_aktif}
                     onChange={v => setField('fase_aktif', v as number)} />
                 </CardContent>
@@ -488,6 +498,7 @@ export default function ParametersPage() {
                   <ParamRow label="Harga Dasar" value={formatRupiah(config.harga_dasar)} />
                   <ParamRow label="Batas Atas" value={formatRupiah(config.batas_atas)} />
                   <ParamRow label="Nilai Min. Project" value={formatRupiah(config.nilai_minimum_project)} />
+                  <ParamRow label="Nilai Maks. Project" value={formatRupiah(config.nilai_maksimum_project ?? 10000000)} />
                   <ParamRow label="Min. Buyback" value={`${config.minimum_buyback_pct}%`} />
                   <ParamRow label="Fee Project"
                     value={`${config.fee_project_pct.min}% – ${config.fee_project_pct.max}%`} />
@@ -505,6 +516,8 @@ export default function ParametersPage() {
                     value={`${config.minimum_top_developer} developer`} />
                   <ParamRow label="Min. Kapasitas Pool"
                     value={`${config.kapasitas_pool_minimum} NFT`} />
+                  <ParamRow label="Maks. NFT di Pool/Developer"
+                    value={`${config.max_nft_in_pool_per_developer ?? 3} NFT`} />
                   <ParamRow label="Fase Aktif"
                     value={`Fase ${config.fase_aktif} — Infrastruktur Terpusat`} />
                 </CardContent>
