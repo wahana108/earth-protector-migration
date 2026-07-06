@@ -291,7 +291,7 @@ export async function buyNftUnit(
   buyerId: string,
   harga_dasar: number,
   batas_atas: number,
-  options?: { transaction_description?: string; proof_link?: string; purchase_autoclose_days?: number },
+  options?: { transaction_description?: string; proof_link?: string; purchase_autoclose_days?: number; via?: 'fifo' | 'pick' },
 ): Promise<void> {
   const nftRef = doc(db, 'nft_units', nftUnitId);
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
@@ -424,7 +424,7 @@ export async function buyNftUnit(
       purchased_at: serverTimestamp(),
       purchase_status: 'pending',
       purchase_auto_complete_at: Timestamp.fromMillis(Date.now() + autoCloseDays * 86400000),
-      purchased_from: isPoolPurchase ? 'pool' : 'explorer',
+      purchased_from: (isPoolPurchase && options?.via === 'fifo') ? 'pool' : 'explorer',
       ...(isPoolPurchase ? { in_pool: false } : {}),
     });
 

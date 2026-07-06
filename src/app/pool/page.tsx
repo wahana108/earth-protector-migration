@@ -129,11 +129,12 @@ interface BuyDialogProps {
   buyerId: string;
   hargaDasar: number;
   batasAtas: number;
+  via: 'fifo' | 'pick';
   onClose: () => void;
   onSuccess: (nftId: string) => void;
 }
 
-function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
+function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, via, onClose, onSuccess }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   const [txDescription, setTxDescription] = useState('');
@@ -146,6 +147,7 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
       await buyNftUnit(unit.id, buyerId, hargaDasar, batasAtas, {
         transaction_description: txDescription.trim() || undefined,
         proof_link: proofLink.trim() || undefined,
+        via,
       });
       onSuccess(unit.id);
       onClose();
@@ -177,10 +179,17 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
               </div>
             </div>
           </div>
-          <Badge variant="secondary" className="gap-1 text-xs">
-            <Layers className="h-3 w-3" />
-            NFT dari Pool Rekomendasi
-          </Badge>
+          {via === 'fifo' ? (
+            <Badge variant="default" className="gap-1 text-xs">
+              <ListOrdered className="h-3 w-3" />
+              Antrian FIFO — NFT dapat digunakan validasi
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <Layers className="h-3 w-3" />
+              Koleksi — NFT tidak dapat digunakan validasi
+            </Badge>
+          )}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Keterangan (opsional)</p>
             <Textarea
@@ -475,11 +484,12 @@ function NftPoolCard({ unit, currentUserId, isTopDeveloper, onBuy }: NftPoolCard
 interface FifoCardProps {
   unit: NFTUnit;
   userId: string;
+  isTopDeveloper: boolean;
   onBuy: (unit: NFTUnit) => void;
   onSkip: (unit: NFTUnit) => void;
 }
 
-function FifoCard({ unit, userId, onBuy, onSkip }: FifoCardProps) {
+function FifoCard({ unit, userId, isTopDeveloper, onBuy, onSkip }: FifoCardProps) {
   const isOwn = unit.owner_id === userId;
   const canBuy = !isOwn && unit.for_sale;
 
@@ -530,15 +540,17 @@ function FifoCard({ unit, userId, onBuy, onSkip }: FifoCardProps) {
               <ShoppingCart className="h-3.5 w-3.5" />
               Beli Sekarang
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1.5 text-muted-foreground"
-              onClick={() => onSkip(unit)}
-            >
-              <SkipForward className="h-3.5 w-3.5" />
-              Lewati
-            </Button>
+            {isTopDeveloper && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5 text-muted-foreground"
+                onClick={() => onSkip(unit)}
+              >
+                <SkipForward className="h-3.5 w-3.5" />
+                Lewati
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -576,7 +588,8 @@ export default function PoolPage() {
   const [poolNfts, setPoolNfts] = useState<NFTUnit[]>([]);
   const [fifoNft, setFifoNft] = useState<NFTUnit | null>(null);
   const [isTopDeveloper, setIsTopDeveloper] = useState(false);
-  const [buyTarget, setBuyTarget] = useState<NFTUnit | null>(null);
+  const [buyFifoTarget, setBuyFifoTarget] = useState<NFTUnit | null>(null);
+  const [buyGridTarget, setBuyGridTarget] = useState<NFTUnit | null>(null);
   const [skipTarget, setSkipTarget] = useState<NFTUnit | null>(null);
   const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
 
@@ -614,18 +627,15 @@ export default function PoolPage() {
         nftsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>)),
       );
 
-      // Cek level user, lalu cari NFT FIFO yang valid (skip otomatis milik sendiri)
+      // Cek level user, lalu cari NFT FIFO yang valid untuk semua user login
       if (user) {
         const userSnap = await getDoc(doc(db, 'users', user.id));
         if (userSnap.exists()) {
           const ud = userSnap.data() as Record<string, unknown>;
-          const isTopDev = (ud.level as string) === 'top_developer';
-          setIsTopDeveloper(isTopDev);
-          if (isTopDev) {
-            const nextFifo = await fetchNextFifoNft(user.id);
-            setFifoNft(nextFifo);
-          }
+          setIsTopDeveloper((ud.level as string) === 'top_developer');
         }
+        const nextFifo = await fetchNextFifoNft(user.id);
+        setFifoNft(nextFifo);
       }
     } finally {
       setLoading(false);
@@ -634,15 +644,17 @@ export default function PoolPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  function handleBuySuccess(nftId: string) {
+  function handleFifoBuySuccess(nftId: string) {
+    setBuyFifoTarget(null);
+    // Reload penuh: perlu fetch NFT FIFO berikutnya dalam antrian
+    loadData();
+  }
+
+  function handleGridBuySuccess(nftId: string) {
     setPoolNfts(prev => prev.map(u =>
       u.id === nftId ? { ...u, for_sale: false, owner_id: user?.id ?? u.owner_id } : u,
     ));
-    if (fifoNft?.id === nftId) {
-      // NFT teratas terbeli — reload untuk dapat NFT berikutnya
-      loadData();
-    }
-    setBuyTarget(null);
+    setBuyGridTarget(null);
   }
 
   function handleSkipSuccess() {
@@ -674,23 +686,29 @@ export default function PoolPage() {
           loading={loading}
         />
 
-        {/* Section B — FIFO Queue (top developer only) */}
-        {!loading && isTopDeveloper && (
+        {/* Section FIFO — semua user yang login */}
+        {!loading && user && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <ListOrdered className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-lg">Antrian FIFO — Kewajiban Top Developer</h2>
+              <h2 className="font-semibold text-lg">
+                {isTopDeveloper
+                  ? 'Antrian FIFO — Kewajiban Top Developer'
+                  : 'Antrian FIFO — Jalur Validasi'}
+              </h2>
             </div>
             <p className="text-sm text-muted-foreground">
-              Sebagai Top Developer, kamu diharapkan membeli NFT berikutnya dalam antrian
-              atau meninggalkan alasan jika melewatinya. NFT keluar dari antrian hanya setelah terbeli.
+              {isTopDeveloper
+                ? 'Sebagai Top Developer, kamu diharapkan membeli NFT berikutnya dalam antrian atau meninggalkan alasan jika melewatinya. NFT keluar dari antrian hanya setelah terbeli.'
+                : 'NFT yang dibeli melalui antrian ini dapat digunakan untuk validasi project.'}
             </p>
 
             {fifoNft ? (
               <FifoCard
                 unit={fifoNft}
-                userId={user!.id}
-                onBuy={setBuyTarget}
+                userId={user.id}
+                isTopDeveloper={isTopDeveloper}
+                onBuy={setBuyFifoTarget}
                 onSkip={setSkipTarget}
               />
             ) : (
@@ -701,9 +719,15 @@ export default function PoolPage() {
           </section>
         )}
 
-        {/* Section A — Grid semua NFT di pool */}
+        {/* Section Grid — koleksi bebas */}
         <section className="space-y-3">
-          <h2 className="font-semibold text-lg">NFT di Pool Rekomendasi</h2>
+          <div>
+            <h2 className="font-semibold text-lg">NFT Rekomendasi — Koleksi</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Pembelian dengan memilih bebas. NFT hanya untuk koleksi/jual kembali —
+              tidak dapat digunakan untuk validasi. Untuk validasi, gunakan Antrian FIFO di atas.
+            </p>
+          </div>
 
           {loading ? (
             <GridSkeleton />
@@ -724,7 +748,7 @@ export default function PoolPage() {
                     unit={unit}
                     currentUserId={user?.id}
                     isTopDeveloper={isTopDeveloper}
-                    onBuy={setBuyTarget}
+                    onBuy={setBuyGridTarget}
                   />
                 ))}
               </div>
@@ -737,15 +761,29 @@ export default function PoolPage() {
 
       </div>
 
-      {/* Buy Dialog */}
-      {buyTarget && user && config && (
+      {/* FIFO Buy Dialog */}
+      {buyFifoTarget && user && config && (
         <BuyDialog
-          unit={buyTarget}
+          unit={buyFifoTarget}
           buyerId={user.id}
           hargaDasar={config.harga_dasar}
           batasAtas={config.batas_atas}
-          onClose={() => setBuyTarget(null)}
-          onSuccess={handleBuySuccess}
+          via="fifo"
+          onClose={() => setBuyFifoTarget(null)}
+          onSuccess={handleFifoBuySuccess}
+        />
+      )}
+
+      {/* Grid Buy Dialog */}
+      {buyGridTarget && user && config && (
+        <BuyDialog
+          unit={buyGridTarget}
+          buyerId={user.id}
+          hargaDasar={config.harga_dasar}
+          batasAtas={config.batas_atas}
+          via="pick"
+          onClose={() => setBuyGridTarget(null)}
+          onSuccess={handleGridBuySuccess}
         />
       )}
 
