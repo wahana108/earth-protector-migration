@@ -20,10 +20,17 @@ const storage = getStorage(app);
 const functions = getFunctions(app);
 const googleProvider = new GoogleAuthProvider();
 
-if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "127.0.0.1", 8082);
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+// connectXxxEmulator hanya boleh dipanggil sekali per instance (Firebase throws jika double).
+// try/catch menangani HMR server-side yang bisa re-evaluate modul ini sementara instance
+// Firestore/Auth yang sama sudah connected ke emulator.
+if (process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
+  try {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "127.0.0.1", 8082);
+    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  } catch {
+    // Already connected — aman diabaikan
+  }
 }
 
 export { app, db, auth, storage, functions, googleProvider };
