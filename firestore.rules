@@ -46,7 +46,7 @@ service cloud.firestore {
       allow create: if isMe(userId);
       allow update: if isMe(userId) || isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions', 'pending_buyback_actions'])) ||
+          .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions', 'pending_buyback_actions', 'daily_usage'])) ||
         // Validasi flow: pemilik akun mencatat partisipasi validasi
         (isMe(userId) &&
           request.resource.data.diff(resource.data)
@@ -342,6 +342,15 @@ service cloud.firestore {
       allow read:           if true;
       allow create:         if isAuth();
       allow update, delete: if isAdmin();
+    }
+
+    // ─── daily_stats/{date} ──────────────────────────────────────────────────
+    // Counter harian global untuk rate limiting (project & komentar).
+    // Dibatasi ketat: hanya dua field yang diizinkan untuk mencegah penyalahgunaan.
+    match /daily_stats/{date} {
+      allow read: if true;
+      allow write: if isAuth() &&
+        request.resource.data.keys().hasOnly(['projects', 'comments']);
     }
 
     // ─── recalculate_requests/{docId} ────────────────────────────────────────

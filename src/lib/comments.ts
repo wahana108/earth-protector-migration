@@ -7,6 +7,8 @@ import {
 
 import type { Comment } from './types';
 import { isBlocked } from './blocks';
+import { getCommunityConfig } from './community-config';
+import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString } from './rate-limit';
 
 export type FlaggedComment = {
   id: string;
@@ -79,8 +81,29 @@ export async function addComment(
     const blocked = await isBlocked(userId, nftOwnerId);
     if (blocked) throw new Error('Tidak bisa berkomentar di NFT user yang diblokir.');
   }
+
+  // Config dan user doc bisa diambil paralel
+  const [config, userSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(doc(db, 'users', userId)),
+  ]);
+  // Cek global setelah config tersedia — race condition minimal diterima (proteksi kasar)
+  await checkGlobalDailyLimit('comments', config?.max_comments_global_per_day ?? 300);
+
   const batch = writeBatch(db);
+  const userRef = doc(db, 'users', userId);
   const commentRef = doc(collection(db, 'nft_units', nftUnitId, 'comments'));
+
+  // Per-user daily comment limit (userSnap sudah di-fetch, 0 read tambahan)
+  checkAndIncrementUserUsage(
+    batch, userRef, userSnap.data() ?? {}, 'comments',
+    config?.max_comments_per_user_per_day ?? 30,
+  );
+
+  // Global increment — tulis ke daily_stats/{today} dalam batch yang sama
+  if ((config?.max_comments_global_per_day ?? 300) > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { comments: increment(1) }, { merge: true });
+  }
 
   batch.set(commentRef, {
     user_id: userId,

@@ -30,6 +30,7 @@ import { getUserCertificates } from '@/lib/infrastructure';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { getCommunityConfig } from '@/lib/community-config';
+import { getTodayString } from '@/lib/rate-limit';
 import type { UserBlock, ContributorCertificate } from '@/lib/types';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -698,6 +699,8 @@ export default function DashboardPage() {
   const [blockedUsers, setBlockedUsers] = useState<(UserBlock & { blocked_name: string })[]>([]);
   const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string } | null>(null);
   const [certificates, setCertificates] = useState<ContributorCertificate[]>([]);
+  const [dailyUsage, setDailyUsage] = useState({ transactions: 0, projects: 0, comments: 0 });
+  const [dailyLimits, setDailyLimits] = useState({ tx: 20, proj: 2, com: 30 });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -731,6 +734,20 @@ export default function DashboardPage() {
         setSoldNfts((d.soldNfts as number) ?? 0);
         setBuybackCount((d.buybackCount as number) ?? 0);
         setIsTopDeveloper((d.level as string) === 'top_developer');
+
+        // Daily usage — reset lazy jika tanggal beda (tampilkan 0, bukan angka kemarin)
+        const today = getTodayString();
+        const raw = d.daily_usage as { date?: string; transactions?: number; projects?: number; comments?: number } | undefined;
+        setDailyUsage({
+          transactions: raw?.date === today ? (raw.transactions ?? 0) : 0,
+          projects: raw?.date === today ? (raw.projects ?? 0) : 0,
+          comments: raw?.date === today ? (raw.comments ?? 0) : 0,
+        });
+        setDailyLimits({
+          tx: cfg?.max_transactions_per_user_per_day ?? 20,
+          proj: cfg?.max_projects_per_user_per_day ?? 2,
+          com: cfg?.max_comments_per_user_per_day ?? 30,
+        });
       }
 
       const allUnits = unitsSnap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>));
@@ -866,6 +883,34 @@ export default function DashboardPage() {
               {realisasi && (
                 <StatusRealisasi realisasi={realisasi} minPct={minRealisasiPct} />
               )}
+
+              {/* Kuota Harian */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Kuota Harian</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5 text-sm pb-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Transaksi</span>
+                    <span className="font-mono">
+                      {dailyUsage.transactions}/{dailyLimits.tx <= 0 ? '∞' : dailyLimits.tx}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Project</span>
+                    <span className="font-mono">
+                      {dailyUsage.projects}/{dailyLimits.proj <= 0 ? '∞' : dailyLimits.proj}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Komentar</span>
+                    <span className="font-mono">
+                      {dailyUsage.comments}/{dailyLimits.com <= 0 ? '∞' : dailyLimits.com}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1">Reset setiap hari pukul 00:00 WITA.</p>
+                </CardContent>
+              </Card>
             </section>
 
             {/* ── 2. NFT Dimiliki ── */}

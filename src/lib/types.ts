@@ -13,6 +13,13 @@ export type ValidatorAktif = {
   fee_diterima: number;
 };
 
+export type DailyUsage = {
+  date: string;           // 'YYYY-MM-DD' zona WITA
+  transactions: number;
+  projects: number;
+  comments: number;
+};
+
 export type User = {
   id: string;
   displayName: string | null;
@@ -28,6 +35,7 @@ export type User = {
   pending_seller_actions?: number;
   pending_buyback_actions?: number;
   total_poin_pending?: number;
+  daily_usage?: DailyUsage;
 };
 
 export type NFT = {
@@ -125,6 +133,11 @@ export type CommunityConfig = {
   purchase_autoclose_days: number;
   max_projects_per_user: number;
   min_realisasi_pct_untuk_create: number;
+  max_transactions_per_user_per_day: number;
+  max_projects_per_user_per_day: number;
+  max_comments_per_user_per_day: number;
+  max_projects_global_per_day: number;
+  max_comments_global_per_day: number;
   super_admin_email: string;
   admin_emails: string[];
   moderator_emails: string[];

@@ -46,6 +46,11 @@ type EditValues = {
   ai_provider: string;
   anomali_flag: number;
   anomali_invalid: number;
+  max_transactions_per_user_per_day: number;
+  max_projects_per_user_per_day: number;
+  max_comments_per_user_per_day: number;
+  max_projects_global_per_day: number;
+  max_comments_global_per_day: number;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -72,6 +77,11 @@ function configToEdit(c: CommunityConfig): EditValues {
     ai_provider: c.ai_provider,
     anomali_flag: c.ai_anomali_threshold.flag,
     anomali_invalid: c.ai_anomali_threshold.invalid,
+    max_transactions_per_user_per_day: c.max_transactions_per_user_per_day ?? 20,
+    max_projects_per_user_per_day: c.max_projects_per_user_per_day ?? 2,
+    max_comments_per_user_per_day: c.max_comments_per_user_per_day ?? 30,
+    max_projects_global_per_day: c.max_projects_global_per_day ?? 20,
+    max_comments_global_per_day: c.max_comments_global_per_day ?? 300,
   };
 }
 
@@ -97,6 +107,11 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     fase_aktif: e.fase_aktif,
     ai_provider: e.ai_provider,
     ai_anomali_threshold: { flag: e.anomali_flag, invalid: e.anomali_invalid },
+    max_transactions_per_user_per_day: e.max_transactions_per_user_per_day,
+    max_projects_per_user_per_day: e.max_projects_per_user_per_day,
+    max_comments_per_user_per_day: e.max_comments_per_user_per_day,
+    max_projects_global_per_day: e.max_projects_global_per_day,
+    max_comments_global_per_day: e.max_comments_global_per_day,
   };
 }
 
@@ -474,6 +489,32 @@ export default function ParametersPage() {
               <Card className="ring-2 ring-primary/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Batas Harian (Rate Limit)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Transaksi per user/hari" value={editValues.max_transactions_per_user_per_day}
+                    onChange={v => setField('max_transactions_per_user_per_day', v as number)} />
+                  <EditRow label="Project per user/hari" value={editValues.max_projects_per_user_per_day}
+                    onChange={v => setField('max_projects_per_user_per_day', v as number)} />
+                  <EditRow label="Komentar per user/hari" value={editValues.max_comments_per_user_per_day}
+                    onChange={v => setField('max_comments_per_user_per_day', v as number)} />
+                  <EditRow label="Project global/hari" value={editValues.max_projects_global_per_day}
+                    onChange={v => setField('max_projects_global_per_day', v as number)} />
+                  <EditRow label="Komentar global/hari" value={editValues.max_comments_global_per_day}
+                    onChange={v => setField('max_comments_global_per_day', v as number)} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Nilai 0 = tak terbatas. Batasan melindungi node dari overload.
+                      Node berpendanaan dapat menaikkan atau menonaktifkan.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Fee Sharing
                   </CardTitle>
                 </CardHeader>
@@ -614,6 +655,32 @@ export default function ParametersPage() {
                       Project baru hanya bisa dibuat jika realisasi transaksi
                       (terjual + buyback / total diterbitkan) memenuhi minimum ini.
                       Project pertama selalu diizinkan.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Batas Harian (Rate Limit)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Transaksi per user/hari"
+                    value={(config.max_transactions_per_user_per_day ?? 20) <= 0 ? 'Tak terbatas' : `${config.max_transactions_per_user_per_day ?? 20}/hari`} />
+                  <ParamRow label="Project per user/hari"
+                    value={(config.max_projects_per_user_per_day ?? 2) <= 0 ? 'Tak terbatas' : `${config.max_projects_per_user_per_day ?? 2}/hari`} />
+                  <ParamRow label="Komentar per user/hari"
+                    value={(config.max_comments_per_user_per_day ?? 30) <= 0 ? 'Tak terbatas' : `${config.max_comments_per_user_per_day ?? 30}/hari`} />
+                  <ParamRow label="Project global/hari"
+                    value={(config.max_projects_global_per_day ?? 20) <= 0 ? 'Tak terbatas' : `${config.max_projects_global_per_day ?? 20}/hari`} />
+                  <ParamRow label="Komentar global/hari"
+                    value={(config.max_comments_global_per_day ?? 300) <= 0 ? 'Tak terbatas' : `${config.max_comments_global_per_day ?? 300}/hari`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Nilai 0 = tak terbatas. Batasan melindungi node dari overload.
+                      Node berpendanaan dapat menaikkan atau menonaktifkan.
                     </p>
                   </div>
                 </CardContent>

@@ -9,7 +9,10 @@ import { checkAndIssueCertificate } from './infrastructure';
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
 import { calculateEffectiveBuyback, fibonacciLargestAndSum } from './ranking';
+import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString, RateLimitError } from './rate-limit';
 import type { ProjectCategory } from './types';
+
+export { RateLimitError } from './rate-limit';
 
 export class BuyError extends Error {
   constructor(message: string) {
@@ -98,10 +101,15 @@ export async function calculateRealisasiPct(userId: string): Promise<RealisasiRe
 }
 
 export async function createProject(input: CreateProjectInput): Promise<string> {
-  const [config, existingSnap] = await Promise.all([
+  const [config, existingSnap, devUserSnap] = await Promise.all([
     getCommunityConfig(),
     getDocs(query(collection(db, 'projects'), where('developer_id', '==', input.developer_id))),
+    getDoc(doc(db, 'users', input.developer_id)),
   ]);
+
+  // Cek global daily limit sebelum batch — ada race condition minimal yang diterima
+  // (lihat komentar di checkGlobalDailyLimit)
+  await checkGlobalDailyLimit('projects', config?.max_projects_global_per_day ?? 20);
 
   const activeProjects = existingSnap.docs.filter(
     d => (d.data().status as string | undefined) !== 'deleted',
@@ -136,6 +144,18 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   const link_bukti_status = await checkLinkBukti(input.link_bukti);
 
   const batch = writeBatch(db);
+  const devUserRef = doc(db, 'users', input.developer_id);
+
+  // Per-user daily project limit (baca dari devUserSnap yang sudah di-fetch)
+  checkAndIncrementUserUsage(
+    batch, devUserRef, devUserSnap.data() ?? {}, 'projects',
+    config?.max_projects_per_user_per_day ?? 2,
+  );
+
+  // Global increment — tulis ke daily_stats/{today} (atomic dalam batch)
+  if ((config?.max_projects_global_per_day ?? 20) > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { projects: increment(1) }, { merge: true });
+  }
 
   const projectRef = doc(collection(db, 'projects'));
   const projectId = projectRef.id;
@@ -339,6 +359,10 @@ export async function buyNftUnit(
     }
   }
 
+  // Ambil limit transaksi harian (di luar tx agar tidak menambah read di dalam)
+  const buyConfig = await getCommunityConfig();
+  const dailyTxLimit = buyConfig?.max_transactions_per_user_per_day ?? 20;
+
   await runTransaction(db, async (tx) => {
     // ── Baca semua dokumen dulu sebelum ada write ──────────────────────────
     const nftSnap = await tx.get(nftRef);
@@ -389,6 +413,9 @@ export async function buyNftUnit(
       : '';
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
+
+    // Rate limit: charge buyer (buyerSnap sudah di-fetch, 0 read tambahan)
+    checkAndIncrementUserUsage(tx, buyerRef, buyerSnap.data() as Record<string, unknown>, 'transactions', dailyTxLimit);
 
     // Infrastructure purchase: direct completion, no seller neraca, update fee_pool
     if (isInfrastructure) {
@@ -551,6 +578,9 @@ export async function buybackNftUnit(
     }
   }
 
+  const buybackConfig = await getCommunityConfig();
+  const dailyBuybackLimit = buybackConfig?.max_transactions_per_user_per_day ?? 20;
+
   await runTransaction(db, async (tx) => {
     // ── Semua read sebelum write ───────────────────────────────────────────
     const nftSnap = await tx.get(nftRef);
@@ -587,6 +617,9 @@ export async function buybackNftUnit(
       : '';
 
     // ── Semua write setelah semua read selesai ─────────────────────────────
+
+    // Rate limit: charge owner (requester) — ownerSnap sudah di-fetch, 0 read tambahan
+    checkAndIncrementUserUsage(tx, ownerRef, ownerSnap.data() as Record<string, unknown>, 'transactions', dailyBuybackLimit);
 
     // 1. NFT kembali ke developer, tidak dijual
     tx.update(nftRef, {
@@ -771,6 +804,7 @@ export async function validateProject(
 
   const config = await getCommunityConfig();
   const minimumHoldingDays = config?.minimum_holding_days ?? 7;
+  const dailyValidasiLimit = config?.max_transactions_per_user_per_day ?? 20;
   const nowMs = Date.now();
 
   const projectRef = doc(db, 'projects', projectId);
@@ -786,6 +820,9 @@ export async function validateProject(
 
     if (!projectSnap.exists()) throw new ValidasiError('Project tidak ditemukan.');
     if (!userSnap.exists()) throw new ValidasiError('Data user tidak ditemukan.');
+
+    // Rate limit: charge validator — userSnap sudah di-fetch, 0 read tambahan
+    checkAndIncrementUserUsage(tx, userRef, userSnap.data() as Record<string, unknown>, 'transactions', dailyValidasiLimit);
 
     const projectData = projectSnap.data();
     const isRevalidasi =
