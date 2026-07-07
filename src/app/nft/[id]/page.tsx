@@ -22,7 +22,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { buyNftUnit, BuyError, toggleNftLike } from '@/lib/projects';
+import { buyNftUnit, BuyError, toggleNftLike, RateLimitError } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment, pinComment, unpinComment } from '@/lib/comments';
 import { BlockUserDialog } from '@/components/block-user-dialog';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
@@ -126,7 +126,7 @@ function BuyDialog({
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof BuyError ? err.message : 'Transaksi gagal. Coba lagi.');
+      setError(err instanceof BuyError || err instanceof RateLimitError ? (err as Error).message : 'Transaksi gagal. Coba lagi.');
     } finally {
       setBuying(false);
     }
@@ -275,8 +275,8 @@ function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, 
       const newComment = await addComment(nftId, currentUserId, name, text.trim(), nftOwnerId);
       setComments(prev => [newComment, ...prev]);
       setText('');
-    } catch {
-      setError('Gagal mengirim komentar. Coba lagi.');
+    } catch (err: unknown) {
+      setError(err instanceof RateLimitError ? err.message : 'Gagal mengirim komentar. Coba lagi.');
     } finally {
       setSubmitting(false);
     }

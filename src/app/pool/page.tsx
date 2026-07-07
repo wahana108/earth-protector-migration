@@ -33,7 +33,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { buyNftUnit, BuyError, skipFifoNft, SkipFifoError } from '@/lib/projects';
+import { buyNftUnit, BuyError, skipFifoNft, SkipFifoError, RateLimitError } from '@/lib/projects';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -152,7 +152,7 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, via, onClose, onSucce
       onSuccess(unit.id);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof BuyError ? err.message : 'Transaksi gagal. Coba lagi.');
+      setError(err instanceof BuyError || err instanceof RateLimitError ? (err as Error).message : 'Transaksi gagal. Coba lagi.');
     } finally {
       setBuying(false);
     }

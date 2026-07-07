@@ -20,7 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { validateProject, ValidasiError } from '@/lib/projects';
+import { validateProject, ValidasiError, RateLimitError } from '@/lib/projects';
 import type { Project, NFTUnit, ProjectCategory } from '@/lib/types';
 import { KATEGORI_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -255,8 +255,8 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
       onValidated(project.id, totalSelisih, selectedIds.size);
     } catch (err: unknown) {
       setError(
-        err instanceof ValidasiError
-          ? err.message
+        err instanceof ValidasiError || err instanceof RateLimitError
+          ? (err as Error).message
           : 'Validasi gagal. Coba lagi.',
       );
     } finally {

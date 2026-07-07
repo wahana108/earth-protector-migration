@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError } from '@/lib/projects';
+import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError, RateLimitError } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
@@ -128,8 +128,8 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
       onClose();
     } catch (err: unknown) {
       setError(
-        err instanceof BuyError
-          ? err.message
+        err instanceof BuyError || err instanceof RateLimitError
+          ? (err as Error).message
           : 'Transaksi gagal. Coba lagi.',
       );
     } finally {
@@ -357,8 +357,8 @@ function CommentPanel({
       setComments((prev) => [newComment, ...prev]);
       setText('');
       onCommentAdded();
-    } catch {
-      setError('Gagal mengirim komentar. Coba lagi.');
+    } catch (err: unknown) {
+      setError(err instanceof RateLimitError ? err.message : 'Gagal mengirim komentar. Coba lagi.');
     } finally {
       setSubmitting(false);
     }

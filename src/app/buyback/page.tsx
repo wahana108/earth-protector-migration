@@ -27,6 +27,7 @@ import {
   completeBuybackRequest,
   disputeBuybackRequest,
   BuybackRequestError,
+  RateLimitError,
 } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -309,7 +310,7 @@ function CompleteDialog({
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof BuybackRequestError ? err.message : 'Gagal menyelesaikan buyback. Coba lagi.');
+      setError(err instanceof BuybackRequestError || err instanceof RateLimitError ? (err as Error).message : 'Gagal menyelesaikan buyback. Coba lagi.');
     } finally {
       setLoading(false);
     }
