@@ -353,6 +353,16 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(['projects', 'comments']);
     }
 
+    // ─── ai_reviews/{reviewId} ───────────────────────────────────────────────
+    // Review AI governance — transparan publik, hanya admin yang bisa tulis.
+    // Tidak ada hasOnly() pada create/update karena struktur entries bersarang
+    // dan hanya admin yang diberi akses — kepercayaan diberikan ke peran, bukan field.
+    match /ai_reviews/{reviewId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
     // ─── recalculate_requests/{docId} ────────────────────────────────────────
     // Flag untuk memicu recalculate developer levels via GitHub Actions cron.
     // Sengaja terbuka untuk write tanpa auth (dipakai dari API route server-side).

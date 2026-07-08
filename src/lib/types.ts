@@ -138,6 +138,12 @@ export type CommunityConfig = {
   max_comments_per_user_per_day: number;
   max_projects_global_per_day: number;
   max_comments_global_per_day: number;
+  ai_governance_enabled: boolean;
+  ai_review_history_limit: number;
+  ai_review_history_days: number;
+  ai_anomali_divisor: number;
+  ai_anomali_min_skor: number;
+  ai_review_revert_days: number;
   super_admin_email: string;
   admin_emails: string[];
   moderator_emails: string[];
@@ -166,6 +172,33 @@ export type FeePool = {
   sertifikat_aktif_id: string | null;
   total_sertifikat_diterbitkan: number;
   updated_at: Date;
+  // Neraca sistem AI Governance — additive, tidak menggantikan field lama
+  saldo_tersedia?: number;
+  total_dari_fee?: number;
+  total_dari_anomali?: number;
+  total_dari_lain?: number;
+  total_dialokasikan_lencana?: number;
+};
+
+export type AiReviewStatus = 'applied' | 'reverted' | 'final';
+
+export type AiReviewEntry = {
+  dev_id: string;
+  nama: string;
+  skor: number;
+  alasan: string;
+  minus_diterapkan: number;
+  status: AiReviewStatus;
+};
+
+export type AiReview = {
+  id: string;
+  created_at: Date;
+  created_by: string;
+  entries: AiReviewEntry[];
+  revert_deadline: Date;
+  total_minus: number;
+  status: AiReviewStatus;
 };
 
 export type ContributorCertificate = {
@@ -267,7 +300,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;
@@ -276,6 +309,8 @@ export type NeracaLog = {
   counterparty_id: string;
   project_id?: string;
   link_bukti?: string;
+  review_id?: string;
+  alasan?: string;
   timestamp: Date;
 };
 

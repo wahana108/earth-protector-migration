@@ -51,6 +51,12 @@ type EditValues = {
   max_comments_per_user_per_day: number;
   max_projects_global_per_day: number;
   max_comments_global_per_day: number;
+  ai_governance_enabled: boolean;
+  ai_review_history_limit: number;
+  ai_review_history_days: number;
+  ai_anomali_divisor: number;
+  ai_anomali_min_skor: number;
+  ai_review_revert_days: number;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -82,6 +88,12 @@ function configToEdit(c: CommunityConfig): EditValues {
     max_comments_per_user_per_day: c.max_comments_per_user_per_day ?? 30,
     max_projects_global_per_day: c.max_projects_global_per_day ?? 20,
     max_comments_global_per_day: c.max_comments_global_per_day ?? 300,
+    ai_governance_enabled: c.ai_governance_enabled ?? false,
+    ai_review_history_limit: c.ai_review_history_limit ?? 50,
+    ai_review_history_days: c.ai_review_history_days ?? 50,
+    ai_anomali_divisor: c.ai_anomali_divisor ?? 10,
+    ai_anomali_min_skor: c.ai_anomali_min_skor ?? 30,
+    ai_review_revert_days: c.ai_review_revert_days ?? 7,
   };
 }
 
@@ -112,6 +124,12 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     max_comments_per_user_per_day: e.max_comments_per_user_per_day,
     max_projects_global_per_day: e.max_projects_global_per_day,
     max_comments_global_per_day: e.max_comments_global_per_day,
+    ai_governance_enabled: e.ai_governance_enabled,
+    ai_review_history_limit: e.ai_review_history_limit,
+    ai_review_history_days: e.ai_review_history_days,
+    ai_anomali_divisor: e.ai_anomali_divisor,
+    ai_anomali_min_skor: e.ai_anomali_min_skor,
+    ai_review_revert_days: e.ai_review_revert_days,
   };
 }
 
@@ -515,6 +533,43 @@ export default function ParametersPage() {
               <Card className="ring-2 ring-primary/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    AI Governance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-muted-foreground">Aktifkan AI Governance</span>
+                    <select
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                      value={editValues.ai_governance_enabled ? 'true' : 'false'}
+                      onChange={e => setField('ai_governance_enabled', e.target.value === 'true')}
+                    >
+                      <option value="false">Nonaktif (default)</option>
+                      <option value="true">Aktif</option>
+                    </select>
+                  </div>
+                  <EditRow label="Maks. log per developer" value={editValues.ai_review_history_limit}
+                    onChange={v => setField('ai_review_history_limit', v as number)} />
+                  <EditRow label="Jangkauan hari log" value={editValues.ai_review_history_days}
+                    onChange={v => setField('ai_review_history_days', v as number)} />
+                  <EditRow label="Pembagi skor → NFT minus" value={editValues.ai_anomali_divisor}
+                    onChange={v => setField('ai_anomali_divisor', v as number)} />
+                  <EditRow label="Skor efek proporsional kecil (<)" value={editValues.ai_anomali_min_skor}
+                    onChange={v => setField('ai_anomali_min_skor', v as number)} />
+                  <EditRow label="Masa sanggah (hari)" value={editValues.ai_review_revert_days}
+                    onChange={v => setField('ai_review_revert_days', v as number)} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Fitur opsional. Saat nonaktif, platform berjalan penuh tanpa penilaian AI.
+                      Node berpendanaan dapat mengaktifkan &amp; mengotomasi via API di masa depan.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Fee Sharing
                   </CardTitle>
                 </CardHeader>
@@ -681,6 +736,28 @@ export default function ParametersPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Nilai 0 = tak terbatas. Batasan melindungi node dari overload.
                       Node berpendanaan dapat menaikkan atau menonaktifkan.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    AI Governance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Status" value={(config.ai_governance_enabled ?? false) ? 'Aktif' : 'Nonaktif (default)'} />
+                  <ParamRow label="Maks. log per developer" value={`${config.ai_review_history_limit ?? 50} log`} />
+                  <ParamRow label="Jangkauan hari log" value={`${config.ai_review_history_days ?? 50} hari`} />
+                  <ParamRow label="Pembagi skor → NFT minus" value={`÷ ${config.ai_anomali_divisor ?? 10}`} />
+                  <ParamRow label="Skor efek kecil (<)" value={`< ${config.ai_anomali_min_skor ?? 30}`} />
+                  <ParamRow label="Masa sanggah" value={`${config.ai_review_revert_days ?? 7} hari`} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Fitur opsional. Saat nonaktif, platform berjalan penuh tanpa penilaian AI.
+                      Node berpendanaan dapat mengaktifkan &amp; mengotomasi via API di masa depan.
                     </p>
                   </div>
                 </CardContent>

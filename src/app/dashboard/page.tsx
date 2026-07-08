@@ -133,6 +133,7 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   level_change: 'Level', transfer_pool: 'Pool', lewati_fifo: 'Lewati',
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
+  anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI',
 };
 
 // ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────

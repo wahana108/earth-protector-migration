@@ -283,7 +283,38 @@ export default function InfrastructurePage() {
               </CardContent>
             </Card>
 
-            {/* ── 4. Kontributor ── */}
+            {/* ── 4. Neraca Sistem ── */}
+            {status && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                    Neraca Sistem
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Sumber dan alokasi saldo pool sistem — transparan untuk semua anggota komunitas.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="divide-y text-sm">
+                  {[
+                    { label: 'Saldo tersedia', value: (status as unknown as Record<string, unknown>).saldo_tersedia as number ?? 0, highlight: true },
+                    { label: 'Dari fee sharing', value: (status as unknown as Record<string, unknown>).total_dari_fee as number ?? 0 },
+                    { label: 'Dari sanksi anomali AI', value: (status as unknown as Record<string, unknown>).total_dari_anomali as number ?? 0 },
+                    { label: 'Dari sumber lain', value: (status as unknown as Record<string, unknown>).total_dari_lain as number ?? 0 },
+                    { label: 'Dialokasikan ke lencana', value: (status as unknown as Record<string, unknown>).total_dialokasikan_lencana as number ?? 0 },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className="flex justify-between py-2">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className={`font-mono font-medium ${highlight ? 'text-green-600' : ''}`}>
+                        {formatIDR(value ?? 0)}
+                      </span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── 5. Kontributor ── */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">

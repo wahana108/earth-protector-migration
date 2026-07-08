@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
   Home,
   Compass,
@@ -18,6 +19,7 @@ import {
   Globe,
   HelpCircle,
   Building2,
+  Scan,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -34,6 +36,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
+import { getCommunityConfig } from '@/lib/community-config';
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
@@ -56,7 +59,15 @@ const navItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { isModerator } = useAuth();
+  const { isModerator, isAdmin } = useAuth();
+  const [aiGovernanceEnabled, setAiGovernanceEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    getCommunityConfig()
+      .then(cfg => setAiGovernanceEnabled(cfg?.ai_governance_enabled ?? false))
+      .catch(() => {});
+  }, [isAdmin]);
 
   return (
     <>
@@ -89,6 +100,20 @@ export function SidebarNav() {
                 <Link href="/admin">
                   <ShieldAlert />
                   <span>Admin</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {isAdmin && aiGovernanceEnabled && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === '/ai-review'}
+                tooltip={{ children: 'AI Review' }}
+              >
+                <Link href="/ai-review">
+                  <Scan />
+                  <span>AI Review</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
