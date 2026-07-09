@@ -15,6 +15,11 @@ export type InfrastructureFundStatus = {
   total_sertifikat_diterbitkan: number;
   cukup_untuk: number;
   harga_dasar: number;
+  saldo_tersedia: number;
+  total_dari_fee: number;
+  total_dari_anomali: number;
+  total_dari_lain: number;
+  total_dialokasikan_lencana: number;
 };
 
 export async function getInfrastructureFundStatus(): Promise<InfrastructureFundStatus | null> {
@@ -42,6 +47,11 @@ export async function getInfrastructureFundStatus(): Promise<InfrastructureFundS
     total_sertifikat_diterbitkan,
     cukup_untuk,
     harga_dasar: config.harga_dasar,
+    saldo_tersedia: (data.saldo_tersedia as number) ?? 0,
+    total_dari_fee: (data.total_dari_fee as number) ?? 0,
+    total_dari_anomali: (data.total_dari_anomali as number) ?? 0,
+    total_dari_lain: (data.total_dari_lain as number) ?? 0,
+    total_dialokasikan_lencana: (data.total_dialokasikan_lencana as number) ?? 0,
   };
 }
 

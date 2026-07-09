@@ -36,6 +36,7 @@ export type User = {
   pending_buyback_actions?: number;
   total_poin_pending?: number;
   daily_usage?: DailyUsage;
+  last_ai_review_at?: Date | null;
 };
 
 export type NFT = {

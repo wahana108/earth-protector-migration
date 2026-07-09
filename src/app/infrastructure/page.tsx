@@ -296,20 +296,32 @@ export default function InfrastructurePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="divide-y text-sm">
-                  {[
-                    { label: 'Saldo tersedia', value: (status as unknown as Record<string, unknown>).saldo_tersedia as number ?? 0, highlight: true },
-                    { label: 'Dari fee sharing', value: (status as unknown as Record<string, unknown>).total_dari_fee as number ?? 0 },
-                    { label: 'Dari sanksi anomali AI', value: (status as unknown as Record<string, unknown>).total_dari_anomali as number ?? 0 },
-                    { label: 'Dari sumber lain', value: (status as unknown as Record<string, unknown>).total_dari_lain as number ?? 0 },
-                    { label: 'Dialokasikan ke lencana', value: (status as unknown as Record<string, unknown>).total_dialokasikan_lencana as number ?? 0 },
-                  ].map(({ label, value, highlight }) => (
-                    <div key={label} className="flex justify-between py-2">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className={`font-mono font-medium ${highlight ? 'text-green-600' : ''}`}>
-                        {formatIDR(value ?? 0)}
-                      </span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between py-2">
+                    <span className="font-medium">Saldo Tersedia</span>
+                    <span className="font-mono font-bold text-green-600">{formatIDR(status.saldo_tersedia)}</span>
+                  </div>
+                  <p className="py-2 text-xs text-muted-foreground font-medium">── Rincian Asal ──</p>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Dari Fee Sharing</span>
+                    <span className="font-mono">{formatIDR(status.total_dari_fee)}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Dari Hukuman Anomali</span>
+                    <span className="font-mono">{formatIDR(status.total_dari_anomali)}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Dari Sumber Lain</span>
+                    <span className="font-mono">{formatIDR(status.total_dari_lain)}</span>
+                  </div>
+                  <p className="py-2 text-xs text-muted-foreground font-medium">── Pengeluaran ──</p>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Dialokasikan Lencana</span>
+                    <span className="font-mono text-orange-600">{formatIDR(status.total_dialokasikan_lencana)}</span>
+                  </div>
+                  <p className="pt-3 pb-1 text-xs text-muted-foreground leading-relaxed">
+                    Neraca sistem selalu seimbang — setiap poin yang masuk berasal dari mekanisme transparan
+                    (fee sukarela, hukuman anomali) dan hanya dipakai untuk mendukung operasional komunitas.
+                  </p>
                 </CardContent>
               </Card>
             )}

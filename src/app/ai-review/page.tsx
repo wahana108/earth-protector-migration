@@ -16,7 +16,7 @@ import {
   generateDataText, generatePrompt, parseAiOutput,
   applyAiReview, revertAiReview, getAiReviews, maybeFinalizeReviews,
   calcMinusNeraca,
-  type DevAggregate, type ParsedAiEntry, type AiReview,
+  type DevProfile, type DevAggregate, type ParsedAiEntry, type AiReview,
 } from '@/lib/ai-review';
 import type { CommunityConfig } from '@/lib/types';
 
@@ -60,6 +60,7 @@ export default function AiReviewPage() {
   const [loading, setLoading] = useState(true);
 
   // Export state
+  const [devs, setDevs] = useState<DevProfile[]>([]);
   const [aggregates, setAggregates] = useState<DevAggregate[]>([]);
   const [shortIdToInfo, setShortIdToInfo] = useState<Map<string, { uid: string; displayName: string }>>(new Map());
   const [dataText, setDataText] = useState('');
@@ -150,14 +151,15 @@ export default function AiReviewPage() {
   async function handleExport() {
     if (!config || !user) return;
     setLoadingExport(true);
+    setDevs([]);
     setAggregates([]);
     setDataText('');
     setPrompt('');
     setParsedEntries(null);
     setParseError('');
     try {
-      const devs = await getTopDevsForAiReview(config);
-      if (devs.length === 0) {
+      const fetchedDevs = await getTopDevsForAiReview(config);
+      if (fetchedDevs.length === 0) {
         setDataText('Tidak ada developer yang memenuhi syarat untuk ditinjau.');
         return;
       }
@@ -165,13 +167,17 @@ export default function AiReviewPage() {
       const histLimit = config.ai_review_history_limit ?? 50;
       const histDays = config.ai_review_history_days ?? 50;
 
-      const logsArr = await Promise.all(devs.map(d => fetchDevLogs(d.uid, histLimit, histDays)));
-      const aggs = devs.map((d, i) => aggregateDevData(d, logsArr[i]));
+      const logsArr = await Promise.all(
+        fetchedDevs.map(d => fetchDevLogs(d.uid, histLimit, histDays, d.lastAiReviewAt)),
+      );
+      const aggs = fetchedDevs.map((d, i) => aggregateDevData(d, logsArr[i]));
+      setDevs(fetchedDevs);
 
       const idMap = new Map<string, { uid: string; displayName: string }>();
       for (const agg of aggs) {
         idMap.set(agg.shortId, { uid: agg.uid, displayName: agg.displayName });
       }
+
 
       const dText = generateDataText(aggs);
       const pText = generatePrompt(dText);
@@ -269,6 +275,20 @@ export default function AiReviewPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{aggregates.length} developer</span>
                   <CopyButton text={dataText} label="Salin Data" />
+                </div>
+                <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1">
+                  {devs.map(d => (
+                    <div key={d.uid} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono font-medium text-foreground w-16 shrink-0">{d.shortId}</span>
+                      <span className="truncate flex-1">{d.displayName}</span>
+                      <span className="shrink-0">
+                        Log sejak:{' '}
+                        <span className="font-medium text-foreground">
+                          {d.lastAiReviewAt ? formatDate(d.lastAiReviewAt) : 'awal'}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
                 <pre className="text-xs bg-muted rounded-lg p-3 overflow-auto max-h-56 whitespace-pre-wrap font-mono leading-relaxed">
                   {dataText}

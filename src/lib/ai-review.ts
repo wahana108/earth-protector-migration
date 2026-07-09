@@ -13,6 +13,7 @@ export type DevProfile = {
   shortId: string;
   displayName: string;
   level: string;
+  lastAiReviewAt: Date | null;
 };
 
 export type DevAggregate = {
@@ -78,11 +79,13 @@ export async function getTopDevsForAiReview(config: CommunityConfig): Promise<De
   for (const d of topDevSnap.docs) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
+    const rawTs = d.data().last_ai_review_at;
     result.push({
       uid: d.id,
       shortId: d.id.substring(0, 6),
       displayName: (d.data().displayName as string) ?? 'User',
       level: 'top_developer',
+      lastAiReviewAt: rawTs instanceof Timestamp ? rawTs.toDate() : null,
     });
   }
 
@@ -90,11 +93,13 @@ export async function getTopDevsForAiReview(config: CommunityConfig): Promise<De
     if (result.length >= quota) break;
     if (seen.has(d.id)) continue;
     seen.add(d.id);
+    const rawTs = d.data().last_ai_review_at;
     result.push({
       uid: d.id,
       shortId: d.id.substring(0, 6),
       displayName: (d.data().displayName as string) ?? 'User',
       level: (d.data().level as string) ?? 'developer_biasa',
+      lastAiReviewAt: rawTs instanceof Timestamp ? rawTs.toDate() : null,
     });
   }
 
@@ -107,13 +112,21 @@ export async function fetchDevLogs(
   uid: string,
   historyLimit: number,
   historyDays: number,
+  lastReviewAt: Date | null = null,
 ): Promise<NeracaLog[]> {
-  const since = new Date();
-  since.setDate(since.getDate() - historyDays);
+  const historyBound = new Date();
+  historyBound.setDate(historyBound.getDate() - historyDays);
+
+  // Watermark: ambil hanya log SETELAH review terakhir untuk cegah double-penalty.
+  // Lower bound = max(historyBound, lastReviewAt). Operator '>' saat watermark
+  // jadi lower bound (log persis di titik watermark sudah dinilai sebelumnya).
+  const watermarkActive = lastReviewAt !== null && lastReviewAt > historyBound;
+  const lowerBound: Date = watermarkActive ? (lastReviewAt as Date) : historyBound;
+  const operator = watermarkActive ? '>' : '>=';
 
   const snap = await getDocs(query(
     collection(db, 'users', uid, 'neraca_log'),
-    where('timestamp', '>=', Timestamp.fromDate(since)),
+    where('timestamp', operator as '<' | '<=' | '==' | '>=' | '>', Timestamp.fromDate(lowerBound)),
     orderBy('timestamp', 'desc'),
     limit(historyLimit),
   ));
@@ -280,8 +293,11 @@ export async function applyAiReview(
       status: 'applied',
     });
 
+    // Watermark di-set untuk SEMUA developer yang dinilai (termasuk skor 0)
+    // agar log sampai titik ini tidak dinilai ulang di sesi review berikutnya.
     if (entry.minusNeraca > 0) {
       batch.update(doc(db, 'users', entry.uid), {
+        last_ai_review_at: serverTimestamp(),
         total_poin: increment(-entry.minusNeraca),
       });
 
@@ -299,6 +315,8 @@ export async function applyAiReview(
       });
 
       totalMinus += entry.minusNeraca;
+    } else {
+      batch.update(doc(db, 'users', entry.uid), { last_ai_review_at: serverTimestamp() });
     }
   }
 
@@ -327,6 +345,10 @@ export async function applyAiReview(
 export async function revertAiReview(reviewId: string, review: AiReview): Promise<void> {
   const batch = writeBatch(db);
   let totalRestored = 0;
+
+  // last_ai_review_at TIDAK diubah saat revert — keputusan sadar:
+  // revert mengoreksi nilai (total_poin), bukan membuka kembali log
+  // yang sudah dinilai untuk sesi review berikutnya.
 
   // Loop per-entry: kembalikan total_poin + tulis log revert untuk setiap user
   for (const entry of review.entries) {
