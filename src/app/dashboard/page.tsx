@@ -134,6 +134,7 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
   anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI',
+  kontribusi_infrastruktur: 'Reward Infrastruktur',
 };
 
 // ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────

@@ -221,6 +221,9 @@ export default function ParametersPage() {
             sertifikat_aktif_id: (fd.sertifikat_aktif_id as string | null) ?? null,
             total_sertifikat_diterbitkan: (fd.total_sertifikat_diterbitkan as number) ?? 0,
             updated_at: (fd.updated_at as Timestamp)?.toDate?.() ?? new Date(),
+            total_dari_fee: (fd.total_dari_fee as number) ?? 0,
+            total_dari_anomali: (fd.total_dari_anomali as number) ?? 0,
+            saldo_tersedia: (fd.saldo_tersedia as number) ?? 0,
           });
         }
       })
@@ -778,9 +781,13 @@ export default function ParametersPage() {
                     value={`${100 - (config.fee_infrastruktur_pct ?? 50)}%`} />
                   {feePool && (
                     <>
-                      <ParamRow label="Total fee terkumpul"
-                        value={formatRupiah(feePool.total_terkumpul)} />
-                      <ParamRow label="Total terdistribusi ke validator"
+                      <ParamRow label="Saldo kas sistem"
+                        value={formatRupiah(feePool.saldo_tersedia ?? 0)} />
+                      <ParamRow label="Dari fee sharing (kas)"
+                        value={formatRupiah(feePool.total_dari_fee ?? 0)} />
+                      <ParamRow label="Dari hukuman anomali"
+                        value={formatRupiah(feePool.total_dari_anomali ?? 0)} />
+                      <ParamRow label="Terdistribusi ke validator"
                         value={formatRupiah(feePool.total_terdistribusi)} />
                     </>
                   )}

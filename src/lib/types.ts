@@ -173,12 +173,23 @@ export type FeePool = {
   sertifikat_aktif_id: string | null;
   total_sertifikat_diterbitkan: number;
   updated_at: Date;
-  // Neraca sistem AI Governance — additive, tidak menggantikan field lama
   saldo_tersedia?: number;
   total_dari_fee?: number;
   total_dari_anomali?: number;
   total_dari_lain?: number;
   total_dialokasikan_lencana?: number;
+  migrated_at?: Date | null;
+};
+
+export type InfrastructurePayment = {
+  id: string;
+  kontributor_id: string;
+  kontributor_nama: string;
+  nilai: number;
+  bukti_link: string;
+  keterangan: string;
+  verified_by: string;
+  created_at: Date;
 };
 
 export type AiReviewStatus = 'applied' | 'reverted' | 'final';
@@ -301,7 +312,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'kontribusi_infrastruktur';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;

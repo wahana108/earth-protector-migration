@@ -16,8 +16,10 @@ import { db } from '@/lib/firebase';
 import {
   getInfrastructureFundStatus,
   getLatestContributorCertificates,
+  getInfrastructurePayments,
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
+import type { InfrastructurePayment } from '@/lib/types';
 import { getCommunityConfig } from '@/lib/community-config';
 import type { ContributorCertificate, NFTUnit } from '@/lib/types';
 
@@ -37,6 +39,7 @@ export default function InfrastructurePage() {
   const [status, setStatus] = useState<InfrastructureFundStatus | null>(null);
   const [activeNft, setActiveNft] = useState<NFTUnit | null>(null);
   const [contributors, setContributors] = useState<ContributorCertificate[]>([]);
+  const [payments, setPayments] = useState<InfrastructurePayment[]>([]);
   const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
   const [expandedInfo, setExpandedInfo] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,13 +48,15 @@ export default function InfrastructurePage() {
     async function loadData() {
       setLoading(true);
       try {
-        const [fundStatus, certs, config] = await Promise.all([
+        const [fundStatus, certs, pmts, config] = await Promise.all([
           getInfrastructureFundStatus(),
           getLatestContributorCertificates(10),
+          getInfrastructurePayments(20),
           getCommunityConfig(),
         ]);
         setStatus(fundStatus);
         setContributors(certs);
+        setPayments(pmts);
         setInfraCosts(
           (config?.infrastructure_costs ?? []).map(c => ({
             ...c,
@@ -118,44 +123,53 @@ export default function InfrastructurePage() {
           </div>
         ) : (
           <>
-            {/* ── 1. Status Dana Sistem ── */}
+            {/* ── 1. Neraca Sistem (terpadu) ── */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Status Dana Sistem
+                  <TrendingUp className="h-4 w-4 text-blue-500" />
+                  Neraca Sistem
                 </CardTitle>
+                <CardDescription className="text-xs">
+                  Sumber dan alokasi kas sistem — transparan untuk semua anggota komunitas.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="divide-y text-sm">
                 {status ? (
                   <>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">Total Terkumpul</p>
-                        <p className="font-bold text-sm">{formatIDR(status.total_terkumpul)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">Total Digunakan</p>
-                        <p className="font-bold text-sm text-orange-600">{formatIDR(status.total_digunakan)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">Sisa Tersedia</p>
-                        <p className="font-bold text-sm text-green-600">{formatIDR(Math.max(0, status.sisa))}</p>
-                      </div>
+                    <div className="flex justify-between py-2">
+                      <span className="font-semibold">Saldo Tersedia</span>
+                      <span className="font-mono font-bold text-green-600">{formatIDR(status.saldo_tersedia)}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground text-center">
-                      {status.cukup_untuk > 0
-                        ? `Cukup untuk ${status.cukup_untuk} sertifikat lagi`
-                        : `Butuh ${formatIDR(status.harga_dasar - Math.max(0, status.sisa))} lagi untuk sertifikat berikutnya`
-                      }
+                    <p className="py-2 text-xs text-muted-foreground font-medium">── Rincian Asal ──</p>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Dari Fee Sharing</span>
+                      <span className="font-mono">{formatIDR(status.total_dari_fee)}</span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Dari Hukuman Anomali</span>
+                      <span className="font-mono">{formatIDR(status.total_dari_anomali)}</span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Dari Sumber Lain</span>
+                      <span className="font-mono">{formatIDR(status.total_dari_lain)}</span>
+                    </div>
+                    <p className="py-2 text-xs text-muted-foreground font-medium">── Pengeluaran ──</p>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Reward ke Kontributor</span>
+                      <span className="font-mono text-orange-600">{formatIDR(status.total_dialokasikan_lencana)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-muted-foreground">Sertifikat diterbitkan</span>
+                      <span className="font-medium">{status.total_sertifikat_diterbitkan}</span>
+                    </div>
+                    <p className="pt-3 pb-1 text-xs text-muted-foreground leading-relaxed">
+                      Neraca sistem selalu seimbang — setiap poin yang masuk berasal dari mekanisme transparan
+                      (fee sukarela, hukuman anomali) dan hanya dipakai untuk mendukung operasional komunitas.
                     </p>
-                    <div className="text-xs text-muted-foreground">
-                      Total sertifikat diterbitkan:{' '}
-                      <span className="font-medium text-foreground">{status.total_sertifikat_diterbitkan}</span>
-                    </div>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Dana sistem belum memiliki catatan.</p>
+                  <p className="py-3 text-sm text-muted-foreground">Dana sistem belum memiliki catatan.</p>
                 )}
               </CardContent>
             </Card>
@@ -283,50 +297,7 @@ export default function InfrastructurePage() {
               </CardContent>
             </Card>
 
-            {/* ── 4. Neraca Sistem ── */}
-            {status && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-blue-500" />
-                    Neraca Sistem
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Sumber dan alokasi saldo pool sistem — transparan untuk semua anggota komunitas.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="divide-y text-sm">
-                  <div className="flex justify-between py-2">
-                    <span className="font-medium">Saldo Tersedia</span>
-                    <span className="font-mono font-bold text-green-600">{formatIDR(status.saldo_tersedia)}</span>
-                  </div>
-                  <p className="py-2 text-xs text-muted-foreground font-medium">── Rincian Asal ──</p>
-                  <div className="flex justify-between py-2">
-                    <span className="text-muted-foreground">Dari Fee Sharing</span>
-                    <span className="font-mono">{formatIDR(status.total_dari_fee)}</span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-muted-foreground">Dari Hukuman Anomali</span>
-                    <span className="font-mono">{formatIDR(status.total_dari_anomali)}</span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-muted-foreground">Dari Sumber Lain</span>
-                    <span className="font-mono">{formatIDR(status.total_dari_lain)}</span>
-                  </div>
-                  <p className="py-2 text-xs text-muted-foreground font-medium">── Pengeluaran ──</p>
-                  <div className="flex justify-between py-2">
-                    <span className="text-muted-foreground">Dialokasikan Lencana</span>
-                    <span className="font-mono text-orange-600">{formatIDR(status.total_dialokasikan_lencana)}</span>
-                  </div>
-                  <p className="pt-3 pb-1 text-xs text-muted-foreground leading-relaxed">
-                    Neraca sistem selalu seimbang — setiap poin yang masuk berasal dari mekanisme transparan
-                    (fee sukarela, hukuman anomali) dan hanya dipakai untuk mendukung operasional komunitas.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* ── 5. Kontributor ── */}
+            {/* ── 4. Kontributor ── */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -358,6 +329,58 @@ export default function InfrastructurePage() {
                         <span className="text-xs text-muted-foreground shrink-0">
                           {formatIDR(cert.nilai)}
                         </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ── 5. Riwayat Pembayaran Infrastruktur ── */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  Riwayat Pembayaran Infrastruktur
+                  {payments.length > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground ml-1">
+                      ({payments.length} terbaru)
+                    </span>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Kontributor yang sudah membayar biaya infrastruktur nyata dan menerima reward poin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Belum ada pembayaran infrastruktur yang tercatat.
+                  </p>
+                ) : (
+                  <div className="divide-y rounded-lg border overflow-hidden">
+                    {payments.map(p => (
+                      <div key={p.id} className="flex items-start gap-3 px-4 py-3 bg-card text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{p.kontributor_nama}</p>
+                          {p.keterangan && (
+                            <p className="text-xs text-muted-foreground truncate">{p.keterangan}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">{formatDate(p.created_at)}</p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-0.5">
+                          <p className="font-mono font-medium text-green-600">+{formatIDR(p.nilai)}</p>
+                          {p.bukti_link && (
+                            <a
+                              href={p.bukti_link.startsWith('http') ? p.bukti_link : `https://${p.bukti_link}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Bukti
+                            </a>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

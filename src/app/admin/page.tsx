@@ -23,7 +23,11 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
 import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
-import { checkAndIssueCertificate, getInfrastructureFundStatus, type InfrastructureFundStatus } from '@/lib/infrastructure';
+import {
+  checkAndIssueCertificate, getInfrastructureFundStatus,
+  migrateFeePoolIfNeeded, rewardInfrastructureContributor,
+  type InfrastructureFundStatus,
+} from '@/lib/infrastructure';
 import { updateCommunityConfig } from '@/lib/community-config';
 import type { UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -356,6 +360,14 @@ export default function AdminPage() {
   const [issuingCert, setIssuingCert] = useState(false);
   const [issueResult, setIssueResult] = useState<string | null>(null);
   const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
+  const [rewardEmail, setRewardEmail] = useState('');
+  const [rewardNilai, setRewardNilai] = useState('');
+  const [rewardBuktiLink, setRewardBuktiLink] = useState('');
+  const [rewardKeterangan, setRewardKeterangan] = useState('');
+  const [rewardLoading, setRewardLoading] = useState(false);
+  const [rewardResult, setRewardResult] = useState<string | null>(null);
   const [savingCosts, setSavingCosts] = useState(false);
 
   useEffect(() => {
@@ -406,6 +418,54 @@ export default function AdminPage() {
       setIssueResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
     } finally {
       setIssuingCert(false);
+    }
+  }
+
+  async function handleMigrate() {
+    setMigrateLoading(true);
+    setMigrateResult(null);
+    try {
+      const msg = await migrateFeePoolIfNeeded();
+      setMigrateResult(msg);
+      await loadInfra();
+    } catch (e) {
+      setMigrateResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
+    } finally {
+      setMigrateLoading(false);
+    }
+  }
+
+  async function handleRewardContributor() {
+    if (!user) return;
+    const nilaiNum = parseInt(rewardNilai.replace(/\D/g, ''), 10);
+    if (!rewardEmail.trim() || !nilaiNum || nilaiNum <= 0 || !rewardBuktiLink.trim()) {
+      setRewardResult('Email, nilai, dan bukti link wajib diisi.');
+      return;
+    }
+    setRewardLoading(true);
+    setRewardResult(null);
+    try {
+      // Lookup user by email
+      const usersSnap = await getDocs(query(
+        collection(db, 'users'),
+        where('email', '==', rewardEmail.trim()),
+        limit(1),
+      ));
+      if (usersSnap.empty) throw new Error(`User dengan email "${rewardEmail.trim()}" tidak ditemukan.`);
+      const kontributorId = usersSnap.docs[0].id;
+      const kontributorNama = (usersSnap.docs[0].data().displayName as string) ?? 'User';
+
+      await rewardInfrastructureContributor(
+        kontributorId, kontributorNama, nilaiNum,
+        rewardBuktiLink.trim(), rewardKeterangan.trim(), user.id,
+      );
+      setRewardResult(`Reward Rp ${nilaiNum.toLocaleString('id-ID')} berhasil diberikan ke ${kontributorNama}.`);
+      setRewardEmail(''); setRewardNilai(''); setRewardBuktiLink(''); setRewardKeterangan('');
+      await loadInfra();
+    } catch (e) {
+      setRewardResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
+    } finally {
+      setRewardLoading(false);
     }
   }
 
@@ -781,18 +841,18 @@ export default function AdminPage() {
                 </div>
               ) : infraStatus ? (
                 <>
-                  {/* Status ringkasan */}
+                  {/* Status ringkasan — field baru sebagai sumber kebenaran */}
                   <div className="grid grid-cols-3 gap-3 text-center text-sm">
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground mb-0.5">Terkumpul</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Total Masuk</p>
                       <p className="font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_terkumpul)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground mb-0.5">Digunakan</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Reward Diberikan</p>
                       <p className="font-bold text-orange-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_digunakan)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground mb-0.5">Sisa</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">Saldo Tersedia</p>
                       <p className="font-bold text-green-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Math.max(0, infraStatus.sisa))}</p>
                     </div>
                   </div>
@@ -833,6 +893,69 @@ export default function AdminPage() {
                         {issueResult}
                       </p>
                     )}
+                  </div>
+
+                  {/* Migrasi saldo lama — sekali pakai, tampil jika belum migrated */}
+                  {!infraStatus.migrated_at && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <p className="text-xs font-medium text-amber-700">Migrasi Saldo Lama</p>
+                      <p className="text-xs text-muted-foreground">
+                        Pindahkan saldo dari sistem lama (total_terkumpul − total_terdistribusi − total_digunakan)
+                        ke saldo_tersedia. Hanya berjalan jika saldo_tersedia masih 0. Idempoten — aman dijalankan sekali.
+                      </p>
+                      <Button size="sm" variant="outline" disabled={migrateLoading} onClick={handleMigrate} className="gap-2">
+                        {migrateLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Jalankan Migrasi
+                      </Button>
+                      {migrateResult && (
+                        <p className="text-xs text-muted-foreground bg-muted rounded px-3 py-2">{migrateResult}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reward kontributor infrastruktur */}
+                  <div className="space-y-3 pt-2 border-t">
+                    <p className="text-xs font-medium">Beri Reward Kontributor</p>
+                    <p className="text-xs text-muted-foreground">
+                      Verifikasi pembayaran infrastruktur nyata → beri reward poin ke kontributor.
+                      Zero-sum: saldo sistem berkurang, poin kontributor bertambah.
+                    </p>
+                    <div className="space-y-2">
+                      <input
+                        className="w-full h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Email kontributor"
+                        value={rewardEmail}
+                        onChange={e => setRewardEmail(e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="w-full h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder={`Nilai reward (Rp) — saldo tersedia: ${new Intl.NumberFormat('id-ID').format(infraStatus.saldo_tersedia)}`}
+                        value={rewardNilai}
+                        onChange={e => setRewardNilai(e.target.value)}
+                      />
+                      <input
+                        className="w-full h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Bukti link (wajib) — URL atau referensi pembayaran"
+                        value={rewardBuktiLink}
+                        onChange={e => setRewardBuktiLink(e.target.value)}
+                      />
+                      <input
+                        className="w-full h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="Keterangan (opsional)"
+                        value={rewardKeterangan}
+                        onChange={e => setRewardKeterangan(e.target.value)}
+                      />
+                      <Button size="sm" disabled={rewardLoading} onClick={handleRewardContributor} className="gap-2">
+                        {rewardLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Verifikasi &amp; Beri Reward
+                      </Button>
+                      {rewardResult && (
+                        <p className={`text-xs rounded-md px-3 py-2 ${rewardResult.startsWith('Gagal') || rewardResult.startsWith('Kas') || rewardResult.startsWith('Email') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-400'}`}>
+                          {rewardResult}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : (

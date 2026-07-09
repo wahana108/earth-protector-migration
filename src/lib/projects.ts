@@ -399,7 +399,8 @@ export async function buyNftUnit(
     const sellerSnap = await tx.get(sellerRef);
     const buyerSnap = await tx.get(buyerRef);
     const projectSnap = await tx.get(projectRef);
-    const feePoolSnap = isInfrastructure ? await tx.get(feePoolRef) : null;
+    // feePool tidak perlu dibaca — increment() sudah atomik
+
 
     if (!isInfrastructure && !sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
     if (!buyerSnap.exists()) throw new BuyError('Data pembeli tidak ditemukan.');
@@ -419,9 +420,6 @@ export async function buyNftUnit(
 
     // Infrastructure purchase: direct completion, no seller neraca, update fee_pool
     if (isInfrastructure) {
-      const currentDipakai = feePoolSnap?.exists()
-        ? ((feePoolSnap.data().total_digunakan as number) ?? 0) : 0;
-
       tx.update(nftRef, {
         owner_id: buyerId,
         for_sale: false,
@@ -434,7 +432,8 @@ export async function buyNftUnit(
       });
       tx.update(buyerRef, { total_poin: buyerPoin + nilai_selisih });
       tx.set(feePoolRef, {
-        total_digunakan: currentDipakai + harga_jual,
+        saldo_tersedia: increment(-harga_jual),
+        total_dialokasikan_lencana: increment(harga_jual),
         sertifikat_aktif_id: null,
       }, { merge: true });
       tx.update(poolRef, { jumlah_nft_valid: increment(-1) });
@@ -1195,10 +1194,12 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
     timestamp: serverTimestamp(),
   });
 
-  // fee_pool metadata
+  // fee_pool: audit trail (lama) + kas aktif (baru) sekaligus
   batch.set(feePoolRef, {
     total_terkumpul: increment(feeTotal),
     total_terdistribusi: increment(feeValidator),
+    total_dari_fee: increment(feeInfrastruktur),
+    saldo_tersedia: increment(feeInfrastruktur),
   }, { merge: true });
 
   // Setiap validator neraca += bagian proporsional
