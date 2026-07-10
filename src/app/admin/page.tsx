@@ -24,7 +24,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
 import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
 import {
-  checkAndIssueCertificate, getInfrastructureFundStatus,
+  getInfrastructureFundStatus,
   migrateFeePoolIfNeeded, rewardInfrastructureContributor,
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
@@ -357,8 +357,6 @@ export default function AdminPage() {
   // Infrastructure Fund state
   const [infraStatus, setInfraStatus] = useState<InfrastructureFundStatus | null>(null);
   const [loadingInfra, setLoadingInfra] = useState(true);
-  const [issuingCert, setIssuingCert] = useState(false);
-  const [issueResult, setIssueResult] = useState<string | null>(null);
   const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
   const [migrateLoading, setMigrateLoading] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
@@ -399,25 +397,6 @@ export default function AdminPage() {
       );
     } finally {
       setLoadingInfra(false);
-    }
-  }
-
-  async function handleIssueCertificate() {
-    if (!user) return;
-    setIssuingCert(true);
-    setIssueResult(null);
-    try {
-      const nftId = await checkAndIssueCertificate(user.id);
-      if (nftId) {
-        setIssueResult(`Sertifikat berhasil diterbitkan (NFT ID: ${nftId.slice(0, 8)}…)`);
-        await loadInfra();
-      } else {
-        setIssueResult('Tidak dapat menerbitkan: dana belum cukup atau sudah ada sertifikat aktif.');
-      }
-    } catch (e) {
-      setIssueResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
-    } finally {
-      setIssuingCert(false);
     }
   }
 
@@ -830,7 +809,7 @@ export default function AdminPage() {
                 Infrastructure Fund
               </CardTitle>
               <CardDescription className="text-xs leading-snug">
-                Kelola dana sistem dari fee sharing. Terbitkan sertifikat kontribusi infrastruktur.
+                Kelola dana sistem dari fee sharing. Verifikasi dan beri reward kontributor infrastruktur.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -856,44 +835,14 @@ export default function AdminPage() {
                       <p className="font-bold text-green-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Math.max(0, infraStatus.sisa))}</p>
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Sertifikat diterbitkan: <span className="font-medium text-foreground">{infraStatus.total_sertifikat_diterbitkan}</span>
-                    {infraStatus.sertifikat_aktif_id && (
-                      <span className="ml-2 text-green-700 font-medium">• 1 aktif di pool</span>
-                    )}
-                  </div>
-
-                  {/* Tombol terbitkan */}
-                  <div className="space-y-2">
-                    <Button
-                      size="sm"
-                      className="gap-2"
-                      disabled={
-                        issuingCert ||
-                        infraStatus.sisa < infraStatus.harga_dasar ||
-                        infraStatus.sertifikat_aktif_id !== null
-                      }
-                      onClick={handleIssueCertificate}
-                    >
-                      {issuingCert
-                        ? <><Loader2 className="h-4 w-4 animate-spin" />Menerbitkan…</>
-                        : <><Building2 className="h-4 w-4" />Terbitkan Sertifikat Sekarang</>
-                      }
-                    </Button>
-                    {infraStatus.sertifikat_aktif_id && (
-                      <p className="text-xs text-muted-foreground">Sudah ada sertifikat aktif di pool.</p>
-                    )}
-                    {infraStatus.sisa < infraStatus.harga_dasar && !infraStatus.sertifikat_aktif_id && (
-                      <p className="text-xs text-muted-foreground">
-                        Dana belum cukup ({new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.harga_dasar - Math.max(0, infraStatus.sisa))} lagi).
-                      </p>
-                    )}
-                    {issueResult && (
-                      <p className={`text-xs rounded-md px-3 py-2 ${issueResult.startsWith('Gagal') || issueResult.startsWith('Tidak') ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-400'}`}>
-                        {issueResult}
-                      </p>
-                    )}
-                  </div>
+                  {/* Dinonaktifkan — digantikan reward kontributor (rewardInfrastructureContributor).
+                      Kode dipertahankan untuk referensi.
+                  {infraStatus.total_sertifikat_diterbitkan > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Sertifikat historis diterbitkan: {infraStatus.total_sertifikat_diterbitkan}
+                    </div>
+                  )}
+                  */}
 
                   {/* Migrasi saldo lama — sekali pakai, tampil jika belum migrated */}
                   {!infraStatus.migrated_at && (

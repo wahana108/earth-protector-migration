@@ -69,8 +69,8 @@ export async function getInfrastructureFundStatus(): Promise<InfrastructureFundS
   };
 }
 
-// Terbitkan satu Infrastructure Certificate jika saldo_tersedia >= harga_dasar
-// dan belum ada sertifikat aktif.
+// @deprecated — Dinonaktifkan. Digantikan rewardInfrastructureContributor() yang zero-sum
+// berbasis kontribusi nyata. Kode dipertahankan untuk referensi; jangan panggil dari alur aktif.
 export async function checkAndIssueCertificate(adminUid?: string): Promise<string | null> {
   const [feePoolSnap, config] = await Promise.all([
     getDoc(doc(db, 'fee_pool', 'v1')),

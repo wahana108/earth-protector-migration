@@ -306,7 +306,7 @@ export default function TransactionsPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-2.5 border-t max-w-[160px]">
-                      {entry.nft_unit_id ? (
+                      {entry.nft_unit_id && entry.nft_unit_id !== 'system' ? (
                         <Link
                           href={`/nft/${entry.nft_unit_id}`}
                           className="font-medium truncate block hover:underline"
@@ -314,7 +314,7 @@ export default function TransactionsPage() {
                           {entry.nama_nft || entry.nft_unit_id.slice(0, 10) + '…'}
                         </Link>
                       ) : (
-                        <span className="text-muted-foreground truncate block">
+                        <span className="font-medium truncate block">
                           {entry.nama_nft || '—'}
                         </span>
                       )}

@@ -1,18 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import {
-  Building2, TrendingUp, Server, Award, Loader2, ExternalLink, Info,
+  Building2, TrendingUp, Server, Award, Loader2, Info, Users,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { db } from '@/lib/firebase';
 import {
   getInfrastructureFundStatus,
   getLatestContributorCertificates,
@@ -21,7 +17,7 @@ import {
 } from '@/lib/infrastructure';
 import type { InfrastructurePayment } from '@/lib/types';
 import { getCommunityConfig } from '@/lib/community-config';
-import type { ContributorCertificate, NFTUnit } from '@/lib/types';
+import type { ContributorCertificate } from '@/lib/types';
 
 function formatIDR(n: number) {
   return new Intl.NumberFormat('id-ID', {
@@ -37,7 +33,6 @@ function formatDate(d: Date) {
 
 export default function InfrastructurePage() {
   const [status, setStatus] = useState<InfrastructureFundStatus | null>(null);
-  const [activeNft, setActiveNft] = useState<NFTUnit | null>(null);
   const [contributors, setContributors] = useState<ContributorCertificate[]>([]);
   const [payments, setPayments] = useState<InfrastructurePayment[]>([]);
   const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
@@ -63,46 +58,12 @@ export default function InfrastructurePage() {
             info: (c.info ?? (c as Record<string, unknown>).link as string | undefined) || undefined,
           })),
         );
-
-        if (fundStatus?.sertifikat_aktif_id) {
-          const nftSnap = await getDoc(doc(db, 'nft_units', fundStatus.sertifikat_aktif_id));
-          if (nftSnap.exists()) {
-            const d = nftSnap.data();
-            setActiveNft({
-              id: nftSnap.id,
-              project_id: d.project_id as string,
-              developer_id: d.developer_id as string,
-              owner_id: d.owner_id as string,
-              nama_nft: (d.nama_nft as string) ?? '',
-              nama_project: (d.nama_project as string) ?? '',
-              gambar_url: (d.gambar_url as string) ?? '',
-              kategori: (d.kategori as NFTUnit['kategori']) ?? 'lainnya',
-              status: (d.status as NFTUnit['status']) ?? 'valid',
-              harga_jual: (d.harga_jual as number) ?? 0,
-              harga_beli_terakhir: (d.harga_beli_terakhir as number) ?? 0,
-              nilai_selisih: (d.nilai_selisih as number) ?? 0,
-              for_sale: (d.for_sale as boolean) ?? true,
-              in_pool: (d.in_pool as boolean) ?? true,
-              digunakan_validasi: false,
-              project_validasi_id: null,
-              like_count: (d.like_count as number) ?? 0,
-              comment_count: (d.comment_count as number) ?? 0,
-              created_at: (d.created_at as Timestamp)?.toDate?.() ?? new Date(),
-              is_infrastructure: true,
-              certificate_code: (d.certificate_code as string) ?? '',
-            });
-          }
-        }
       } finally {
         setLoading(false);
       }
     }
     loadData();
   }, []);
-
-  const sisaPct = status && status.harga_dasar > 0
-    ? Math.min(100, Math.round((status.sisa / status.harga_dasar) * 100))
-    : 0;
 
   return (
     <MainLayout>
@@ -158,10 +119,6 @@ export default function InfrastructurePage() {
                     <div className="flex justify-between py-2">
                       <span className="text-muted-foreground">Reward ke Kontributor</span>
                       <span className="font-mono text-orange-600">{formatIDR(status.total_dialokasikan_lencana)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-muted-foreground">Sertifikat diterbitkan</span>
-                      <span className="font-medium">{status.total_sertifikat_diterbitkan}</span>
                     </div>
                     <p className="pt-3 pb-1 text-xs text-muted-foreground leading-relaxed">
                       Neraca sistem selalu seimbang — setiap poin yang masuk berasal dari mekanisme transparan
@@ -234,122 +191,23 @@ export default function InfrastructurePage() {
               </CardContent>
             </Card>
 
-            {/* ── 3. Sertifikat Tersedia ── */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Award className="h-4 w-4" />
-                  Sertifikat Tersedia
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Kontribusi untuk infrastruktur mendapatkan certificate NFT eksklusif.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {activeNft ? (
-                  <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-primary/10 p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-sm">{activeNft.nama_nft}</p>
-                        {activeNft.certificate_code && (
-                          <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                            {activeNft.certificate_code}
-                          </p>
-                        )}
-                      </div>
-                      <Badge className="text-xs bg-green-100 text-green-800 border-green-300 shrink-0">
-                        Tersedia
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Harga kontribusi</span>
-                      <span className="font-bold">{formatIDR(activeNft.harga_jual)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Sertifikat tersedia di Pool Rekomendasi.
-                      Beli untuk mendukung infrastruktur jaringan TMEP.
-                    </p>
-                    <Button size="sm" asChild className="w-full">
-                      <Link href="/pool">
-                        Beli di Pool Rekomendasi
-                        <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                      </Link>
-                    </Button>
-                  </div>
-                ) : status ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      {status.sisa < status.harga_dasar
-                        ? 'Dana sistem belum mencukupi untuk menerbitkan sertifikat berikutnya.'
-                        : 'Sertifikat sedang menunggu penerbitan oleh admin.'}
-                    </p>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{formatIDR(Math.max(0, status.sisa))}</span>
-                        <span>target {formatIDR(status.harga_dasar)}</span>
-                      </div>
-                      <Progress value={sisaPct} className="h-2" />
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Dana sistem belum aktif.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* ── 4. Kontributor ── */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Award className="h-4 w-4 text-yellow-500" />
-                  Kontributor
-                  {contributors.length > 0 && (
-                    <span className="text-sm font-normal text-muted-foreground ml-1">
-                      ({contributors.length} terbaru)
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {contributors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-2">
-                    Belum ada kontributor. Jadilah yang pertama!
-                  </p>
-                ) : (
-                  <div className="divide-y rounded-lg border overflow-hidden">
-                    {contributors.map(cert => (
-                      <div key={cert.id} className="flex items-center gap-3 px-4 py-3 bg-card text-sm">
-                        <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
-                          <Award className="h-4 w-4 text-yellow-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-mono text-xs font-medium">{cert.certificate_code}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(cert.purchased_at)}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {formatIDR(cert.nilai)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* ── 5. Riwayat Pembayaran Infrastruktur ── */}
+            {/* ── 3. Reward Kontributor Infrastruktur ── */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-500" />
-                  Riwayat Pembayaran Infrastruktur
+                  Reward Kontributor Infrastruktur
                   {payments.length > 0 && (
                     <span className="text-sm font-normal text-muted-foreground ml-1">
                       ({payments.length} terbaru)
                     </span>
                   )}
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Kontributor yang sudah membayar biaya infrastruktur nyata dan menerima reward poin.
+                <CardDescription className="text-xs leading-relaxed">
+                  Anggota yang membayar biaya infrastruktur nyata (hosting, domain, API, dsb.) dapat
+                  diverifikasi admin dan menerima poin kontribusi, tercatat transparan di bawah.
+                  Poin diambil dari kas sistem (saldo tersedia). Jika saldo belum cukup,
+                  reward menunggu hingga kas terkumpul.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -387,6 +245,42 @@ export default function InfrastructurePage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ── 4. Kontributor Historis (read-only, sembunyi jika kosong) ── */}
+            {contributors.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    Kontributor Historis
+                    <span className="text-sm font-normal text-muted-foreground ml-1">
+                      ({contributors.length})
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Data dari mekanisme sertifikat sebelumnya, dipertahankan untuk transparansi.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="divide-y rounded-lg border overflow-hidden">
+                    {contributors.map(cert => (
+                      <div key={cert.id} className="flex items-center gap-3 px-4 py-3 bg-card text-sm">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <Award className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-xs font-medium">{cert.certificate_code}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(cert.purchased_at)}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {formatIDR(cert.nilai)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>

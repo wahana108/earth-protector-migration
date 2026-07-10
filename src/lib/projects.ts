@@ -5,7 +5,7 @@ import {
   setDoc, increment, arrayUnion, Timestamp, getCountFromServer,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
-import { checkAndIssueCertificate } from './infrastructure';
+// checkAndIssueCertificate dinonaktifkan — digantikan rewardInfrastructureContributor
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
 import { calculateEffectiveBuyback, fibonacciLargestAndSum } from './ranking';
@@ -529,9 +529,9 @@ export async function buyNftUnit(
     });
   });
 
-  // Infrastructure purchase: cek penerbitan sertifikat berikutnya (non-critical)
+  // Legacy: pembelian sertifikat infrastruktur lama — tidak menerbitkan sertifikat baru.
+  // Penerbitan sertifikat dinonaktifkan; digantikan rewardInfrastructureContributor.
   if (isInfrastructureCapture) {
-    try { await checkAndIssueCertificate(developerIdCapture); } catch { /* silent */ }
     return;
   }
   // Cek dan update level developer asli NFT setelah soldNfts bertambah (non-critical)
@@ -1222,8 +1222,7 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
 
   await batch.commit();
 
-  // Cek penerbitan sertifikat infrastruktur jika fee terkumpul cukup (non-critical)
-  try { await checkAndIssueCertificate(); } catch { /* silent */ }
+  // Penerbitan sertifikat infrastruktur dinonaktifkan — digantikan rewardInfrastructureContributor.
 }
 
 // ─── Buyback 2 Arah (Two-Way Handshake) ──────────────────────────────────────
