@@ -118,15 +118,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const dataText = generateDataText(aggs);
   const prompt = buildAiReviewPrompt(dataText, totalUsers, aggs.length);
 
-  // ── 9. Call Gemini ─────────────────────────────────────────────────────────
-  let geminiText: string;
-  try {
-    const response = await ai.generate({ prompt, config: { temperature: 0.15 } });
-    geminiText = response.text;
-    console.log('[ai-review-auto] gemini raw (first 300 chars):', geminiText.substring(0, 300));
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return err500('gemini', `model=${process.env.GEMINI_MODEL ?? 'googleai/gemini-2.0-flash'} — ${msg}`);
+  // ── 9. Call Gemini (fallback chain) ────────────────────────────────────────
+  // gemini-3-flash tidak ada di @genkit-ai/google-genai@1.20.0 → tidak disertakan
+  const MODEL_CANDIDATES = [...new Set([
+    process.env.GEMINI_MODEL,
+    'googleai/gemini-2.5-flash-lite',
+    'googleai/gemini-2.5-flash',
+    'googleai/gemini-2.5-pro',
+    'googleai/gemini-2.0-flash-lite',
+    'googleai/gemini-2.0-flash',
+  ].filter(Boolean) as string[])];
+
+  let geminiText = '';
+  let modelUsed = '';
+  let lastGeminiError = '';
+  const triedModels: string[] = [];
+
+  for (const model of MODEL_CANDIDATES) {
+    triedModels.push(model);
+    try {
+      const response = await ai.generate({ model, prompt, config: { temperature: 0.15 } });
+      geminiText = response.text;
+      modelUsed = model;
+      console.log(`[ai-review-auto] gemini success model=${model}, raw (first 300):`, geminiText.substring(0, 300));
+      break;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastGeminiError = msg;
+      const isRetryable = /404|429|not available|quota|no longer|retired/i.test(msg);
+      console.warn(`[ai-review-auto] model ${model} ${isRetryable ? 'tidak tersedia, coba berikutnya' : 'error (berhenti)'}: ${msg.substring(0, 150)}`);
+      if (!isRetryable) break;
+    }
+  }
+
+  if (!geminiText || !modelUsed) {
+    return NextResponse.json({
+      ok: false,
+      step: 'gemini',
+      error: 'Semua model Gemini gagal.',
+      tried: triedModels,
+      last_error: lastGeminiError,
+    }, { status: 500 });
   }
 
   // ── 10. Parse output ───────────────────────────────────────────────────────
@@ -163,5 +195,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     devs_reviewed: targetDevs.length,
     total_minus: totalMinus,
     devs_remaining: devsRemaining,
+    model_used: modelUsed,
   });
 }
