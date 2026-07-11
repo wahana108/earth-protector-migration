@@ -317,6 +317,19 @@ export async function applyAiReview(
       totalMinus += entry.minusNeraca;
     } else {
       batch.update(doc(db, 'users', entry.uid), { last_ai_review_at: serverTimestamp() });
+
+      batch.set(doc(collection(db, 'users', entry.uid, 'neraca_log')), {
+        type: 'anomali_ai_bersih',
+        nft_unit_id: 'system',
+        nama_nft: 'AI Review — Bersih',
+        harga_transaksi: 0,
+        nilai_selisih: 0,
+        delta: 0,
+        counterparty_id: adminUid,
+        review_id: reviewId,
+        alasan: entry.alasan,
+        timestamp: serverTimestamp(),
+      });
     }
   }
 
@@ -342,7 +355,7 @@ export async function applyAiReview(
 
 // ─── Revert review — kembalikan neraca SETIAP user yang kena minus ────────────
 
-export async function revertAiReview(reviewId: string, review: AiReview): Promise<void> {
+export async function revertAiReview(reviewId: string, review: AiReview, adminUid: string): Promise<void> {
   const batch = writeBatch(db);
   let totalRestored = 0;
 
@@ -365,8 +378,10 @@ export async function revertAiReview(reviewId: string, review: AiReview): Promis
       harga_transaksi: 0,
       nilai_selisih: entry.minus_diterapkan,
       delta: entry.minus_diterapkan,
-      counterparty_id: 'system',
+      counterparty_id: adminUid,
+      reverted_by: adminUid,
       review_id: reviewId,
+      alasan: `Pembatalan: ${entry.alasan}`,
       timestamp: serverTimestamp(),
     });
 

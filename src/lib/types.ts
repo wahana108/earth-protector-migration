@@ -312,7 +312,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'kontribusi_infrastruktur';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'anomali_ai_bersih' | 'kontribusi_infrastruktur';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;

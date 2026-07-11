@@ -99,6 +99,8 @@ function toNeracaLog(id: string, data: Record<string, unknown>): NeracaLog {
     delta: (data.delta as number) ?? 0,
     counterparty_id: (data.counterparty_id as string) ?? '',
     timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
+    ...(data.review_id !== undefined ? { review_id: data.review_id as string } : {}),
+    ...(data.alasan !== undefined ? { alasan: data.alasan as string } : {}),
   };
 }
 
@@ -133,7 +135,7 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   level_change: 'Level', transfer_pool: 'Pool', lewati_fifo: 'Lewati',
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
-  anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI',
+  anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI', anomali_ai_bersih: 'AI Review Bersih',
   kontribusi_infrastruktur: 'Reward Infrastruktur',
 };
 
@@ -508,6 +510,9 @@ function LogTransaksi({
               <p className="text-xs text-muted-foreground">
                 {LOG_TYPE_LABELS[log.type]} · {relativeTime(log.timestamp)}
               </p>
+              {log.alasan && ['anomali_ai', 'anomali_ai_revert', 'anomali_ai_bersih'].includes(log.type) && (
+                <p className="text-xs text-muted-foreground italic mt-0.5 truncate">{log.alasan}</p>
+              )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

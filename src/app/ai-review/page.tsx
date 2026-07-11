@@ -230,7 +230,7 @@ export default function AiReviewPage() {
     if (!window.confirm(`Batalkan review ini? Neraca ${review.entries.filter(e => e.minus_diterapkan > 0).length} developer akan dikembalikan.`)) return;
     setReverting(review.id);
     try {
-      await revertAiReview(review.id, review);
+      await revertAiReview(review.id, review, user!.id);
       await loadReviews();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Gagal membatalkan review.');

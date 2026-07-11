@@ -41,6 +41,8 @@ const TYPE_LABELS: Record<string, string> = {
   validasi: 'Validasi', buyback: 'Buyback', level_change: 'Level',
   transfer_pool: 'Pool', lewati_fifo: 'Lewati',
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
+  anomali_ai: 'Anomali AI', anomali_ai_revert: 'Pembatalan Anomali AI',
+  anomali_ai_bersih: 'AI Review Bersih', kontribusi_infrastruktur: 'Reward Kontribusi',
 };
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
