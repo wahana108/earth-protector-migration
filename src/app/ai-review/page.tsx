@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import {
   getTopDevsForAiReview, fetchDevLogs, aggregateDevData,
-  generateDataText, generatePrompt, parseAiOutput,
+  generateDataText, buildAiReviewPrompt, parseAiOutput,
   applyAiReview, revertAiReview, getAiReviews, maybeFinalizeReviews,
   calcMinusNeraca,
   type DevProfile, type DevAggregate, type ParsedAiEntry, type AiReview,
@@ -158,7 +158,7 @@ export default function AiReviewPage() {
     setParsedEntries(null);
     setParseError('');
     try {
-      const fetchedDevs = await getTopDevsForAiReview(config);
+      const { devs: fetchedDevs, totalUsers } = await getTopDevsForAiReview(config);
       if (fetchedDevs.length === 0) {
         setDataText('Tidak ada developer yang memenuhi syarat untuk ditinjau.');
         return;
@@ -180,7 +180,7 @@ export default function AiReviewPage() {
 
 
       const dText = generateDataText(aggs);
-      const pText = generatePrompt(dText);
+      const pText = buildAiReviewPrompt(dText, totalUsers, aggs.length);
 
       setAggregates(aggs);
       setShortIdToInfo(idMap);

@@ -56,7 +56,9 @@ export function calcMinusNeraca(
 
 // ─── Fetch top developers + kandidat (capped at Fibonacci quota) ───────────
 
-export async function getTopDevsForAiReview(config: CommunityConfig): Promise<DevProfile[]> {
+export async function getTopDevsForAiReview(
+  config: CommunityConfig,
+): Promise<{ devs: DevProfile[]; totalUsers: number }> {
   const minSold = config.minimum_soldNfts_top_developer ?? 24;
 
   const [topDevSnap, candidateSnap, totalCountResult] = await Promise.all([
@@ -103,7 +105,7 @@ export async function getTopDevsForAiReview(config: CommunityConfig): Promise<De
     });
   }
 
-  return result.slice(0, quota);
+  return { devs: result.slice(0, quota), totalUsers };
 }
 
 // ─── Fetch neraca_log per developer ───────────────────────────────────────────
@@ -207,11 +209,20 @@ export function generateDataText(aggregates: DevAggregate[]): string {
 }
 
 // ─── Generate prompt baku untuk AI eksternal ──────────────────────────────────
+// Fungsi ini juga dipakai oleh mode otonom Level 2 (api/ai-review-auto).
 
-export function generatePrompt(dataText: string): string {
+export function buildAiReviewPrompt(
+  dataText: string,
+  totalUsers: number,
+  jumlahDev: number,
+): string {
   return `Kamu adalah AI detector anomali untuk platform komunitas NFT nirlaba.
 Tugasmu menilai log transaksi developer dan mendeteksi pola tidak wajar.
 AI bukan pengambil keputusan — hanya menghasilkan skor anomali transparan.
+
+KONTEKS KOMUNITAS:
+Total user terdaftar: ${totalUsers} | Developer papan atas dinilai: ${jumlahDev}
+Pada komunitas kecil, counterparty berulang lebih wajar terjadi. Kalibrasikan skor dengan mempertimbangkan ukuran komunitas: pola yang sama lebih mencurigakan di komunitas besar daripada komunitas kecil.
 
 DATA DEVELOPER (dinonimasi, ID = 6 karakter pertama UID):
 ${dataText}
@@ -219,6 +230,8 @@ ${dataText}
 INSTRUKSI:
 - Fokus deteksi: self-dealing (counterparty berulang di kedua arah jual + buyback), volume tidak wajar, pola sirkular antar akun.
 - Skor 0 = bersih, 100 = anomali sangat berat.
+- Developer TANPA aktivitas transaksi (Jual: 0, Buyback: 0, tanpa counterparty) WAJIB skor 0 dengan alasan "tidak ada aktivitas untuk dinilai". JANGAN beri skor kecil (1-10) karena keraguan.
+- Skor > 0 HANYA jika ada pola konkret yang dirujuk dalam alasan (counterparty berulang dua arah, volume tak wajar, pola sirkular antar akun). Alasan harus menyebut data nyata dari log, bukan asumsi.
 - Output HANYA daftar skor. Satu baris per developer. FORMAT PERSIS:
   SKOR: [id_6_char] | [0-100] | [alasan singkat, maks 80 karakter]
 - Jangan tambahkan narasi, pembuka, atau penutup. Jangan ulangi data. Hanya baris SKOR.`;
