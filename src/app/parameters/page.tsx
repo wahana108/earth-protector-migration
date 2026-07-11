@@ -57,6 +57,9 @@ type EditValues = {
   ai_anomali_divisor: number;
   ai_anomali_min_skor: number;
   ai_review_revert_days: number;
+  ai_auto_mode_enabled: boolean;
+  ai_auto_interval_days: number;
+  ai_auto_max_devs_per_run: number;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -94,6 +97,9 @@ function configToEdit(c: CommunityConfig): EditValues {
     ai_anomali_divisor: c.ai_anomali_divisor ?? 10,
     ai_anomali_min_skor: c.ai_anomali_min_skor ?? 30,
     ai_review_revert_days: c.ai_review_revert_days ?? 7,
+    ai_auto_mode_enabled: c.ai_auto_mode_enabled ?? false,
+    ai_auto_interval_days: c.ai_auto_interval_days ?? 30,
+    ai_auto_max_devs_per_run: c.ai_auto_max_devs_per_run ?? 10,
   };
 }
 
@@ -130,6 +136,9 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     ai_anomali_divisor: e.ai_anomali_divisor,
     ai_anomali_min_skor: e.ai_anomali_min_skor,
     ai_review_revert_days: e.ai_review_revert_days,
+    ai_auto_mode_enabled: e.ai_auto_mode_enabled,
+    ai_auto_interval_days: e.ai_auto_interval_days,
+    ai_auto_max_devs_per_run: e.ai_auto_max_devs_per_run,
   };
 }
 
@@ -561,10 +570,25 @@ export default function ParametersPage() {
                     onChange={v => setField('ai_anomali_min_skor', v as number)} />
                   <EditRow label="Masa sanggah (hari)" value={editValues.ai_review_revert_days}
                     onChange={v => setField('ai_review_revert_days', v as number)} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-muted-foreground">Mode Otonom (Level 2)</span>
+                    <select
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                      value={editValues.ai_auto_mode_enabled ? 'true' : 'false'}
+                      onChange={e => setField('ai_auto_mode_enabled', e.target.value === 'true')}
+                    >
+                      <option value="false">Nonaktif (default)</option>
+                      <option value="true">Aktif</option>
+                    </select>
+                  </div>
+                  <EditRow label="Interval antar run (hari)" value={editValues.ai_auto_interval_days}
+                    onChange={v => setField('ai_auto_interval_days', v as number)} />
+                  <EditRow label="Maks. developer per run" value={editValues.ai_auto_max_devs_per_run}
+                    onChange={v => setField('ai_auto_max_devs_per_run', v as number)} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Fitur opsional. Saat nonaktif, platform berjalan penuh tanpa penilaian AI.
-                      Node berpendanaan dapat mengaktifkan &amp; mengotomasi via API di masa depan.
+                      Mode Otonom membutuhkan GEMINI_API_KEY dan FIREBASE_SERVICE_ACCOUNT_KEY di environment.
                     </p>
                   </div>
                 </CardContent>
@@ -757,10 +781,13 @@ export default function ParametersPage() {
                   <ParamRow label="Pembagi skor → NFT minus" value={`÷ ${config.ai_anomali_divisor ?? 10}`} />
                   <ParamRow label="Skor efek kecil (<)" value={`< ${config.ai_anomali_min_skor ?? 30}`} />
                   <ParamRow label="Masa sanggah" value={`${config.ai_review_revert_days ?? 7} hari`} />
+                  <ParamRow label="Mode Otonom (Level 2)" value={(config.ai_auto_mode_enabled ?? false) ? 'Aktif' : 'Nonaktif (default)'} />
+                  <ParamRow label="Interval antar run" value={`${config.ai_auto_interval_days ?? 30} hari`} />
+                  <ParamRow label="Maks. developer per run" value={`${config.ai_auto_max_devs_per_run ?? 10} developer`} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Fitur opsional. Saat nonaktif, platform berjalan penuh tanpa penilaian AI.
-                      Node berpendanaan dapat mengaktifkan &amp; mengotomasi via API di masa depan.
+                      Mode Otonom membutuhkan GEMINI_API_KEY dan FIREBASE_SERVICE_ACCOUNT_KEY di environment.
                     </p>
                   </div>
                 </CardContent>

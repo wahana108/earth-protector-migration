@@ -1,0 +1,16 @@
+name: Monthly AI Review
+
+on:
+  schedule:
+    - cron: '0 18 1 * *'  # tanggal 1 tiap bulan, 02:00 WITA (UTC+8 → 18:00 UTC hari sebelumnya)
+  workflow_dispatch:       # bisa dijalankan manual dari GitHub Actions tab (untuk test)
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger AI Review Otonom
+        run: |
+          curl -f -X POST "${{ secrets.APP_URL }}/api/ai-review-auto" \
+            -H "x-ai-review-secret: ${{ secrets.AI_REVIEW_SECRET }}" \
+            -H "Content-Type: application/json"

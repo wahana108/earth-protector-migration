@@ -52,6 +52,25 @@ Setup untuk fork Anda:
 
 Workflow `.github/workflows/daily-recalculate.yml` akan aktif otomatis setelah fork.
 
+## 🤖 AI Review Otonom (Level 2)
+
+Platform mendukung review anomali developer otomatis menggunakan Gemini API, tanpa campur tangan admin. Aktif pada tanggal 1 tiap bulan via GitHub Actions cron.
+
+**Setup untuk fork Anda:**
+
+1. Set environment variables di Vercel:
+   - `GEMINI_API_KEY` — dari [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - `AI_REVIEW_SECRET` — string acak (sama dengan GitHub Secret di bawah)
+   - `FIREBASE_SERVICE_ACCOUNT_KEY` — base64(JSON) dari Firebase console → Project Settings → Service Accounts → *Generate new private key*
+2. Set GitHub Secrets di repository Anda:
+   - `APP_URL` — URL Vercel deployment Anda (sudah ada jika sudah set recalculate)
+   - `AI_REVIEW_SECRET` — sama dengan nilai di Vercel
+3. Aktifkan di `/parameters` → card **AI Governance**:
+   - Aktifkan **AI Governance** (master switch)
+   - Aktifkan **Mode Otonom (Level 2)**
+
+Workflow `.github/workflows/monthly-ai-review.yml` akan aktif otomatis setelah fork. Gunakan tombol *Run workflow* di GitHub Actions tab untuk test manual pertama kali.
+
 ## 🤝 Kontribusi
 Kami menyambut kontribusi dari para pecinta lingkungan dan pengembang! Silakan baca [Panduan Kontribusi](CONTRIBUTING.md) dan [Kode Etik](CODE_OF_CONDUCT.md) kami untuk memulai.
 

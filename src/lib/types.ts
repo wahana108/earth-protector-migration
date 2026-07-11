@@ -145,6 +145,9 @@ export type CommunityConfig = {
   ai_anomali_divisor: number;
   ai_anomali_min_skor: number;
   ai_review_revert_days: number;
+  ai_auto_mode_enabled: boolean;
+  ai_auto_interval_days: number;
+  ai_auto_max_devs_per_run: number;
   super_admin_email: string;
   admin_emails: string[];
   moderator_emails: string[];
@@ -179,6 +182,7 @@ export type FeePool = {
   total_dari_lain?: number;
   total_dialokasikan_lencana?: number;
   migrated_at?: Date | null;
+  last_auto_review_at?: Date | null;
 };
 
 export type InfrastructurePayment = {
