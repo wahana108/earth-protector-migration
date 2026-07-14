@@ -867,10 +867,10 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-0.5">Dashboard</h1>
-            <p className="text-muted-foreground text-sm flex items-center gap-1.5">
+            <div className="text-muted-foreground text-sm flex items-center gap-1.5">
               {user?.displayName ?? user?.email}
               {user?.badge_kontributor && <ContributorBadge nilai={user.total_kontribusi ?? 0} />}
-            </p>
+            </div>
           </div>
           <Button asChild>
             <Link href="/create" className="gap-2">

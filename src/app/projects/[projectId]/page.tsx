@@ -483,10 +483,10 @@ export default function ProjectDetailPage({
               {developer.displayName.charAt(0)}
             </div>
             <div>
-              <p className="font-semibold leading-snug flex items-center gap-1.5">
+              <div className="font-semibold leading-snug flex items-center gap-1.5">
                 {developer.displayName}
                 {developer.badge_kontributor && <ContributorBadge nilai={developer.total_kontribusi} />}
-              </p>
+              </div>
               <p className="text-xs text-muted-foreground">
                 {developer.level === 'top_developer' ? '⭐ Top Developer' : 'Developer Biasa'}
                 {developer.soldNfts > 0 && (
