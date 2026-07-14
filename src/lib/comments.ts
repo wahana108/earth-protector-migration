@@ -37,6 +37,8 @@ export async function fetchComments(nftUnitId: string): Promise<Comment[]> {
       timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
       anomali_flag: (data.anomali_flag as boolean) ?? false,
       is_pinned: (data.is_pinned as boolean) ?? false,
+      badge_kontributor: (data.badge_kontributor as boolean) ?? false,
+      total_kontribusi: (data.total_kontribusi as number) ?? 0,
     };
   });
 }
@@ -93,10 +95,15 @@ export async function addComment(
   const batch = writeBatch(db);
   const userRef = doc(db, 'users', userId);
   const commentRef = doc(collection(db, 'nft_units', nftUnitId, 'comments'));
+  const userData = userSnap.data() ?? {};
+  // Snapshot badge di titik waktu ini (sama seperti display_name) — 0 read tambahan,
+  // userSnap sudah di-fetch untuk rate limit. Komentar lama tidak retroaktif berubah.
+  const badgeKontributor = (userData.badge_kontributor as boolean) ?? false;
+  const totalKontribusi = (userData.total_kontribusi as number) ?? 0;
 
   // Per-user daily comment limit (userSnap sudah di-fetch, 0 read tambahan)
   checkAndIncrementUserUsage(
-    batch, userRef, userSnap.data() ?? {}, 'comments',
+    batch, userRef, userData, 'comments',
     config?.max_comments_per_user_per_day ?? 30,
   );
 
@@ -111,6 +118,8 @@ export async function addComment(
     text,
     timestamp: serverTimestamp(),
     anomali_flag: false,
+    badge_kontributor: badgeKontributor,
+    total_kontribusi: totalKontribusi,
   });
 
   batch.update(doc(db, 'nft_units', nftUnitId), {
@@ -126,6 +135,8 @@ export async function addComment(
     text,
     timestamp: new Date(),
     anomali_flag: false,
+    badge_kontributor: badgeKontributor,
+    total_kontribusi: totalKontribusi,
   };
 }
 

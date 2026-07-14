@@ -30,6 +30,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError, RateLimitError } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
+import { ContributorBadge } from '@/components/contributor-badge';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
   type NFTUnit, type ProjectCategory, type Comment,
@@ -440,6 +441,7 @@ function CommentPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-1.5 flex-wrap">
                       <span className="font-semibold text-foreground">{c.display_name}</span>
+                      {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} size="sm" />}
                       <span className="text-[10px] text-muted-foreground">{relativeTime(c.timestamp)}</span>
                     </div>
                     <p className="text-foreground/80 leading-snug break-words mt-0.5">{c.text}</p>

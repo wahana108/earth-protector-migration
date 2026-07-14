@@ -60,6 +60,7 @@ type EditValues = {
   ai_auto_mode_enabled: boolean;
   ai_auto_interval_days: number;
   ai_auto_max_devs_per_run: number;
+  badge_klaim_enabled: boolean;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -100,6 +101,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     ai_auto_mode_enabled: c.ai_auto_mode_enabled ?? false,
     ai_auto_interval_days: c.ai_auto_interval_days ?? 30,
     ai_auto_max_devs_per_run: c.ai_auto_max_devs_per_run ?? 10,
+    badge_klaim_enabled: c.badge_klaim_enabled ?? true,
   };
 }
 
@@ -139,6 +141,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     ai_auto_mode_enabled: e.ai_auto_mode_enabled,
     ai_auto_interval_days: e.ai_auto_interval_days,
     ai_auto_max_devs_per_run: e.ai_auto_max_devs_per_run,
+    badge_klaim_enabled: e.badge_klaim_enabled,
   };
 }
 
@@ -607,6 +610,33 @@ export default function ParametersPage() {
                     onChange={v => setField('fee_infrastruktur_pct', v as number)} />
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Badge Kontributor
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-muted-foreground">Klaim Kontribusi</span>
+                    <select
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                      value={editValues.badge_klaim_enabled ? 'true' : 'false'}
+                      onChange={e => setField('badge_klaim_enabled', e.target.value === 'true')}
+                    >
+                      <option value="true">Aktif (default)</option>
+                      <option value="false">Nonaktif</option>
+                    </select>
+                  </div>
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Saat nonaktif, form klaim kontribusi baru disembunyikan di halaman /infrastructure.
+                      Lencana kontributor yang sudah diberikan tetap tampil.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
             // ── READ-ONLY MODE ──────────────────────────────────────────────
@@ -822,6 +852,23 @@ export default function ParametersPage() {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Fee diambil dari neraca developer dan dibagikan proporsional
                       ke semua validator aktif project.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Badge Kontributor
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Klaim Kontribusi" value={(config.badge_klaim_enabled ?? true) ? 'Aktif (default)' : 'Nonaktif'} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Saat nonaktif, form klaim kontribusi baru disembunyikan di halaman /infrastructure.
+                      Lencana kontributor yang sudah diberikan tetap tampil.
                     </p>
                   </div>
                 </CardContent>

@@ -37,6 +37,8 @@ export type User = {
   total_poin_pending?: number;
   daily_usage?: DailyUsage;
   last_ai_review_at?: Date | null;
+  badge_kontributor?: boolean;
+  total_kontribusi?: number;
 };
 
 export type NFT = {
@@ -148,6 +150,7 @@ export type CommunityConfig = {
   ai_auto_mode_enabled: boolean;
   ai_auto_interval_days: number;
   ai_auto_max_devs_per_run: number;
+  badge_klaim_enabled: boolean;
   super_admin_email: string;
   admin_emails: string[];
   moderator_emails: string[];
@@ -194,6 +197,20 @@ export type InfrastructurePayment = {
   keterangan: string;
   verified_by: string;
   created_at: Date;
+};
+
+export type InfrastructureClaim = {
+  id: string;
+  user_id: string;
+  user_nama: string;
+  nilai: number;
+  bukti_link: string;
+  keterangan: string;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_uid?: string;
+  alasan_penolakan?: string;
+  created_at: Date;
+  processed_at?: Date | null;
 };
 
 export type AiReviewStatus = 'applied' | 'reverted' | 'final';
@@ -316,7 +333,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'anomali_ai_bersih' | 'kontribusi_infrastruktur';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'anomali_ai_bersih' | 'kontribusi_infrastruktur' | 'klaim_lencana';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;
@@ -346,6 +363,8 @@ export type Comment = {
   timestamp: Date;
   anomali_flag: boolean;
   is_pinned?: boolean;
+  badge_kontributor?: boolean;
+  total_kontribusi?: number;
 };
 
 export type NFTUnit = {

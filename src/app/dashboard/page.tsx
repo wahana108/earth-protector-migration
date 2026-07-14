@@ -29,6 +29,7 @@ import { toggleForSale, updateProjectGambar, transferToPool, TransferPoolError, 
 import { getUserCertificates } from '@/lib/infrastructure';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
+import { ContributorBadge } from '@/components/contributor-badge';
 import { getCommunityConfig } from '@/lib/community-config';
 import { getTodayString } from '@/lib/rate-limit';
 import type { UserBlock, ContributorCertificate } from '@/lib/types';
@@ -137,6 +138,7 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   revalidasi_keluar: 'Revalidasi Keluar', revalidasi_masuk: 'Revalidasi Masuk',
   anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI', anomali_ai_bersih: 'AI Review Bersih',
   kontribusi_infrastruktur: 'Reward Infrastruktur',
+  klaim_lencana: 'Klaim Lencana',
 };
 
 // ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────
@@ -865,7 +867,10 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-0.5">Dashboard</h1>
-            <p className="text-muted-foreground text-sm">{user?.displayName ?? user?.email}</p>
+            <p className="text-muted-foreground text-sm flex items-center gap-1.5">
+              {user?.displayName ?? user?.email}
+              {user?.badge_kontributor && <ContributorBadge nilai={user.total_kontribusi ?? 0} />}
+            </p>
           </div>
           <Button asChild>
             <Link href="/create" className="gap-2">

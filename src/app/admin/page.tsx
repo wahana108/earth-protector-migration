@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
   Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
-  Building2, Plus, X,
+  Building2, Plus, X, HandCoins,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -26,10 +27,11 @@ import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
 import {
   getInfrastructureFundStatus,
   migrateFeePoolIfNeeded, rewardInfrastructureContributor,
+  getPendingInfrastructureClaims, approveInfrastructureClaim, rejectInfrastructureClaim,
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
 import { updateCommunityConfig } from '@/lib/community-config';
-import type { UserBlock } from '@/lib/types';
+import type { InfrastructureClaim, UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -328,6 +330,153 @@ function DisputeCard({
   );
 }
 
+// ─── Klaim Kontribusi Card ──────────────────────────────────────────────────
+
+function ClaimAdminCard({
+  claim, adminId, onProcessed,
+}: {
+  claim: InfrastructureClaim;
+  adminId: string;
+  onProcessed: (id: string) => void;
+}) {
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState('');
+  const [rejectOpen, setRejectOpen] = useState(false);
+
+  async function handleApprove() {
+    setApproving(true);
+    setApproveError('');
+    try {
+      await approveInfrastructureClaim(claim.id, adminId);
+      onProcessed(claim.id);
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : 'Gagal memproses. Coba lagi.');
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-semibold text-sm leading-snug">{claim.user_nama}</p>
+            <p className="text-xs text-muted-foreground">{formatDate(claim.created_at)}</p>
+          </div>
+          <p className="font-mono font-bold text-sm shrink-0">
+            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(claim.nilai)}
+          </p>
+        </div>
+
+        {claim.keterangan && (
+          <p className="text-xs text-muted-foreground italic">"{claim.keterangan}"</p>
+        )}
+
+        <a
+          href={claim.bukti_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary hover:underline inline-block"
+        >
+          Lihat Bukti
+        </a>
+
+        {approveError && (
+          <p className="text-xs text-destructive bg-destructive/10 rounded-md px-3 py-2">{approveError}</p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1 text-xs border-red-200 text-red-700 hover:bg-red-50"
+            onClick={() => setRejectOpen(true)}
+          >
+            <XCircle className="h-3.5 w-3.5 mr-1" />
+            Tolak
+          </Button>
+          <Button size="sm" className="flex-1 text-xs" disabled={approving} onClick={handleApprove}>
+            {approving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+            Setujui
+          </Button>
+        </div>
+      </div>
+
+      {rejectOpen && (
+        <RejectClaimDialog
+          claim={claim}
+          adminId={adminId}
+          onClose={() => setRejectOpen(false)}
+          onRejected={onProcessed}
+        />
+      )}
+    </>
+  );
+}
+
+function RejectClaimDialog({
+  claim, adminId, onClose, onRejected,
+}: {
+  claim: InfrastructureClaim;
+  adminId: string;
+  onClose: () => void;
+  onRejected: (id: string) => void;
+}) {
+  const [alasan, setAlasan] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    if (!alasan.trim()) { setError('Alasan penolakan wajib diisi.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await rejectInfrastructureClaim(claim.id, alasan.trim(), adminId);
+      onRejected(claim.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memproses. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Tolak Klaim Kontribusi</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="rounded-lg border p-3 space-y-1.5 text-sm">
+            <p className="font-semibold">{claim.user_nama}</p>
+            <p className="text-xs text-muted-foreground">
+              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(claim.nilai)}
+            </p>
+          </div>
+          <Textarea
+            placeholder="Alasan penolakan (wajib)"
+            value={alasan}
+            onChange={e => setAlasan(e.target.value)}
+            rows={3}
+          />
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            <XCircle className="h-4 w-4 mr-1.5" />
+            Tolak Klaim
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -368,6 +517,10 @@ export default function AdminPage() {
   const [rewardResult, setRewardResult] = useState<string | null>(null);
   const [savingCosts, setSavingCosts] = useState(false);
 
+  // Antrian Klaim Kontribusi
+  const [pendingClaims, setPendingClaims] = useState<InfrastructureClaim[]>([]);
+  const [loadingClaims, setLoadingClaims] = useState(true);
+
   useEffect(() => {
     if (authLoading) return;
     if (!isModerator) router.replace('/');
@@ -379,7 +532,21 @@ export default function AdminPage() {
     loadProjects();
     loadBlocks();
     loadInfra();
+    loadClaims();
   }, [isModerator]);
+
+  async function loadClaims() {
+    setLoadingClaims(true);
+    try {
+      setPendingClaims(await getPendingInfrastructureClaims());
+    } finally {
+      setLoadingClaims(false);
+    }
+  }
+
+  function handleClaimProcessed(id: string) {
+    setPendingClaims(prev => prev.filter(c => c.id !== id));
+  }
 
   async function loadInfra() {
     setLoadingInfra(true);
@@ -978,6 +1145,45 @@ export default function AdminPage() {
                   </Button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Antrian Klaim Kontribusi */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <HandCoins className="h-4 w-4 text-emerald-600" />
+                Antrian Klaim Kontribusi
+                {pendingClaims.length > 0 && (
+                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs ml-auto font-normal">
+                    {pendingClaims.length} pending
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Klaim kontribusi infrastruktur yang diajukan user, menunggu verifikasi.
+                Setujui hanya jika bukti valid — persetujuan memberi poin + lencana kontributor.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingClaims ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat klaim…
+                </div>
+              ) : pendingClaims.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Tidak ada klaim kontribusi yang menunggu verifikasi.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {pendingClaims.map(c => (
+                    <ClaimAdminCard key={c.id} claim={c} adminId={user!.id} onProcessed={handleClaimProcessed} />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

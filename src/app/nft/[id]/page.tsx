@@ -25,6 +25,7 @@ import { getCommunityConfig } from '@/lib/community-config';
 import { buyNftUnit, BuyError, toggleNftLike, RateLimitError } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment, pinComment, unpinComment } from '@/lib/comments';
 import { BlockUserDialog } from '@/components/block-user-dialog';
+import { ContributorBadge } from '@/components/contributor-badge';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -430,6 +431,7 @@ function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="font-semibold">{c.display_name}</span>
+                    {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} />}
                     <span className="text-xs text-muted-foreground">{relativeTime(c.timestamp)}</span>
                     {c.is_pinned && (
                       <span className="text-xs text-primary font-medium">📌 Disematkan</span>

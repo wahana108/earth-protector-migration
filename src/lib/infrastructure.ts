@@ -1,10 +1,11 @@
 import { db } from './firebase';
 import {
   collection, doc, writeBatch, runTransaction, serverTimestamp,
-  getDoc, getDocs, query, where, orderBy, limit, Timestamp, increment,
+  getDoc, getDocs, query, where, orderBy, limit, updateDoc, Timestamp, increment,
+  type Transaction, type DocumentReference, type QueryDocumentSnapshot, type DocumentData,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
-import type { ContributorCertificate, InfrastructurePayment } from './types';
+import type { ContributorCertificate, InfrastructureClaim, InfrastructurePayment } from './types';
 
 export type InfrastructureFundStatus = {
   // Unified display fields — mapped dari field baru
@@ -190,6 +191,61 @@ export async function migrateFeePoolIfNeeded(): Promise<string> {
   return message;
 }
 
+// Cek saldo_tersedia >= nilai DI DALAM transaksi (bukan sebelumnya) — cegah race saldo
+// antar dua approval/reward yang berjalan bersamaan.
+async function checkSaldoTersediaTx(tx: Transaction, feePoolRef: DocumentReference, nilai: number): Promise<void> {
+  const snap = await tx.get(feePoolRef);
+  const saldo = snap.exists() ? ((snap.data().saldo_tersedia as number) ?? 0) : 0;
+
+  if (saldo < nilai) {
+    const fmt = (n: number) => new Intl.NumberFormat('id-ID', {
+      style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
+    }).format(n);
+    throw new Error(`Kas sistem belum cukup (tersedia ${fmt(saldo)}, dibutuhkan ${fmt(nilai)}).`);
+  }
+}
+
+// Satu sumber kebenaran untuk write zero-sum reward kontributor — dipakai baik oleh
+// reward langsung admin (rewardInfrastructureContributor) maupun approve klaim
+// (approveInfrastructureClaim). extraUserFields digabung ke SATU tx.update(userRef)
+// agar tidak ada dua write terpisah ke dokumen user yang sama dalam satu transaksi.
+function writeContributorRewardTx(
+  tx: Transaction,
+  refs: { feePoolRef: DocumentReference; neracaLogRef: DocumentReference; paymentRef: DocumentReference; userRef: DocumentReference },
+  params: { kontributorNama: string; nilai: number; buktiLink: string; keterangan: string; adminUid: string },
+  extraUserFields: Record<string, unknown> = {},
+) {
+  tx.set(refs.feePoolRef, {
+    saldo_tersedia: increment(-params.nilai),
+    total_dialokasikan_lencana: increment(params.nilai),
+  }, { merge: true });
+
+  tx.update(refs.userRef, { total_poin: increment(params.nilai), ...extraUserFields });
+
+  tx.set(refs.neracaLogRef, {
+    type: 'kontribusi_infrastruktur',
+    nft_unit_id: 'system',
+    nama_nft: 'Reward Kontribusi Infrastruktur',
+    harga_transaksi: 0,
+    nilai_selisih: params.nilai,
+    delta: params.nilai,
+    counterparty_id: params.adminUid,
+    link_bukti: params.buktiLink,
+    alasan: params.keterangan || '',
+    timestamp: serverTimestamp(),
+  });
+
+  tx.set(refs.paymentRef, {
+    kontributor_id: refs.userRef.id,
+    kontributor_nama: params.kontributorNama,
+    nilai: params.nilai,
+    bukti_link: params.buktiLink,
+    keterangan: params.keterangan || '',
+    verified_by: params.adminUid,
+    created_at: serverTimestamp(),
+  });
+}
+
 // Beri reward poin ke kontributor yang sudah membayar infrastruktur nyata.
 // Zero-sum: sistem -nilai, kontributor +nilai. Cek saldo sebelum eksekusi.
 export async function rewardInfrastructureContributor(
@@ -203,49 +259,134 @@ export async function rewardInfrastructureContributor(
   const feePoolRef = doc(db, 'fee_pool', 'v1');
   const neracaLogRef = doc(collection(db, 'users', kontributorId, 'neraca_log'));
   const paymentRef = doc(collection(db, 'infrastructure_payments'));
+  const userRef = doc(db, 'users', kontributorId);
 
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(feePoolRef);
-    const saldo = snap.exists() ? ((snap.data().saldo_tersedia as number) ?? 0) : 0;
+    await checkSaldoTersediaTx(tx, feePoolRef, nilai);
+    writeContributorRewardTx(tx, { feePoolRef, neracaLogRef, paymentRef, userRef }, { kontributorNama, nilai, buktiLink, keterangan, adminUid });
+  });
+}
 
-    if (saldo < nilai) {
-      const fmt = (n: number) => new Intl.NumberFormat('id-ID', {
-        style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-      }).format(n);
-      throw new Error(`Kas sistem belum cukup (tersedia ${fmt(saldo)}, dibutuhkan ${fmt(nilai)}).`);
-    }
+// Klaim kontribusi infrastruktur — user mengajukan, admin memverifikasi (approve/reject).
+// Submit HANYA mencatat klaim + jejak publik (delta 0); poin & badge baru diberikan saat approve.
+export async function submitInfrastructureClaim(
+  userId: string,
+  userNama: string,
+  nilai: number,
+  buktiLink: string,
+  keterangan: string,
+): Promise<void> {
+  const claimRef = doc(collection(db, 'infrastructure_claims'));
+  const neracaLogRef = doc(collection(db, 'users', userId, 'neraca_log'));
 
-    // Semua write dalam satu transaksi — zero-sum dijamin
-    tx.set(feePoolRef, {
-      saldo_tersedia: increment(-nilai),
-      total_dialokasikan_lencana: increment(nilai),
-    }, { merge: true });
+  const batch = writeBatch(db);
+  batch.set(claimRef, {
+    user_id: userId,
+    user_nama: userNama,
+    nilai,
+    bukti_link: buktiLink,
+    keterangan: keterangan || '',
+    status: 'pending',
+    created_at: serverTimestamp(),
+  });
+  batch.set(neracaLogRef, {
+    type: 'klaim_lencana',
+    nft_unit_id: 'system',
+    nama_nft: 'Klaim Kontribusi Infrastruktur',
+    harga_transaksi: 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: userId,
+    link_bukti: buktiLink,
+    alasan: keterangan || '',
+    timestamp: serverTimestamp(),
+  });
+  await batch.commit();
+}
 
-    tx.update(doc(db, 'users', kontributorId), { total_poin: increment(nilai) });
+export async function approveInfrastructureClaim(claimId: string, adminUid: string): Promise<void> {
+  const claimRef = doc(db, 'infrastructure_claims', claimId);
+  const feePoolRef = doc(db, 'fee_pool', 'v1');
 
-    tx.set(neracaLogRef, {
-      type: 'kontribusi_infrastruktur',
-      nft_unit_id: 'system',
-      nama_nft: 'Reward Kontribusi Infrastruktur',
-      harga_transaksi: 0,
-      nilai_selisih: nilai,
-      delta: nilai,
-      counterparty_id: adminUid,
-      link_bukti: buktiLink,
-      alasan: keterangan || '',
-      timestamp: serverTimestamp(),
-    });
+  await runTransaction(db, async (tx) => {
+    const claimSnap = await tx.get(claimRef);
+    if (!claimSnap.exists()) throw new Error('Klaim tidak ditemukan.');
 
-    tx.set(paymentRef, {
-      kontributor_id: kontributorId,
-      kontributor_nama: kontributorNama,
-      nilai,
-      bukti_link: buktiLink,
-      keterangan: keterangan || '',
-      verified_by: adminUid,
-      created_at: serverTimestamp(),
+    const claim = claimSnap.data();
+    if (claim.status !== 'pending') throw new Error('Klaim sudah diproses sebelumnya.');
+
+    const kontributorId = claim.user_id as string;
+    const kontributorNama = (claim.user_nama as string) ?? 'User';
+    const nilai = (claim.nilai as number) ?? 0;
+    const buktiLink = (claim.bukti_link as string) ?? '';
+    const keterangan = (claim.keterangan as string) ?? '';
+
+    const userRef = doc(db, 'users', kontributorId);
+    const neracaLogRef = doc(collection(db, 'users', kontributorId, 'neraca_log'));
+    const paymentRef = doc(collection(db, 'infrastructure_payments'));
+
+    // Cek saldo DI DALAM transaction yang sama (bukan hasil pembacaan sebelumnya) — cegah race
+    await checkSaldoTersediaTx(tx, feePoolRef, nilai);
+
+    writeContributorRewardTx(
+      tx,
+      { feePoolRef, neracaLogRef, paymentRef, userRef },
+      { kontributorNama, nilai, buktiLink, keterangan, adminUid },
+      { badge_kontributor: true, total_kontribusi: increment(nilai) },
+    );
+
+    tx.update(claimRef, {
+      status: 'approved',
+      admin_uid: adminUid,
+      processed_at: serverTimestamp(),
     });
   });
+}
+
+export async function rejectInfrastructureClaim(claimId: string, alasan: string, adminUid: string): Promise<void> {
+  await updateDoc(doc(db, 'infrastructure_claims', claimId), {
+    status: 'rejected',
+    alasan_penolakan: alasan,
+    admin_uid: adminUid,
+    processed_at: serverTimestamp(),
+  });
+}
+
+function mapInfrastructureClaim(d: QueryDocumentSnapshot<DocumentData>): InfrastructureClaim {
+  const data = d.data();
+  return {
+    id: d.id,
+    user_id: (data.user_id as string) ?? '',
+    user_nama: (data.user_nama as string) ?? 'User',
+    nilai: (data.nilai as number) ?? 0,
+    bukti_link: (data.bukti_link as string) ?? '',
+    keterangan: (data.keterangan as string) ?? '',
+    status: (data.status as InfrastructureClaim['status']) ?? 'pending',
+    admin_uid: data.admin_uid as string | undefined,
+    alasan_penolakan: data.alasan_penolakan as string | undefined,
+    created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+    processed_at: (data.processed_at as Timestamp)?.toDate?.() ?? null,
+  };
+}
+
+// Guard "1 klaim pending per user" hanya diperiksa client-side (lihat komentar di
+// firestore.rules match /infrastructure_claims — tidak ada query arbitrer di rules).
+export async function getUserClaims(userId: string): Promise<InfrastructureClaim[]> {
+  const snap = await getDocs(query(
+    collection(db, 'infrastructure_claims'),
+    where('user_id', '==', userId),
+    orderBy('created_at', 'desc'),
+  ));
+  return snap.docs.map(mapInfrastructureClaim);
+}
+
+export async function getPendingInfrastructureClaims(): Promise<InfrastructureClaim[]> {
+  const snap = await getDocs(query(
+    collection(db, 'infrastructure_claims'),
+    where('status', '==', 'pending'),
+    orderBy('created_at', 'desc'),
+  ));
+  return snap.docs.map(mapInfrastructureClaim);
 }
 
 export async function getInfrastructurePayments(maxCount = 20): Promise<InfrastructurePayment[]> {

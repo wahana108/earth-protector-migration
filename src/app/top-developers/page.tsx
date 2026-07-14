@@ -17,6 +17,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { BlockUserDialog } from '@/components/block-user-dialog';
+import { ContributorBadge } from '@/components/contributor-badge';
 import { cn } from '@/lib/utils';
 import { getCommunityConfig } from '@/lib/community-config';
 import { calculateEffectiveBuyback, fibonacciLargestAndSum } from '@/lib/ranking';
@@ -45,6 +46,8 @@ type DeveloperRow = {
   qualifies: boolean;  // lolos syarat individu (soldNfts + effective_pct)
   has_anomali: boolean;
   is_flagged: boolean;
+  badge_kontributor: boolean;
+  total_kontribusi: number;
 };
 
 type FetchResult = {
@@ -99,6 +102,8 @@ async function fetchDeveloperRows(): Promise<FetchResult> {
       qualifies,
       has_anomali,
       is_flagged: total_poin < 0 || has_anomali,
+      badge_kontributor: (data.badge_kontributor as boolean) ?? false,
+      total_kontribusi: (data.total_kontribusi as number) ?? 0,
     };
   });
 
@@ -186,6 +191,7 @@ function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct }:
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-sm truncate">{displayName}</p>
+              {dev.badge_kontributor && <ContributorBadge nilai={dev.total_kontribusi} />}
               {dev.tier === 1 && (
                 <Badge className="bg-green-600 text-white text-xs shrink-0">Top Developer</Badge>
               )}

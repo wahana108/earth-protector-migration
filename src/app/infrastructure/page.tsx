@@ -3,19 +3,22 @@
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import {
-  Building2, TrendingUp, Server, Award, Loader2, Info, Users,
+  Building2, TrendingUp, Server, Award, Loader2, Info, Users, HandCoins,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/use-auth';
 import {
   getInfrastructureFundStatus,
   getLatestContributorCertificates,
   getInfrastructurePayments,
+  getUserClaims,
+  submitInfrastructureClaim,
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
-import type { InfrastructurePayment } from '@/lib/types';
+import type { CommunityConfig, InfrastructureClaim, InfrastructurePayment } from '@/lib/types';
 import { getCommunityConfig } from '@/lib/community-config';
 import type { ContributorCertificate } from '@/lib/types';
 
@@ -32,18 +35,27 @@ function formatDate(d: Date) {
 }
 
 export default function InfrastructurePage() {
+  const { user } = useAuth();
   const [status, setStatus] = useState<InfrastructureFundStatus | null>(null);
   const [contributors, setContributors] = useState<ContributorCertificate[]>([]);
   const [payments, setPayments] = useState<InfrastructurePayment[]>([]);
   const [infraCosts, setInfraCosts] = useState<Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>>([]);
   const [expandedInfo, setExpandedInfo] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [config, setConfig] = useState<CommunityConfig | null>(null);
+
+  const [userClaims, setUserClaims] = useState<InfrastructureClaim[]>([]);
+  const [claimNilai, setClaimNilai] = useState('');
+  const [claimBuktiLink, setClaimBuktiLink] = useState('');
+  const [claimKeterangan, setClaimKeterangan] = useState('');
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
+  const [claimResult, setClaimResult] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
-        const [fundStatus, certs, pmts, config] = await Promise.all([
+        const [fundStatus, certs, pmts, cfg] = await Promise.all([
           getInfrastructureFundStatus(),
           getLatestContributorCertificates(10),
           getInfrastructurePayments(20),
@@ -52,8 +64,9 @@ export default function InfrastructurePage() {
         setStatus(fundStatus);
         setContributors(certs);
         setPayments(pmts);
+        setConfig(cfg);
         setInfraCosts(
-          (config?.infrastructure_costs ?? []).map(c => ({
+          (cfg?.infrastructure_costs ?? []).map(c => ({
             ...c,
             info: (c.info ?? (c as Record<string, unknown>).link as string | undefined) || undefined,
           })),
@@ -64,6 +77,48 @@ export default function InfrastructurePage() {
     }
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!user) { setUserClaims([]); return; }
+    getUserClaims(user.id).then(setUserClaims).catch(() => {});
+  }, [user]);
+
+  // Guard "1 klaim pending" — client-side saja (lihat komentar di firestore.rules).
+  // Gerbang keras tetap verifikasi admin, bukan proteksi ini.
+  const hasPendingClaim = userClaims.some(c => c.status === 'pending');
+
+  async function handleSubmitClaim() {
+    if (!user) return;
+    const nilaiNum = parseInt(claimNilai.replace(/\D/g, ''), 10);
+    if (!nilaiNum || nilaiNum <= 0) {
+      setClaimResult('Nilai klaim wajib diisi dan lebih dari 0.');
+      return;
+    }
+    if (!/^https?:\/\/.+/.test(claimBuktiLink.trim())) {
+      setClaimResult('Bukti link wajib diisi dengan format URL (dimulai http:// atau https://).');
+      return;
+    }
+    setClaimSubmitting(true);
+    setClaimResult(null);
+    try {
+      await submitInfrastructureClaim(
+        user.id,
+        user.displayName ?? user.email ?? 'User',
+        nilaiNum,
+        claimBuktiLink.trim(),
+        claimKeterangan.trim(),
+      );
+      setClaimResult('Klaim berhasil diajukan. Menunggu verifikasi admin.');
+      setClaimNilai('');
+      setClaimBuktiLink('');
+      setClaimKeterangan('');
+      setUserClaims(await getUserClaims(user.id));
+    } catch (e) {
+      setClaimResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
+    } finally {
+      setClaimSubmitting(false);
+    }
+  }
 
   return (
     <MainLayout>
@@ -245,6 +300,100 @@ export default function InfrastructurePage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ── 3b. Klaim Kontribusi (hanya user login) ── */}
+            {user && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <HandCoins className="h-4 w-4 text-emerald-600" />
+                    Klaim Kontribusi
+                  </CardTitle>
+                  <CardDescription className="text-xs leading-relaxed">
+                    Sudah membayar biaya infrastruktur nyata (hosting, domain, API)? Ajukan klaim
+                    dengan bukti. Setelah diverifikasi, Anda menerima poin kontribusi + lencana
+                    kontributor. Poin diambil dari kas sistem — jika kas belum cukup, persetujuan
+                    menunggu hingga kas terkumpul.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {(config?.badge_klaim_enabled ?? true) ? (
+                    <>
+                      {hasPendingClaim ? (
+                        <p className="text-sm text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+                          Anda masih memiliki klaim yang menunggu verifikasi admin. Klaim baru bisa
+                          diajukan setelah klaim ini diproses.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Nilai (Rp)"
+                            value={claimNilai}
+                            onChange={e => setClaimNilai(e.target.value.replace(/\D/g, ''))}
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Link bukti pembayaran (https://...)"
+                            value={claimBuktiLink}
+                            onChange={e => setClaimBuktiLink(e.target.value)}
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Keterangan (opsional)"
+                            value={claimKeterangan}
+                            onChange={e => setClaimKeterangan(e.target.value)}
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                          />
+                          <button
+                            onClick={handleSubmitClaim}
+                            disabled={claimSubmitting}
+                            className="w-full rounded-md bg-emerald-600 text-white text-sm font-medium py-2 disabled:opacity-50"
+                          >
+                            {claimSubmitting ? 'Mengirim...' : 'Ajukan Klaim'}
+                          </button>
+                          {claimResult && (
+                            <p className={`text-xs ${claimResult.startsWith('Gagal') ? 'text-red-600' : 'text-green-600'}`}>
+                              {claimResult}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {userClaims.length > 0 && (
+                        <div className="divide-y rounded-lg border overflow-hidden">
+                          {userClaims.map(c => (
+                            <div key={c.id} className="flex items-start gap-3 px-4 py-3 bg-card text-sm">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-mono font-medium">{formatIDR(c.nilai)}</p>
+                                <p className="text-xs text-muted-foreground">{formatDate(c.created_at)}</p>
+                                {c.status === 'rejected' && c.alasan_penolakan && (
+                                  <p className="text-xs text-red-600 mt-1">Ditolak: {c.alasan_penolakan}</p>
+                                )}
+                              </div>
+                              <Badge
+                                variant={c.status === 'approved' ? 'default' : c.status === 'rejected' ? 'destructive' : 'secondary'}
+                                className="text-xs shrink-0"
+                              >
+                                {c.status === 'pending' ? 'Menunggu' : c.status === 'approved' ? 'Disetujui' : 'Ditolak'}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Fitur klaim kontribusi sedang dinonaktifkan sementara oleh admin. Lencana
+                      kontributor yang sudah ada tetap berlaku.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* ── 4. Kontributor Historis (read-only, sembunyi jika kosong) ── */}
             {contributors.length > 0 && (

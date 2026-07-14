@@ -25,6 +25,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { checkLinkBukti } from '@/lib/link-checker';
 import { updateNftUnitGambar } from '@/lib/projects';
+import { ContributorBadge } from '@/components/contributor-badge';
 import {
   KATEGORI_LABELS,
   type Project, type NFTUnit, type ProjectCategory,
@@ -114,6 +115,8 @@ type DeveloperInfo = {
   level: string;
   soldNfts: number;
   buybackCount: number;
+  badge_kontributor: boolean;
+  total_kontribusi: number;
 };
 
 type PageData = {
@@ -321,6 +324,8 @@ export default function ProjectDetailPage({
           level: (devData.level as string) || 'developer_biasa',
           soldNfts: (devData.soldNfts as number) ?? 0,
           buybackCount: (devData.buybackCount as number) ?? 0,
+          badge_kontributor: (devData.badge_kontributor as boolean) ?? false,
+          total_kontribusi: (devData.total_kontribusi as number) ?? 0,
         };
 
         // Resolve display name untuk setiap validator
@@ -478,7 +483,10 @@ export default function ProjectDetailPage({
               {developer.displayName.charAt(0)}
             </div>
             <div>
-              <p className="font-semibold leading-snug">{developer.displayName}</p>
+              <p className="font-semibold leading-snug flex items-center gap-1.5">
+                {developer.displayName}
+                {developer.badge_kontributor && <ContributorBadge nilai={developer.total_kontribusi} />}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {developer.level === 'top_developer' ? '⭐ Top Developer' : 'Developer Biasa'}
                 {developer.soldNfts > 0 && (

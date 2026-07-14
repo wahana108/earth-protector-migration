@@ -37,6 +37,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   ai_auto_mode_enabled: false,
   ai_auto_interval_days: 30,
   ai_auto_max_devs_per_run: 10,
+  badge_klaim_enabled: true,
   super_admin_email: process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '',
   admin_emails: [],
   moderator_emails: [],

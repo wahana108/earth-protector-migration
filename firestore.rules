@@ -44,7 +44,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow read:   if isAuth();
       allow create: if isMe(userId);
-      allow update: if isMe(userId) || isAdmin() ||
+      // badge_kontributor & total_kontribusi WAJIB admin-only — isMe(userId) di bawah
+      // sengaja dikecualikan dari kedua field ini (hasAny) agar user tidak bisa
+      // memberi badge/nilai kontribusi ke diri sendiri lewat write biasa.
+      allow update: if
+        (isMe(userId) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['badge_kontributor', 'total_kontribusi'])) ||
+        isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions', 'pending_buyback_actions', 'daily_usage'])) ||
         // Validasi flow: pemilik akun mencatat partisipasi validasi
@@ -360,6 +367,26 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isAdmin();
       allow delete: if false;
+    }
+
+    // ─── infrastructure_claims/{claimId} ─────────────────────────────────────
+    // User mengklaim sudah membayar infrastruktur nyata; admin verifikasi.
+    // Publik untuk dibaca (transparansi). Create: hanya pemilik klaim, status
+    // awal wajib 'pending', bukti_link wajib http(s). Guard "1 klaim pending
+    // per user" TIDAK ditegakkan di rules (tidak ada query arbitrer di rules
+    // security language) — diperiksa client-side sebelum submit; verifikasi
+    // admin tetap jadi gerbang keras jika guard client terlewati.
+    match /infrastructure_claims/{claimId} {
+      allow read: if true;
+      allow create: if isAuth() &&
+        request.resource.data.user_id == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.nilai is number && request.resource.data.nilai > 0 &&
+        request.resource.data.bukti_link is string &&
+        request.resource.data.bukti_link.matches('^https?://.+') &&
+        request.resource.data.keys().hasOnly(
+          ['user_id', 'user_nama', 'nilai', 'bukti_link', 'keterangan', 'status', 'created_at']);
+      allow update, delete: if isAdmin();
     }
 
     // ─── ai_reviews/{reviewId} ───────────────────────────────────────────────
