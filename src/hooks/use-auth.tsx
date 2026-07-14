@@ -61,6 +61,7 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
       total_poin_pending: (data.total_poin_pending as number) ?? 0,
       badge_kontributor: (data.badge_kontributor as boolean) ?? false,
       total_kontribusi: (data.total_kontribusi as number) ?? 0,
+      lapak_aktif: (data.lapak_aktif as boolean) ?? true,
     };
   }
 
@@ -94,6 +95,7 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
     isTopDeveloper: false,
     badge_kontributor: false,
     total_kontribusi: 0,
+    lapak_aktif: true,
   };
 }
 

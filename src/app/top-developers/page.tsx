@@ -20,7 +20,7 @@ import { BlockUserDialog } from '@/components/block-user-dialog';
 import { ContributorBadge } from '@/components/contributor-badge';
 import { cn } from '@/lib/utils';
 import { getCommunityConfig } from '@/lib/community-config';
-import { calculateEffectiveBuyback, fibonacciLargestAndSum } from '@/lib/ranking';
+import { calculateEffectiveBuyback, fibonacciLargestAndSum, isLapakAktif } from '@/lib/ranking';
 import { maybeAutoRecalculate } from '@/lib/projects';
 
 function formatIDR(n: number) {
@@ -69,7 +69,9 @@ async function fetchDeveloperRows(): Promise<FetchResult> {
     anomaliSnap.docs.map((d) => d.data().developer_id as string),
   );
 
-  const rows: DeveloperRow[] = usersSnap.docs.map((d) => {
+  // lapak OFF tidak ditampilkan — filter sebelum tier/quota dihitung, agar peringkat
+  // (dan slot Fibonacci di halaman lain) hanya mencerminkan komunitas aktif.
+  const rows: DeveloperRow[] = usersSnap.docs.filter((d) => isLapakAktif(d.data())).map((d) => {
     const data = d.data();
     const soldNfts = (data.soldNfts as number) ?? 0;
     const buybackCount = (data.buybackCount as number) ?? 0;

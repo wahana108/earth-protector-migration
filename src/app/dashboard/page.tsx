@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  collection, doc, getDoc, getDocs,
+  collection, doc, getDoc, getDocs, updateDoc,
   query, where, orderBy, limit, Timestamp,
 } from 'firebase/firestore';
 import {
   PlusCircle, Loader2, Lock, Pencil,
   RefreshCcw, TrendingDown, TrendingUp, Minus, Upload, UserX, ShieldOff,
-  CheckCircle2, AlertTriangle, Award,
+  CheckCircle2, AlertTriangle, Award, Store,
 } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -685,6 +686,40 @@ function DashboardSkeleton() {
   );
 }
 
+// ─── Confirm Lapak Off Dialog ─────────────────────────────────────────────────
+
+function ConfirmLapakOffDialog({
+  loading, onClose, onConfirm,
+}: {
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o && !loading) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Nonaktifkan Lapak?</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Project &amp; NFT Anda akan disembunyikan dan tidak dapat dibeli selama nonaktif.
+            Transaksi yang sedang berjalan tetap harus diselesaikan. Anda keluar sementara
+            dari papan peringkat — posisi pulih otomatis saat kembali aktif.
+          </p>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Nonaktifkan Lapak
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -710,10 +745,44 @@ export default function DashboardPage() {
   const [certificates, setCertificates] = useState<ContributorCertificate[]>([]);
   const [dailyUsage, setDailyUsage] = useState({ transactions: 0, projects: 0, comments: 0 });
   const [dailyLimits, setDailyLimits] = useState({ tx: 20, proj: 2, com: 30 });
+  const [lapakAktif, setLapakAktif] = useState(true);
+  const [showConfirmLapakOff, setShowConfirmLapakOff] = useState(false);
+  const [togglingLapak, setTogglingLapak] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    setLapakAktif(user?.lapak_aktif ?? true);
+  }, [user]);
+
+  async function handleToggleLapak(next: boolean) {
+    if (!user) return;
+    if (!next) {
+      setShowConfirmLapakOff(true);
+      return;
+    }
+    // Menyalakan kembali — tanpa konfirmasi, posisi pulih otomatis (data tak pernah berubah)
+    setLapakAktif(true);
+    try {
+      await updateDoc(doc(db, 'users', user.id), { lapak_aktif: true });
+    } catch {
+      setLapakAktif(false);
+    }
+  }
+
+  async function confirmLapakOff() {
+    if (!user) return;
+    setTogglingLapak(true);
+    try {
+      await updateDoc(doc(db, 'users', user.id), { lapak_aktif: false });
+      setLapakAktif(false);
+      setShowConfirmLapakOff(false);
+    } finally {
+      setTogglingLapak(false);
+    }
+  }
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -879,6 +948,34 @@ export default function DashboardPage() {
             </Link>
           </Button>
         </div>
+
+        {/* Lapak Aktif */}
+        <div className="rounded-lg border p-4 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <Store className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Lapak Aktif</p>
+              <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                Saat nonaktif: project &amp; NFT Anda disembunyikan dan tidak dapat dibeli.
+                Transaksi yang sedang berjalan tetap harus diselesaikan. Anda keluar
+                sementara dari papan peringkat — posisi pulih otomatis saat kembali aktif.
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={lapakAktif}
+            onCheckedChange={handleToggleLapak}
+            className="shrink-0 mt-0.5"
+          />
+        </div>
+
+        {showConfirmLapakOff && (
+          <ConfirmLapakOffDialog
+            loading={togglingLapak}
+            onClose={() => setShowConfirmLapakOff(false)}
+            onConfirm={confirmLapakOff}
+          />
+        )}
 
         {loading ? <DashboardSkeleton /> : (
           <>

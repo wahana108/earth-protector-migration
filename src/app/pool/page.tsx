@@ -33,7 +33,8 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { buyNftUnit, BuyError, skipFifoNft, SkipFifoError, RateLimitError } from '@/lib/projects';
+import { buyNftUnit, BuyError, skipFifoNft, SkipFifoError, RateLimitError, filterUnitsByActiveLapak } from '@/lib/projects';
+import { isLapakAktif } from '@/lib/ranking';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -76,9 +77,10 @@ function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
 
 // ─── FIFO Queue Helper ────────────────────────────────────────────────────────
 
-// Cari NFT teratas antrian FIFO yang bukan milik userId.
-// NFT milik sendiri di-skip otomatis (transferred_at di-reset → geser ke belakang).
-// Return null jika antrian kosong atau semua NFT milik sendiri.
+// Cari NFT teratas antrian FIFO yang bukan milik userId DAN pemiliknya lapak aktif.
+// NFT milik sendiri, atau milik owner yang lapak-nya nonaktif, di-skip otomatis
+// (transferred_at di-reset → geser ke belakang). Return null jika antrian kosong
+// atau semua kandidat ter-skip.
 async function fetchNextFifoNft(userId: string): Promise<NFTUnit | null> {
   const autoSkippedIds = new Set<string>();
   const MAX_AUTO_SKIP = 20;
@@ -96,15 +98,24 @@ async function fetchNextFifoNft(userId: string): Promise<NFTUnit | null> {
 
     const d = snap.docs[0];
     const unit = toNFTUnit(d.id, d.data() as Record<string, unknown>);
+    const isOwnNft = unit.developer_id === userId || unit.owner_id === userId;
 
-    if (unit.developer_id !== userId && unit.owner_id !== userId) return unit;
+    // Cek lapak pemilik SAAT INI hanya untuk kandidat teratas (1 read), bukan semua kandidat.
+    const ownerInactive = !isOwnNft &&
+      !isLapakAktif((await getDoc(doc(db, 'users', unit.owner_id))).data());
 
-    // Sudah pernah auto-skip ID ini → semua NFT milik sendiri
+    if (!isOwnNft && !ownerInactive) return unit;
+
+    // Sudah pernah auto-skip ID ini → tidak ada kandidat lain yang lolos
     if (autoSkippedIds.has(unit.id)) return null;
-
     autoSkippedIds.add(unit.id);
+
     try {
-      await skipFifoNft(unit.id, userId, 'lewati_otomatis', 'NFT milik sendiri, dilewati otomatis');
+      if (isOwnNft) {
+        await skipFifoNft(unit.id, userId, 'lewati_otomatis', 'NFT milik sendiri, dilewati otomatis');
+      } else {
+        await skipFifoNft(unit.id, userId, 'lapak_nonaktif', 'Pemilik lapak sedang nonaktif, dilewati otomatis');
+      }
     } catch {
       return null;
     }
@@ -623,9 +634,8 @@ export default function PoolPage() {
         setConfig({ harga_dasar: cfg.harga_dasar, batas_atas: cfg.batas_atas });
       }
 
-      setPoolNfts(
-        nftsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>)),
-      );
+      const fetchedUnits = nftsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>));
+      setPoolNfts(await filterUnitsByActiveLapak(fetchedUnits));
 
       // Cek level user, lalu cari NFT FIFO yang valid untuk semua user login
       if (user) {

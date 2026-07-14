@@ -3,7 +3,7 @@ import {
   collection, doc, getDoc, getDocs, query, where, orderBy, limit,
   writeBatch, serverTimestamp, increment, Timestamp, getCountFromServer,
 } from 'firebase/firestore';
-import { fibonacciLargestAndSum } from './ranking';
+import { fibonacciLargestAndSum, isLapakAktif } from './ranking';
 import type { AiReview, AiReviewEntry, AiReviewStatus, CommunityConfig, NeracaLog } from './types';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -81,6 +81,7 @@ export async function getTopDevsForAiReview(
   for (const d of topDevSnap.docs) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
+    if (!isLapakAktif(d.data())) continue; // lapak OFF — tidak direview, posisi teratas = posisi aktif
     const rawTs = d.data().last_ai_review_at;
     result.push({
       uid: d.id,
@@ -95,6 +96,7 @@ export async function getTopDevsForAiReview(
     if (result.length >= quota) break;
     if (seen.has(d.id)) continue;
     seen.add(d.id);
+    if (!isLapakAktif(d.data())) continue; // lapak OFF — tidak direview
     const rawTs = d.data().last_ai_review_at;
     result.push({
       uid: d.id,

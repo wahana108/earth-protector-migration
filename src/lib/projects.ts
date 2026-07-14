@@ -2,13 +2,13 @@ import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
   getDocs, getDoc, query, where, updateDoc, runTransaction,
-  setDoc, increment, arrayUnion, Timestamp, getCountFromServer,
+  setDoc, increment, arrayUnion, Timestamp, getCountFromServer, documentId,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 // checkAndIssueCertificate dinonaktifkan — digantikan rewardInfrastructureContributor
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
-import { calculateEffectiveBuyback, fibonacciLargestAndSum } from './ranking';
+import { calculateEffectiveBuyback, fibonacciLargestAndSum, isLapakAktif } from './ranking';
 import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString, RateLimitError } from './rate-limit';
 import type { ProjectCategory } from './types';
 
@@ -252,11 +252,17 @@ export async function updateNftUnitGambar(
 export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void> {
   const poolRef = doc(db, 'pool_rekomendasi', 'v1');
 
-  const [config, userSnap, poolSnap, userCountSnap] = await Promise.all([
+  // totalActive = totalAll - totalOff. TIDAK pakai where('lapak_aktif','!=',false):
+  // inequality Firestore hanya mengembalikan dokumen yang MEMILIKI field itu,
+  // sehingga semua user lama tanpa field lapak_aktif akan terkecualikan diam-diam
+  // dan totalUsers anjlok. Equality where('lapak_aktif','==',false) aman — hanya
+  // menghitung user yang secara eksplisit OFF, lalu dikurangkan dari total.
+  const [config, userSnap, poolSnap, totalAllSnap, totalOffSnap] = await Promise.all([
     getCommunityConfig(),
     getDoc(doc(db, 'users', userId)),
     getDoc(poolRef),
     getCountFromServer(collection(db, 'users')),
+    getCountFromServer(query(collection(db, 'users'), where('lapak_aktif', '==', false))),
   ]);
   if (!config || !userSnap.exists()) return;
 
@@ -274,7 +280,7 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   const meetsBuybackRate =
     soldNfts >= 1 &&
     Math.floor((effectiveBuyback / soldNfts) * 100) >= config.minimum_buyback_pct;
-  const qualifies = meetsMinSold && meetsBuybackRate;
+  const qualifies = meetsMinSold && meetsBuybackRate && isLapakAktif(userData);
 
   // Quota-aware: pragmatis per-transaksi menggunakan pool count + Fibonacci
   let newLevel: string;
@@ -283,8 +289,8 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   } else if (currentLevel === 'top_developer') {
     newLevel = 'top_developer'; // pertahankan slot yang sudah dimiliki
   } else {
-    const totalUsers = userCountSnap.data().count;
-    const { largest: kuota } = fibonacciLargestAndSum(totalUsers);
+    const totalActive = totalAllSnap.data().count - totalOffSnap.data().count;
+    const { largest: kuota } = fibonacciLargestAndSum(totalActive);
     newLevel = currentTopCount < kuota ? 'top_developer' : 'developer_biasa';
   }
 
@@ -330,6 +336,33 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   });
 
   await batch.commit();
+}
+
+// Filter unit berdasarkan lapak_aktif OWNER SAAT INI (bukan developer asal) — NFT
+// yang sudah berpindah tangan dari developer OFF tetap tampil & tradable.
+// Batched: dedup owner_id lalu getDocs where(documentId(),'in',chunk) chunk 10 —
+// reads sebanding jumlah OWNER UNIK (biasanya jauh lebih sedikit dari jumlah unit),
+// bukan satu getDoc per unit.
+export async function filterUnitsByActiveLapak<T extends { owner_id: string }>(
+  units: T[],
+): Promise<T[]> {
+  const uniqueOwnerIds = [...new Set(units.map(u => u.owner_id))];
+  if (uniqueOwnerIds.length === 0) return units;
+
+  const inactiveOwners = new Set<string>();
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueOwnerIds.length; i += 10) {
+    chunks.push(uniqueOwnerIds.slice(i, i + 10));
+  }
+
+  await Promise.all(chunks.map(async (chunk) => {
+    const snap = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', chunk)));
+    snap.docs.forEach(d => {
+      if (!isLapakAktif(d.data())) inactiveOwners.add(d.id);
+    });
+  }));
+
+  return units.filter(u => !inactiveOwners.has(u.owner_id));
 }
 
 // Beli NFT — satu Firestore transaction yang mengupdate semua dokumen terkait atomik
@@ -404,6 +437,12 @@ export async function buyNftUnit(
 
     if (!isInfrastructure && !sellerSnap.exists()) throw new BuyError('Data penjual tidak ditemukan.');
     if (!buyerSnap.exists()) throw new BuyError('Data pembeli tidak ditemukan.');
+    // Guard keras: lapak pemilik saat ini nonaktif → NFT tidak bisa dibeli baru.
+    // Berbasis OWNER saat ini (bukan developer asal) — NFT yang sudah berpindah
+    // tangan dari developer OFF tetap tradable selama pemilik saat ini aktif.
+    if (!isInfrastructure && sellerSnap.exists() && !isLapakAktif(sellerSnap.data())) {
+      throw new BuyError('Pemilik sedang menonaktifkan lapaknya. NFT tidak dapat dibeli saat ini.');
+    }
 
     const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
     const buyerBuybackCount: number = (buyerSnap.data().buybackCount as number) ?? 0;
@@ -1800,7 +1839,10 @@ export async function recalculateAllDeveloperLevels(
   if (!config) throw new Error('Community config tidak ditemukan.');
 
   const totalUsers = usersSnap.size;
-  const { largest: kuota } = fibonacciLargestAndSum(totalUsers);
+  // Kuota Fibonacci HANYA dari user aktif (lapak_aktif !== false) — komunitas hidup.
+  // Filter di memori, 0 read tambahan (usersSnap sudah di-fetch penuh di atas).
+  const activeUserCount = usersSnap.docs.filter(d => isLapakAktif(d.data())).length;
+  const { largest: kuota } = fibonacciLargestAndSum(activeUserCount);
 
   // Evaluasi syarat individu semua user
   type UserEval = {
@@ -1822,7 +1864,8 @@ export async function recalculateAllDeveloperLevels(
     const qualifies =
       soldNfts >= config.minimum_soldNfts_top_developer &&
       soldNfts >= 1 &&
-      effectivePct >= config.minimum_buyback_pct;
+      effectivePct >= config.minimum_buyback_pct &&
+      isLapakAktif(d);
     return {
       id: userDoc.id,
       currentLevel: (d.level as string) ?? 'developer_biasa',

@@ -1,3 +1,11 @@
+// lapak_aktif undefined/true = aktif (default ON) — user lama tanpa field dianggap aktif.
+// Post-fetch check saja, JANGAN pakai where('lapak_aktif','!=',false) di query:
+// inequality Firestore hanya mengembalikan dokumen yang MEMILIKI field itu,
+// mengecualikan semua user lama tanpa field secara diam-diam.
+export function isLapakAktif(data: { lapak_aktif?: boolean } | Record<string, unknown> | undefined | null): boolean {
+  return (data as { lapak_aktif?: boolean } | undefined | null)?.lapak_aktif !== false;
+}
+
 export function calculateEffectiveBuyback(
   buybackCount: number,
   totalPoin: number,

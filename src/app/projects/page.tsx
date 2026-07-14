@@ -20,6 +20,7 @@ import {
 } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { isLapakAktif } from '@/lib/ranking';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,11 +85,14 @@ async function fetchProjects(kat: ProjectCategory | 'semua'): Promise<ProjectWit
     Promise.all(uniqueDevIds.map(id => getDoc(doc(db, 'users', id)))),
   ]);
 
-  // Build developer name map
+  // Build developer name map + inactive-lapak set — piggyback pada devSnaps yang
+  // sudah di-fetch untuk nama, 0 read tambahan.
   const nameMap: Record<string, string> = {};
+  const inactiveDevIds = new Set<string>();
   devSnaps.forEach(s => {
     if (s.exists()) {
       nameMap[s.id] = (s.data().displayName as string) || s.id.slice(0, 8) + '…';
+      if (!isLapakAktif(s.data())) inactiveDevIds.add(s.id);
     }
   });
 
@@ -107,11 +111,13 @@ async function fetchProjects(kat: ProjectCategory | 'semua'): Promise<ProjectWit
     }
   });
 
-  return projects.map(p => ({
-    ...p,
-    developer_name: nameMap[p.developer_id] ?? 'Developer',
-    terjual: terjualMap[p.id] ?? 0,
-  }));
+  return projects
+    .filter(p => !inactiveDevIds.has(p.developer_id))
+    .map(p => ({
+      ...p,
+      developer_name: nameMap[p.developer_id] ?? 'Developer',
+      terjual: terjualMap[p.id] ?? 0,
+    }));
 }
 
 // ─── Project Card ─────────────────────────────────────────────────────────────

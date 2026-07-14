@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
-import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError, RateLimitError } from '@/lib/projects';
+import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError, RateLimitError, filterUnitsByActiveLapak } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
 import { ContributorBadge } from '@/components/contributor-badge';
 import {
@@ -724,7 +724,8 @@ function ExploreContent() {
           : query(baseRef, where('kategori', '==', kat), orderBy('like_count', 'desc'), limit(PAGE_SIZE));
 
       const snap = await getDocs(q);
-      setUnits(snap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>)));
+      const fetchedUnits = snap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>));
+      setUnits(await filterUnitsByActiveLapak(fetchedUnits));
     } finally {
       setLoading(false);
     }

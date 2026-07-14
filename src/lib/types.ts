@@ -39,6 +39,7 @@ export type User = {
   last_ai_review_at?: Date | null;
   badge_kontributor?: boolean;
   total_kontribusi?: number;
+  lapak_aktif?: boolean;
 };
 
 export type NFT = {
