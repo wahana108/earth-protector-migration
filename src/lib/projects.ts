@@ -1148,11 +1148,10 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
   const validatorList: Array<{ user_id: string; nilai: number }> =
     (p.validator_list as Array<{ user_id: string; nilai: number }>) ?? [];
 
-  // Baca neraca developer
+  // Baca neraca developer — existence guard (fee tidak ditulis ke user yang tidak ada)
   const developerRef = doc(db, 'users', developerIdFee);
   const developerSnap = await getDoc(developerRef);
   if (!developerSnap.exists()) return;
-  const developerPoin: number = (developerSnap.data().total_poin as number) ?? 0;
 
   // Hitung total nilai validator untuk distribusi proporsional
   const totalNilai = validatorList.reduce((sum, v) => sum + (v.nilai ?? 0), 0);
@@ -1166,14 +1165,12 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
     }
   }
 
-  // Baca semua neraca validator sebelum batch
-  const validatorSnapshots = new Map<string, number>();
+  // Baca semua neraca validator sebelum batch — existence guard (skip validator yang tidak ada)
+  const existingValidators = new Set<string>();
   await Promise.all(
     Array.from(validatorShares.keys()).map(async (vid) => {
       const vSnap = await getDoc(doc(db, 'users', vid));
-      if (vSnap.exists()) {
-        validatorSnapshots.set(vid, (vSnap.data().total_poin as number) ?? 0);
-      }
+      if (vSnap.exists()) existingValidators.add(vid);
     }),
   );
 
@@ -1181,7 +1178,7 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
   const batch = writeBatch(db);
 
   // Developer neraca -= feeTotal
-  batch.update(developerRef, { total_poin: developerPoin - feeTotal });
+  batch.update(developerRef, { total_poin: increment(-feeTotal) });
   batch.set(doc(collection(db, 'users', developerIdFee, 'neraca_log')), {
     type: 'fee_keluar',
     nft_unit_id: '',
@@ -1204,9 +1201,8 @@ export async function maybeTriggerFee(projectId: string, hargaJual: number): Pro
 
   // Setiap validator neraca += bagian proporsional
   for (const [validatorId, share] of validatorShares.entries()) {
-    const currentPoin = validatorSnapshots.get(validatorId);
-    if (currentPoin === undefined) continue;
-    batch.update(doc(db, 'users', validatorId), { total_poin: currentPoin + share });
+    if (!existingValidators.has(validatorId)) continue;
+    batch.update(doc(db, 'users', validatorId), { total_poin: increment(share) });
     batch.set(doc(collection(db, 'users', validatorId, 'neraca_log')), {
       type: 'fee_validator',
       nft_unit_id: '',
