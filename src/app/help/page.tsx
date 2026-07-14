@@ -225,6 +225,109 @@ export default function HelpPage() {
           </CardContent>
         </Card>
 
+        {/* ── Panduan Transaksi Sehat ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Panduan Transaksi Sehat (Tata Kelola AI)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+
+              <AccordionItem value="cara-menilai">
+                <AccordionTrigger className="text-sm text-left">
+                  Bagaimana sistem menilai transaksi saya?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  Saat tata kelola AI aktif, log transaksi developer papan atas dinilai berkala
+                  untuk mendeteksi anomali. Penilaian berdasarkan POLA perilaku dari log publik —
+                  bukan identitas, bukan isi tulisan. Developer tanpa aktivitas dinilai bersih
+                  (skor 0).
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="pola-sehat">
+                <AccordionTrigger className="text-sm text-left">
+                  Pola apa yang dinilai SEHAT?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Bertransaksi dengan banyak pihak berbeda (counterparty beragam)</li>
+                    <li>Jeda waktu wajar antar transaksi</li>
+                    <li>Buyback proporsional dari pembeli asli</li>
+                    <li>Menyertakan link bukti dan keterangan transaksi</li>
+                    <li>Aktivitas mencerminkan tindakan charity nyata</li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="pola-anomali">
+                <AccordionTrigger className="text-sm text-left">
+                  Pola apa yang berpotensi dinilai ANOMALI?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>
+                      Transaksi berulang dua arah dengan pihak yang sama (jual ke X berulang DAN
+                      buyback dari X berulang — indikasi self-dealing)
+                    </li>
+                    <li>Banyak transaksi dalam waktu sangat singkat</li>
+                    <li>Membeli/memvalidasi project sendiri lewat akun lain</li>
+                    <li>Transaksi bernilai besar tanpa bukti</li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="akibat-anomali">
+                <AccordionTrigger className="text-sm text-left">
+                  Apa akibat dinilai anomali?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  Skor anomali menghasilkan pengurangan poin neraca proporsional (dengan bukti
+                  yang dirujuk dalam alasan). Neraca negatif menurunkan buyback efektif — dapat
+                  menurunkan peringkat. Nilai yang dipotong masuk ke kas sistem secara transparan
+                  (lihat halaman{' '}
+                  <Link href="/infrastructure" className="text-primary hover:underline">
+                    Dana Sistem
+                  </Link>
+                  ) — tidak ada nilai yang hilang.
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="penilaian-keliru">
+                <AccordionTrigger className="text-sm text-left">
+                  Bagaimana jika saya merasa penilaian keliru?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  Setiap penilaian memiliki masa tenggang. Hubungi administrator dengan bukti
+                  kronologi transaksi Anda. Di pengembangan mendatang, tersedia mekanisme
+                  klarifikasi yang dinilai ulang otomatis pada siklus berikutnya.
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="lencana-kontributor">
+                <AccordionTrigger className="text-sm text-left">
+                  Apa itu lencana kontributor?
+                </AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                  Lencana (badge) diberikan kepada anggota yang terbukti membayar biaya
+                  infrastruktur nyata platform. Ajukan klaim dengan bukti di halaman{' '}
+                  <Link href="/infrastructure" className="text-primary hover:underline">
+                    Dana Sistem
+                  </Link>
+                  {' '}— setelah diverifikasi, Anda menerima poin kontribusi dan lencana yang
+                  tampil di profil serta karya Anda.
+                </AccordionContent>
+              </AccordionItem>
+
+            </Accordion>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed pt-4 mt-4 border-t">
+              Panduan ini transparan agar setiap anggota memahami cara menjaga reputasi
+              transaksinya. Sistem menilai perilaku berdasarkan bukti, bukan menghukum kesalahan
+              jujur.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* ── Credits ── */}
         <Card>
           <CardHeader>
