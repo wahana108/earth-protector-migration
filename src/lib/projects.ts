@@ -1,14 +1,14 @@
 import { db } from './firebase';
 import {
   collection, doc, writeBatch, serverTimestamp,
-  getDocs, getDoc, query, where, updateDoc, runTransaction,
-  setDoc, increment, arrayUnion, Timestamp, getCountFromServer, documentId,
+  getDocs, getDoc, query, where, or, updateDoc, runTransaction,
+  setDoc, increment, arrayUnion, Timestamp, getCountFromServer, documentId, limit,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
 // checkAndIssueCertificate dinonaktifkan — digantikan rewardInfrastructureContributor
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
-import { calculateEffectiveBuyback, fibonacciLargestAndSum, isLapakAktif } from './ranking';
+import { calculateEffectiveBuyback, fibonacciLargestAndSum, isLapakAktif, isSuspended } from './ranking';
 import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString, RateLimitError } from './rate-limit';
 import type { ProjectCategory } from './types';
 
@@ -106,6 +106,8 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     getDocs(query(collection(db, 'projects'), where('developer_id', '==', input.developer_id))),
     getDoc(doc(db, 'users', input.developer_id)),
   ]);
+
+  if (isSuspended(devUserSnap.data())) throw new Error('Akun Anda ditangguhkan administrator.');
 
   // Cek global daily limit sebelum batch — ada race condition minimal yang diterima
   // (lihat komentar di checkGlobalDailyLimit)
@@ -255,14 +257,18 @@ export async function checkAndUpdateDeveloperLevel(userId: string): Promise<void
   // totalActive = totalAll - totalOff. TIDAK pakai where('lapak_aktif','!=',false):
   // inequality Firestore hanya mengembalikan dokumen yang MEMILIKI field itu,
   // sehingga semua user lama tanpa field lapak_aktif akan terkecualikan diam-diam
-  // dan totalUsers anjlok. Equality where('lapak_aktif','==',false) aman — hanya
-  // menghitung user yang secara eksplisit OFF, lalu dikurangkan dari total.
+  // dan totalUsers anjlok. Equality where(...,'==',...) aman — hanya menghitung
+  // user yang secara eksplisit OFF (lapak dimatikan ATAU disuspend admin — or()
+  // agar tidak double-count user yang kena keduanya), lalu dikurangkan dari total.
   const [config, userSnap, poolSnap, totalAllSnap, totalOffSnap] = await Promise.all([
     getCommunityConfig(),
     getDoc(doc(db, 'users', userId)),
     getDoc(poolRef),
     getCountFromServer(collection(db, 'users')),
-    getCountFromServer(query(collection(db, 'users'), where('lapak_aktif', '==', false))),
+    getCountFromServer(query(
+      collection(db, 'users'),
+      or(where('lapak_aktif', '==', false), where('suspended_by_admin', '==', true)),
+    )),
   ]);
   if (!config || !userSnap.exists()) return;
 
@@ -442,6 +448,12 @@ export async function buyNftUnit(
     // tangan dari developer OFF tetap tradable selama pemilik saat ini aktif.
     if (!isInfrastructure && sellerSnap.exists() && !isLapakAktif(sellerSnap.data())) {
       throw new BuyError('Pemilik sedang menonaktifkan lapaknya. NFT tidak dapat dibeli saat ini.');
+    }
+    // Guard aktor: pembeli yang disuspend admin tidak bisa bertransaksi apapun.
+    // Cek suspend saja (bukan isLapakAktif) — mematikan lapak sendiri tidak boleh
+    // menghalangi diri sendiri membeli NFT orang lain.
+    if (isSuspended(buyerSnap.data())) {
+      throw new BuyError('Akun Anda ditangguhkan administrator.');
     }
 
     const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
@@ -858,6 +870,7 @@ export async function validateProject(
 
     if (!projectSnap.exists()) throw new ValidasiError('Project tidak ditemukan.');
     if (!userSnap.exists()) throw new ValidasiError('Data user tidak ditemukan.');
+    if (isSuspended(userSnap.data())) throw new ValidasiError('Akun Anda ditangguhkan administrator.');
 
     // Rate limit: charge validator — userSnap sudah di-fetch, 0 read tambahan
     checkAndIncrementUserUsage(tx, userRef, userSnap.data() as Record<string, unknown>, 'transactions', dailyValidasiLimit);
@@ -1275,8 +1288,12 @@ export async function createBuybackRequest(
   requesterId: string,
   requesterNote: string | null = null,
 ): Promise<string> {
-  const nftSnap = await getDoc(doc(db, 'nft_units', nftUnitId));
+  const [nftSnap, requesterSnap] = await Promise.all([
+    getDoc(doc(db, 'nft_units', nftUnitId)),
+    getDoc(doc(db, 'users', requesterId)),
+  ]);
   if (!nftSnap.exists()) throw new BuybackRequestError('NFT tidak ditemukan.');
+  if (isSuspended(requesterSnap.data())) throw new BuybackRequestError('Akun Anda ditangguhkan administrator.');
 
   const nft = nftSnap.data();
   if (nft.owner_id !== requesterId) throw new BuybackRequestError('Kamu bukan pemilik NFT ini.');
@@ -1991,5 +2008,128 @@ export async function maybeAutoRecalculate(): Promise<void> {
     // silent — tidak mengganggu alur pemanggil
   } finally {
     _autoRecalcRunning = false;
+  }
+}
+
+// ─── Admin: Suspend / Unsuspend User ─────────────────────────────────────────
+// suspended_by_admin HANYA ditulis lewat jalur ini (isAdmin() di rules).
+// Tidak menyentuh neraca — delta 0, murni penanda + jejak akuntabilitas publik.
+
+export async function suspendUser(targetUserId: string, adminUid: string, reason: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users', targetUserId), { suspended_by_admin: true });
+  batch.set(doc(collection(db, 'users', targetUserId, 'neraca_log')), {
+    type: 'admin_suspend',
+    nft_unit_id: 'system',
+    nama_nft: 'Suspend Akun oleh Admin',
+    harga_transaksi: 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: adminUid,
+    alasan: reason,
+    timestamp: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function unsuspendUser(targetUserId: string, adminUid: string, reason: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users', targetUserId), { suspended_by_admin: false });
+  batch.set(doc(collection(db, 'users', targetUserId, 'neraca_log')), {
+    type: 'admin_unsuspend',
+    nft_unit_id: 'system',
+    nama_nft: 'Pulihkan Akun oleh Admin',
+    harga_transaksi: 0,
+    nilai_selisih: 0,
+    delta: 0,
+    counterparty_id: adminUid,
+    alasan: reason,
+    timestamp: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+// ─── Dispute Auto-Cancel (lazy eval, tanpa cron baru) ────────────────────────
+// Dipanggil ketika NFT berstatus purchase_status:'disputed' dan
+// purchase_auto_complete_at (deadline yang SUDAH ADA dari purchase_autoclose_days)
+// sudah terlewati TANPA admin bertindak. Mirror field set dari cabang 'reject'
+// resolvePurchaseDispute — bedanya: log neraca_log ditulis untuk KEDUA pihak
+// (bukan cuma buyer) sebagai jejak lengkap untuk analisis AI kelak, dan status
+// dispute ditandai 'auto_cancelled' (bukan 'resolved_rejected') agar terbedakan
+// dari keputusan manual admin.
+export async function autoCancelDisputedPurchase(nftUnitId: string): Promise<void> {
+  const nftRef = doc(db, 'nft_units', nftUnitId);
+
+  let sellerIdCapture = '';
+  let buyerIdCapture = '';
+
+  await runTransaction(db, async (tx) => {
+    const nftSnap = await tx.get(nftRef);
+    if (!nftSnap.exists()) return;
+
+    const nft = nftSnap.data();
+    if (nft.purchase_status !== 'disputed') return; // sudah diproses admin, atau bukan disputed
+
+    const autoCompleteAt = (nft.purchase_auto_complete_at as Timestamp | undefined)?.toDate?.();
+    if (!autoCompleteAt || Date.now() < autoCompleteAt.getTime()) return; // belum lewat deadline
+
+    const buyerId = nft.owner_id as string;
+    const developerId = nft.developer_id as string;
+    const nilai_selisih = nft.nilai_selisih as number;
+    const nama_nft = nft.nama_nft as string;
+    const project_id = nft.project_id as string;
+    const harga_beli_terakhir = nft.harga_beli_terakhir as number;
+
+    const developerRef = doc(db, 'users', developerId);
+    const buyerRef = doc(db, 'users', buyerId);
+
+    const [developerSnap, buyerSnap] = await Promise.all([tx.get(developerRef), tx.get(buyerRef)]);
+    if (!developerSnap.exists() || !buyerSnap.exists()) return;
+
+    sellerIdCapture = developerId;
+    buyerIdCapture = buyerId;
+
+    const developerPending: number = (developerSnap.data().pending_seller_actions as number) ?? 0;
+    const buyerPoinPending: number = (buyerSnap.data().total_poin_pending as number) ?? 0;
+
+    // NFT kembali ke penjual — status kepemilikan pulih (sama field set dengan
+    // cabang 'reject' resolvePurchaseDispute)
+    tx.update(nftRef, {
+      purchase_status: 'cancelled',
+      owner_id: developerId,
+      for_sale: false,
+    });
+
+    tx.update(developerRef, { pending_seller_actions: Math.max(0, developerPending - 1) });
+    tx.update(buyerRef, { total_poin_pending: Math.max(0, buyerPoinPending - nilai_selisih) });
+
+    // Jejak permanen KEDUA pihak — delta 0 (zero-sum, tidak ada nilai pending yang
+    // pernah masuk total_poin aktif, jadi tidak ada yang perlu "dikembalikan" secara nilai)
+    tx.set(doc(collection(db, 'users', buyerId, 'neraca_log')), {
+      type: 'dispute_auto_cancel', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: 0, counterparty_id: developerId, project_id,
+      timestamp: serverTimestamp(),
+    });
+    tx.set(doc(collection(db, 'users', developerId, 'neraca_log')), {
+      type: 'dispute_auto_cancel', nft_unit_id: nftUnitId, nama_nft,
+      harga_transaksi: harga_beli_terakhir, nilai_selisih,
+      delta: 0, counterparty_id: buyerId, project_id,
+      timestamp: serverTimestamp(),
+    });
+  });
+
+  // Tandai dispute doc terpisah dari transaksi NFT — hanya jalan jika tx di atas
+  // benar-benar memproses (sellerIdCapture/buyerIdCapture ke-set).
+  if (sellerIdCapture && buyerIdCapture) {
+    const disputeSnap = await getDocs(query(
+      collection(db, 'purchase_disputes'),
+      where('nft_unit_id', '==', nftUnitId),
+      where('status', '==', 'pending_admin'),
+      limit(1),
+    ));
+    if (!disputeSnap.empty) {
+      await updateDoc(disputeSnap.docs[0].ref, { status: 'auto_cancelled', resolved_at: serverTimestamp() });
+    }
   }
 }

@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import { toggleForSale, updateProjectGambar, transferToPool, TransferPoolError, autoCompletePurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
+import { toggleForSale, updateProjectGambar, transferToPool, TransferPoolError, autoCompletePurchase, autoCancelDisputedPurchase, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
 import { getUserCertificates } from '@/lib/infrastructure';
 import { getBlockList, unblockUser } from '@/lib/blocks';
 import { BlockUserDialog } from '@/components/block-user-dialog';
@@ -140,6 +140,9 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
   anomali_ai: 'Anomali AI', anomali_ai_revert: 'Batal Anomali AI', anomali_ai_bersih: 'AI Review Bersih',
   kontribusi_infrastruktur: 'Reward Infrastruktur',
   klaim_lencana: 'Klaim Lencana',
+  dispute_auto_cancel: 'Dispute Dibatalkan Otomatis',
+  admin_suspend: 'Suspend Admin',
+  admin_unsuspend: 'Pulihkan Admin',
 };
 
 // ─── Transfer ke Pool Dialog ──────────────────────────────────────────────────
@@ -513,7 +516,7 @@ function LogTransaksi({
               <p className="text-xs text-muted-foreground">
                 {LOG_TYPE_LABELS[log.type]} · {relativeTime(log.timestamp)}
               </p>
-              {log.alasan && ['anomali_ai', 'anomali_ai_revert', 'anomali_ai_bersih'].includes(log.type) && (
+              {log.alasan && ['anomali_ai', 'anomali_ai_revert', 'anomali_ai_bersih', 'admin_suspend', 'admin_unsuspend'].includes(log.type) && (
                 <p className="text-xs text-muted-foreground italic mt-0.5 truncate">{log.alasan}</p>
               )}
             </div>
@@ -759,6 +762,11 @@ export default function DashboardPage() {
 
   async function handleToggleLapak(next: boolean) {
     if (!user) return;
+    // Client-side only — cukup karena isLapakAktif() sudah memeriksa
+    // suspended_by_admin di semua titik filter. Sekalipun user memaksa set
+    // lapak_aktif=true lewat console, suspend tetap menang di mana pun dicek;
+    // disable di sini murni UX (jangan biarkan user mengira toggle berpengaruh).
+    if (user.suspended_by_admin) return;
     if (!next) {
       setShowConfirmLapakOff(true);
       return;
@@ -830,16 +838,27 @@ export default function DashboardPage() {
 
       const allUnits = unitsSnap.docs.map((d) => toNFTUnit(d.id, d.data() as Record<string, unknown>));
 
-      // Lazy eval: auto-complete pembelian yang sudah melewati batas waktu
+      // Lazy eval: auto-complete pembelian pending yang sudah melewati batas waktu.
+      // Disputed + lewat deadline → auto-cancel (bukan auto-complete) — lihat
+      // autoCancelDisputedPurchase. Deadline sama persis (purchase_auto_complete_at
+      // tidak pernah diubah saat dispute diajukan), hanya hasil akhirnya beda.
       const nowMs = Date.now();
-      const expiredPurchases = allUnits.filter(u =>
+      const expiredPending = allUnits.filter(u =>
         u.purchase_status === 'pending' &&
         u.purchase_auto_complete_at &&
         nowMs > u.purchase_auto_complete_at.getTime(),
       );
-      if (expiredPurchases.length > 0) {
-        await Promise.all(expiredPurchases.map(u => autoCompletePurchase(u.id).catch(() => {})));
-        // Reload setelah auto-complete
+      const expiredDisputed = allUnits.filter(u =>
+        u.purchase_status === 'disputed' &&
+        u.purchase_auto_complete_at &&
+        nowMs > u.purchase_auto_complete_at.getTime(),
+      );
+      if (expiredPending.length > 0 || expiredDisputed.length > 0) {
+        await Promise.all([
+          ...expiredPending.map(u => autoCompletePurchase(u.id).catch(() => {})),
+          ...expiredDisputed.map(u => autoCancelDisputedPurchase(u.id).catch(() => {})),
+        ]);
+        // Reload setelah auto-complete/auto-cancel
         const [freshUserSnap, freshUnitsSnap] = await Promise.all([
           getDoc(doc(db, 'users', user.id)),
           getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
@@ -960,11 +979,17 @@ export default function DashboardPage() {
                 Transaksi yang sedang berjalan tetap harus diselesaikan. Anda keluar
                 sementara dari papan peringkat — posisi pulih otomatis saat kembali aktif.
               </p>
+              {user?.suspended_by_admin && (
+                <p className="text-xs text-destructive mt-1.5">
+                  Akun Anda ditangguhkan administrator — lapak tidak dapat diubah.
+                </p>
+              )}
             </div>
           </div>
           <Switch
             checked={lapakAktif}
             onCheckedChange={handleToggleLapak}
+            disabled={!!user?.suspended_by_admin}
             className="shrink-0 mt-0.5"
           />
         </div>

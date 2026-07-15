@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
   Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
-  Building2, Plus, X, HandCoins,
+  Building2, Plus, X, HandCoins, Ban,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -22,7 +22,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { recalculateAllDeveloperLevels, resolvePurchaseDispute, deleteProject, PurchaseError, type RecalcStats } from '@/lib/projects';
+import { recalculateAllDeveloperLevels, resolvePurchaseDispute, autoCancelDisputedPurchase, deleteProject, suspendUser, unsuspendUser, PurchaseError, type RecalcStats } from '@/lib/projects';
 import { getPendingBlocks, adminResolveBlock } from '@/lib/blocks';
 import {
   getInfrastructureFundStatus,
@@ -64,6 +64,7 @@ type DisputeItem = {
   type: string;
   reason: string;
   created_at: Date;
+  auto_complete_at: Date | null;
 };
 
 function formatDate(d: Date) {
@@ -297,6 +298,12 @@ function DisputeCard({
 
         <p className="text-xs text-muted-foreground">{formatDate(dispute.created_at)}</p>
 
+        {dispute.type !== 'buyback' && dispute.auto_complete_at && (
+          <p className="text-xs text-muted-foreground italic">
+            Jika tidak ditangani hingga {formatDate(dispute.auto_complete_at)}, transaksi dibatalkan otomatis.
+          </p>
+        )}
+
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -327,6 +334,79 @@ function DisputeCard({
         />
       )}
     </>
+  );
+}
+
+// ─── Suspend / Pulihkan User Dialog ───────────────────────────────────────────
+
+function SuspendUserDialog({
+  targetId, targetName, adminUid, willSuspend, onClose, onDone,
+}: {
+  targetId: string;
+  targetName: string;
+  adminUid: string;
+  willSuspend: boolean; // true = akan menangguhkan, false = akan memulihkan
+  onClose: () => void;
+  onDone: (nowSuspended: boolean) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleConfirm() {
+    if (!reason.trim()) { setError('Alasan wajib diisi.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      if (willSuspend) {
+        await suspendUser(targetId, adminUid, reason.trim());
+      } else {
+        await unsuspendUser(targetId, adminUid, reason.trim());
+      }
+      onDone(willSuspend);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memproses. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{willSuspend ? 'Tangguhkan Akun?' : 'Pulihkan Akun?'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-muted-foreground">
+            {willSuspend ? (
+              <>Akun <span className="font-medium text-foreground">{targetName}</span> akan
+                ditangguhkan — tidak bisa bertransaksi apapun (beli, validasi, buyback,
+                komentar, buat project) dan lapaknya otomatis tersembunyi hingga dipulihkan.</>
+            ) : (
+              <>Akun <span className="font-medium text-foreground">{targetName}</span> akan
+                dipulihkan — dapat bertransaksi kembali seperti biasa.</>
+            )}
+          </p>
+          <Textarea
+            placeholder="Alasan (wajib)…"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            className="text-sm resize-none"
+          />
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+          <Button variant={willSuspend ? 'destructive' : 'default'} onClick={handleConfirm} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {willSuspend ? 'Tangguhkan' : 'Pulihkan'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -521,6 +601,13 @@ export default function AdminPage() {
   const [pendingClaims, setPendingClaims] = useState<InfrastructureClaim[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(true);
 
+  // Suspend User
+  const [suspendEmail, setSuspendEmail] = useState('');
+  const [suspendLookupLoading, setSuspendLookupLoading] = useState(false);
+  const [suspendLookupError, setSuspendLookupError] = useState('');
+  const [foundUser, setFoundUser] = useState<{ id: string; displayName: string; suspended: boolean } | null>(null);
+  const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
+
   useEffect(() => {
     if (authLoading) return;
     if (!isModerator) router.replace('/');
@@ -546,6 +633,35 @@ export default function AdminPage() {
 
   function handleClaimProcessed(id: string) {
     setPendingClaims(prev => prev.filter(c => c.id !== id));
+  }
+
+  async function handleLookupUser() {
+    if (!suspendEmail.trim()) { setSuspendLookupError('Email wajib diisi.'); return; }
+    setSuspendLookupLoading(true);
+    setSuspendLookupError('');
+    setFoundUser(null);
+    try {
+      const usersSnap = await getDocs(query(
+        collection(db, 'users'),
+        where('email', '==', suspendEmail.trim()),
+        limit(1),
+      ));
+      if (usersSnap.empty) throw new Error(`User dengan email "${suspendEmail.trim()}" tidak ditemukan.`);
+      const d = usersSnap.docs[0];
+      setFoundUser({
+        id: d.id,
+        displayName: (d.data().displayName as string) ?? 'User',
+        suspended: (d.data().suspended_by_admin as boolean) ?? false,
+      });
+    } catch (e) {
+      setSuspendLookupError(e instanceof Error ? e.message : 'Terjadi kesalahan.');
+    } finally {
+      setSuspendLookupLoading(false);
+    }
+  }
+
+  function handleSuspendDone(nowSuspended: boolean) {
+    setFoundUser(prev => prev ? { ...prev, suspended: nowSuspended } : null);
   }
 
   async function loadInfra() {
@@ -642,7 +758,7 @@ export default function AdminPage() {
 
       if (snap.empty) { setDisputes([]); return; }
 
-      // Batch-fetch NFT names + seller/buyer names
+      // Batch-fetch NFT names + deadline + seller/buyer names
       const nftIds = [...new Set(snap.docs.map(d => d.data().nft_unit_id as string))];
       const sellerIds = [...new Set(snap.docs.map(d => d.data().seller_id as string))];
       const buyerIds = [...new Set(snap.docs.map(d => d.data().buyer_id as string))];
@@ -654,8 +770,11 @@ export default function AdminPage() {
       ]);
 
       const nftNameMap = new Map<string, string>();
+      const nftDeadlineMap = new Map<string, Date | null>();
       nftSnaps.forEach((s, i) => {
         nftNameMap.set(nftIds[i], s.exists() ? (s.data().nama_nft as string) ?? '—' : '—');
+        const at = s.exists() ? (s.data().purchase_auto_complete_at as Timestamp | undefined)?.toDate?.() : undefined;
+        nftDeadlineMap.set(nftIds[i], at ?? null);
       });
 
       const userNameMap = new Map<string, string>();
@@ -666,7 +785,26 @@ export default function AdminPage() {
         );
       });
 
-      setDisputes(snap.docs.map(d => {
+      // Lazy sweep: dispute 'purchase' yang deadline-nya (purchase_auto_complete_at,
+      // TIDAK berubah sejak dispute diajukan) sudah lewat → auto-cancel, tidak
+      // ditampilkan lagi di antrian (lihat autoCancelDisputedPurchase).
+      const nowMs = Date.now();
+      const stillPending: typeof snap.docs = [];
+      const toAutoCancel: string[] = [];
+      for (const d of snap.docs) {
+        const data = d.data();
+        const nftUnitId = data.nft_unit_id as string;
+        const deadline = nftDeadlineMap.get(nftUnitId) ?? null;
+        const isExpiredPurchaseDispute =
+          (data.type as string) === 'purchase' && !!deadline && nowMs > deadline.getTime();
+        if (isExpiredPurchaseDispute) toAutoCancel.push(nftUnitId);
+        else stillPending.push(d);
+      }
+      if (toAutoCancel.length > 0) {
+        await Promise.all(toAutoCancel.map(id => autoCancelDisputedPurchase(id).catch(() => {})));
+      }
+
+      setDisputes(stillPending.map(d => {
         const data = d.data();
         return {
           id: d.id,
@@ -679,6 +817,7 @@ export default function AdminPage() {
           type: (data.type as string) ?? 'purchase',
           reason: (data.reason as string) ?? '',
           created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
+          auto_complete_at: nftDeadlineMap.get(data.nft_unit_id as string) ?? null,
         };
       }));
     } finally {
@@ -1186,6 +1325,78 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Suspend User */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Ban className="h-4 w-4 text-red-600" />
+                Suspend User
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Tangguhkan akun yang melanggar — user yang ditangguhkan tidak bisa
+                bertransaksi apapun (beli, validasi, buyback, komentar, buat project)
+                dan lapaknya otomatis tersembunyi dari marketplace.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Email user"
+                  value={suspendEmail}
+                  onChange={e => { setSuspendEmail(e.target.value); setFoundUser(null); }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1"
+                  disabled={suspendLookupLoading}
+                  onClick={handleLookupUser}
+                >
+                  {suspendLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  Cari
+                </Button>
+              </div>
+              {suspendLookupError && (
+                <p className="text-xs rounded-md px-3 py-2 bg-destructive/10 text-destructive">{suspendLookupError}</p>
+              )}
+              {foundUser && (
+                <div className="rounded-lg border p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{foundUser.displayName}</p>
+                    <Badge
+                      variant={foundUser.suspended ? 'destructive' : 'secondary'}
+                      className="text-[10px] mt-1"
+                    >
+                      {foundUser.suspended ? 'Ditangguhkan' : 'Aktif'}
+                    </Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={foundUser.suspended ? 'default' : 'destructive'}
+                    className="text-xs shrink-0"
+                    onClick={() => setSuspendDialogOpen(true)}
+                  >
+                    {foundUser.suspended ? 'Pulihkan' : 'Tangguhkan'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {suspendDialogOpen && foundUser && (
+          <SuspendUserDialog
+            targetId={foundUser.id}
+            targetName={foundUser.displayName}
+            adminUid={user!.id}
+            willSuspend={!foundUser.suspended}
+            onClose={() => setSuspendDialogOpen(false)}
+            onDone={handleSuspendDone}
+          />
         )}
 
         {/* Recalculate Developer Levels */}

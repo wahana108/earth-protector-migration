@@ -40,6 +40,7 @@ export type User = {
   badge_kontributor?: boolean;
   total_kontribusi?: number;
   lapak_aktif?: boolean;
+  suspended_by_admin?: boolean;
 };
 
 export type NFT = {
@@ -334,7 +335,7 @@ export type Project = {
 
 export type NeracaLog = {
   id: string;
-  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'anomali_ai_bersih' | 'kontribusi_infrastruktur' | 'klaim_lencana';
+  type: 'beli' | 'beli_pool' | 'beli_pending' | 'beli_auto' | 'beli_dibatalkan' | 'jual' | 'validasi' | 'buyback' | 'buyback_auto' | 'level_change' | 'transfer_pool' | 'lewati_fifo' | 'fee_keluar' | 'fee_validator' | 'revalidasi_keluar' | 'revalidasi_masuk' | 'anomali_ai' | 'anomali_ai_revert' | 'anomali_ai_bersih' | 'kontribusi_infrastruktur' | 'klaim_lencana' | 'dispute_auto_cancel' | 'admin_suspend' | 'admin_unsuspend';
   nft_unit_id: string;
   nama_nft: string;
   harga_transaksi: number;

@@ -19,7 +19,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import {
-  confirmPurchase, reportPurchase, autoCompletePurchase, PurchaseError,
+  confirmPurchase, reportPurchase, autoCompletePurchase, autoCancelDisputedPurchase, PurchaseError,
 } from '@/lib/projects';
 import type { ProjectCategory } from '@/lib/types';
 import { getPlaceholder } from '@/lib/category-placeholders';
@@ -289,30 +289,47 @@ export default function PurchaseConfirmationsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const snap = await getDocs(query(
+      const pendingQuery = query(
         collection(db, 'nft_units'),
         where('developer_id', '==', user.id),
         where('purchase_status', '==', 'pending'),
-      ));
+      );
+      // Query terpisah untuk disputed — tidak ditampilkan di halaman ini (sudah
+      // bukan wewenang seller, menunggu admin), tapi tetap perlu di-sweep lazy
+      // agar tidak menggantung jika deadline lewat sebelum admin bertindak.
+      const [pendingSnap, disputedSnap] = await Promise.all([
+        getDocs(pendingQuery),
+        getDocs(query(
+          collection(db, 'nft_units'),
+          where('developer_id', '==', user.id),
+          where('purchase_status', '==', 'disputed'),
+        )),
+      ]);
 
-      if (snap.empty) { setPurchases([]); return; }
-
-      // Lazy eval: auto-complete yang sudah expired
+      // Lazy eval: auto-complete pending yang expired, auto-cancel disputed yang
+      // expired (deadline sama — purchase_auto_complete_at tidak berubah saat
+      // dispute diajukan, lihat autoCancelDisputedPurchase)
       const nowMs = Date.now();
-      const expired = snap.docs.filter(d => {
+      const expiredPending = pendingSnap.docs.filter(d => {
         const at = (d.data().purchase_auto_complete_at as Timestamp)?.toDate?.();
         return at && nowMs > at.getTime();
       });
-      if (expired.length > 0) {
-        await Promise.all(expired.map(d => autoCompletePurchase(d.id).catch(() => {})));
-        // Reload setelah auto-complete
-        const freshSnap = await getDocs(query(
-          collection(db, 'nft_units'),
-          where('developer_id', '==', user.id),
-          where('purchase_status', '==', 'pending'),
-        ));
-        snap.docs.splice(0, snap.docs.length, ...freshSnap.docs);
+      const expiredDisputed = disputedSnap.docs.filter(d => {
+        const at = (d.data().purchase_auto_complete_at as Timestamp)?.toDate?.();
+        return at && nowMs > at.getTime();
+      });
+
+      let snap = pendingSnap;
+      if (expiredPending.length > 0 || expiredDisputed.length > 0) {
+        await Promise.all([
+          ...expiredPending.map(d => autoCompletePurchase(d.id).catch(() => {})),
+          ...expiredDisputed.map(d => autoCancelDisputedPurchase(d.id).catch(() => {})),
+        ]);
+        // Reload pending setelah sweep
+        snap = await getDocs(pendingQuery);
       }
+
+      if (snap.empty) { setPurchases([]); return; }
 
       // Fetch buyer names
       const buyerIds = [...new Set(snap.docs.map(d => d.data().owner_id as string))];

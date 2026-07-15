@@ -44,13 +44,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow read:   if isAuth();
       allow create: if isMe(userId);
-      // badge_kontributor & total_kontribusi WAJIB admin-only — isMe(userId) di bawah
-      // sengaja dikecualikan dari kedua field ini (hasAny) agar user tidak bisa
-      // memberi badge/nilai kontribusi ke diri sendiri lewat write biasa.
+      // badge_kontributor, total_kontribusi, & suspended_by_admin WAJIB admin-only —
+      // isMe(userId) di bawah sengaja dikecualikan dari ketiga field ini (hasAny)
+      // agar user tidak bisa memberi badge/nilai ke diri sendiri atau melepas
+      // status suspend sendiri lewat write biasa.
       allow update: if
         (isMe(userId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['badge_kontributor', 'total_kontribusi'])) ||
+            .hasAny(['badge_kontributor', 'total_kontribusi', 'suspended_by_admin'])) ||
         isAdmin() ||
         (isAuth() && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['soldNfts', 'totalLikes', 'total_poin', 'total_poin_pending', 'buybackCount', 'level', 'pending_seller_actions', 'pending_buyback_actions', 'daily_usage'])) ||

@@ -9,6 +9,7 @@ import type { Comment } from './types';
 import { isBlocked } from './blocks';
 import { getCommunityConfig } from './community-config';
 import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString } from './rate-limit';
+import { isSuspended } from './ranking';
 
 export type FlaggedComment = {
   id: string;
@@ -89,6 +90,7 @@ export async function addComment(
     getCommunityConfig(),
     getDoc(doc(db, 'users', userId)),
   ]);
+  if (isSuspended(userSnap.data())) throw new Error('Akun Anda ditangguhkan administrator.');
   // Cek global setelah config tersedia — race condition minimal diterima (proteksi kasar)
   await checkGlobalDailyLimit('comments', config?.max_comments_global_per_day ?? 300);
 
