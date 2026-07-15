@@ -346,6 +346,8 @@ export type NeracaLog = {
   link_bukti?: string;
   review_id?: string;
   alasan?: string;
+  target_email?: string;
+  target_nama?: string;
   timestamp: Date;
 };
 

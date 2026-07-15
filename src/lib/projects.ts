@@ -2015,7 +2015,16 @@ export async function maybeAutoRecalculate(): Promise<void> {
 // suspended_by_admin HANYA ditulis lewat jalur ini (isAdmin() di rules).
 // Tidak menyentuh neraca — delta 0, murni penanda + jejak akuntabilitas publik.
 
-export async function suspendUser(targetUserId: string, adminUid: string, reason: string): Promise<void> {
+// targetEmail/targetNama diteruskan dari dokumen user yang sudah di-fetch saat
+// email-lookup di /admin — 0 read tambahan. Ditulis ke log agar identitas target
+// selalu terlihat langsung di UI log transaksi, tanpa perlu membuka console.
+export async function suspendUser(
+  targetUserId: string,
+  targetEmail: string,
+  targetNama: string,
+  adminUid: string,
+  reason: string,
+): Promise<void> {
   const batch = writeBatch(db);
   batch.update(doc(db, 'users', targetUserId), { suspended_by_admin: true });
   batch.set(doc(collection(db, 'users', targetUserId, 'neraca_log')), {
@@ -2027,12 +2036,20 @@ export async function suspendUser(targetUserId: string, adminUid: string, reason
     delta: 0,
     counterparty_id: adminUid,
     alasan: reason,
+    target_email: targetEmail,
+    target_nama: targetNama,
     timestamp: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function unsuspendUser(targetUserId: string, adminUid: string, reason: string): Promise<void> {
+export async function unsuspendUser(
+  targetUserId: string,
+  targetEmail: string,
+  targetNama: string,
+  adminUid: string,
+  reason: string,
+): Promise<void> {
   const batch = writeBatch(db);
   batch.update(doc(db, 'users', targetUserId), { suspended_by_admin: false });
   batch.set(doc(collection(db, 'users', targetUserId, 'neraca_log')), {
@@ -2044,6 +2061,8 @@ export async function unsuspendUser(targetUserId: string, adminUid: string, reas
     delta: 0,
     counterparty_id: adminUid,
     alasan: reason,
+    target_email: targetEmail,
+    target_nama: targetNama,
     timestamp: serverTimestamp(),
   });
   await batch.commit();

@@ -43,6 +43,8 @@ const TYPE_LABELS: Record<string, string> = {
   fee_keluar: 'Fee Keluar', fee_validator: 'Fee Validator',
   anomali_ai: 'Anomali AI', anomali_ai_revert: 'Pembatalan Anomali AI',
   anomali_ai_bersih: 'AI Review Bersih', kontribusi_infrastruktur: 'Reward Kontribusi',
+  dispute_auto_cancel: 'Dispute Dibatalkan Otomatis',
+  admin_suspend: 'Suspend Admin', admin_unsuspend: 'Pulihkan Admin',
 };
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
@@ -189,6 +191,9 @@ export default function TransactionsPage() {
             counterparty_id: (data.counterparty_id as string) ?? '',
             project_id: (data.project_id as string) ?? '',
             timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
+            ...(data.alasan !== undefined ? { alasan: data.alasan as string } : {}),
+            ...(data.target_email !== undefined ? { target_email: data.target_email as string } : {}),
+            ...(data.target_nama !== undefined ? { target_nama: data.target_nama as string } : {}),
           };
         });
         setLogs(entries);
@@ -306,6 +311,12 @@ export default function TransactionsPage() {
                       >
                         {TYPE_LABELS[entry.type] ?? entry.type}
                       </Badge>
+                      {['admin_suspend', 'admin_unsuspend'].includes(entry.type) && entry.target_nama && (
+                        <p className="text-[10px] text-muted-foreground mt-1 max-w-[180px] truncate">
+                          {entry.target_nama}{entry.target_email ? ` (${entry.target_email})` : ''}
+                          {entry.alasan ? ` — ${entry.alasan}` : ''}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 border-t max-w-[160px]">
                       {entry.nft_unit_id && entry.nft_unit_id !== 'system' ? (

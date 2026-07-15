@@ -340,10 +340,11 @@ function DisputeCard({
 // ─── Suspend / Pulihkan User Dialog ───────────────────────────────────────────
 
 function SuspendUserDialog({
-  targetId, targetName, adminUid, willSuspend, onClose, onDone,
+  targetId, targetName, targetEmail, adminUid, willSuspend, onClose, onDone,
 }: {
   targetId: string;
   targetName: string;
+  targetEmail: string;
   adminUid: string;
   willSuspend: boolean; // true = akan menangguhkan, false = akan memulihkan
   onClose: () => void;
@@ -359,9 +360,9 @@ function SuspendUserDialog({
     setError('');
     try {
       if (willSuspend) {
-        await suspendUser(targetId, adminUid, reason.trim());
+        await suspendUser(targetId, targetEmail, targetName, adminUid, reason.trim());
       } else {
-        await unsuspendUser(targetId, adminUid, reason.trim());
+        await unsuspendUser(targetId, targetEmail, targetName, adminUid, reason.trim());
       }
       onDone(willSuspend);
       onClose();
@@ -605,8 +606,11 @@ export default function AdminPage() {
   const [suspendEmail, setSuspendEmail] = useState('');
   const [suspendLookupLoading, setSuspendLookupLoading] = useState(false);
   const [suspendLookupError, setSuspendLookupError] = useState('');
-  const [foundUser, setFoundUser] = useState<{ id: string; displayName: string; suspended: boolean } | null>(null);
+  const [foundUser, setFoundUser] = useState<{ id: string; displayName: string; email: string; suspended: boolean } | null>(null);
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
+  const [suspendedUsers, setSuspendedUsers] = useState<{ id: string; displayName: string; email: string }[]>([]);
+  const [loadingSuspended, setLoadingSuspended] = useState(true);
+  const [restoreTarget, setRestoreTarget] = useState<{ id: string; displayName: string; email: string } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -620,7 +624,22 @@ export default function AdminPage() {
     loadBlocks();
     loadInfra();
     loadClaims();
+    loadSuspendedUsers();
   }, [isModerator]);
+
+  async function loadSuspendedUsers() {
+    setLoadingSuspended(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('suspended_by_admin', '==', true)));
+      setSuspendedUsers(snap.docs.map(d => ({
+        id: d.id,
+        displayName: (d.data().displayName as string) ?? 'User',
+        email: (d.data().email as string) ?? '',
+      })));
+    } finally {
+      setLoadingSuspended(false);
+    }
+  }
 
   async function loadClaims() {
     setLoadingClaims(true);
@@ -651,6 +670,7 @@ export default function AdminPage() {
       setFoundUser({
         id: d.id,
         displayName: (d.data().displayName as string) ?? 'User',
+        email: (d.data().email as string) ?? suspendEmail.trim(),
         suspended: (d.data().suspended_by_admin as boolean) ?? false,
       });
     } catch (e) {
@@ -662,6 +682,19 @@ export default function AdminPage() {
 
   function handleSuspendDone(nowSuspended: boolean) {
     setFoundUser(prev => prev ? { ...prev, suspended: nowSuspended } : null);
+    setSuspendedUsers(prev => {
+      if (!foundUser) return prev;
+      if (nowSuspended) {
+        return prev.some(u => u.id === foundUser.id) ? prev : [...prev, { id: foundUser.id, displayName: foundUser.displayName, email: foundUser.email }];
+      }
+      return prev.filter(u => u.id !== foundUser.id);
+    });
+  }
+
+  function handleRestoreDone() {
+    if (!restoreTarget) return;
+    setSuspendedUsers(prev => prev.filter(u => u.id !== restoreTarget.id));
+    setRestoreTarget(null);
   }
 
   async function loadInfra() {
@@ -1388,10 +1421,74 @@ export default function AdminPage() {
           </Card>
         )}
 
+        {/* User Ditangguhkan */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Ban className="h-4 w-4 text-red-600" />
+                User Ditangguhkan
+                {suspendedUsers.length > 0 && (
+                  <Badge className="bg-red-100 text-red-800 border-red-300 text-xs ml-auto font-normal">
+                    {suspendedUsers.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Semua akun yang sedang ditangguhkan admin, dalam satu tempat — pulihkan
+                langsung tanpa perlu mencari lewat log atau console.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingSuspended ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat…
+                </div>
+              ) : suspendedUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Tidak ada user yang sedang ditangguhkan.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {suspendedUsers.map(u => (
+                    <div key={u.id} className="rounded-lg border p-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{u.displayName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="text-xs shrink-0"
+                        onClick={() => setRestoreTarget(u)}
+                      >
+                        Pulihkan
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {restoreTarget && (
+          <SuspendUserDialog
+            targetId={restoreTarget.id}
+            targetName={restoreTarget.displayName}
+            targetEmail={restoreTarget.email}
+            adminUid={user!.id}
+            willSuspend={false}
+            onClose={() => setRestoreTarget(null)}
+            onDone={handleRestoreDone}
+          />
+        )}
+
         {suspendDialogOpen && foundUser && (
           <SuspendUserDialog
             targetId={foundUser.id}
             targetName={foundUser.displayName}
+            targetEmail={foundUser.email}
             adminUid={user!.id}
             willSuspend={!foundUser.suspended}
             onClose={() => setSuspendDialogOpen(false)}

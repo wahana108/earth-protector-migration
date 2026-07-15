@@ -103,6 +103,8 @@ function toNeracaLog(id: string, data: Record<string, unknown>): NeracaLog {
     timestamp: (data.timestamp as Timestamp)?.toDate?.() ?? new Date(),
     ...(data.review_id !== undefined ? { review_id: data.review_id as string } : {}),
     ...(data.alasan !== undefined ? { alasan: data.alasan as string } : {}),
+    ...(data.target_email !== undefined ? { target_email: data.target_email as string } : {}),
+    ...(data.target_nama !== undefined ? { target_nama: data.target_nama as string } : {}),
   };
 }
 
@@ -514,7 +516,10 @@ function LogTransaksi({
             <div className="flex-1 min-w-0">
               <p className="font-medium leading-snug truncate">{log.nama_nft}</p>
               <p className="text-xs text-muted-foreground">
-                {LOG_TYPE_LABELS[log.type]} · {relativeTime(log.timestamp)}
+                {LOG_TYPE_LABELS[log.type]}
+                {['admin_suspend', 'admin_unsuspend'].includes(log.type) && log.target_nama &&
+                  `: ${log.target_nama}${log.target_email ? ` (${log.target_email})` : ''}`}
+                {' · '}{relativeTime(log.timestamp)}
               </p>
               {log.alasan && ['anomali_ai', 'anomali_ai_revert', 'anomali_ai_bersih', 'admin_suspend', 'admin_unsuspend'].includes(log.type) && (
                 <p className="text-xs text-muted-foreground italic mt-0.5 truncate">{log.alasan}</p>
