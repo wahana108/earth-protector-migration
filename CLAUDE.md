@@ -7,7 +7,7 @@
 
 ## Apa proyek ini?
 
-TMEP adalah platform komunitas open-source untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace spekulatif. NFT = sertifikat pengakuan tindakan nyata. Semua nilai adalah poin simbolik reputasi, bukan uang.
+TMEP adalah platform komunitas open-source untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace spekulatif. NFT = sertifikat pengakuan tindakan nyata. Semua nilai adalah poin simbolik reputasi, bukan uang. Platform = "lapisan pencatatan sosial": transaksi nilai nyata terjadi DI LUAR platform (eksternal); platform tidak pernah memegang risiko finansial.
 
 **Visi realistis:** Platform = ETALASE FUNGSIONAL — bukti konsep berjalan, aman diperkenalkan tanpa takut crash/overload/tagihan. Skalabilitas sengaja DIBATASI KETAT (batasan = fitur pelindung free tier). Semua batasan = parameter transparan di /parameters (nilai ≤0 = unlimited) — pengembang berpendanaan yang fork tinggal membukanya TANPA ubah kode.
 
@@ -19,16 +19,18 @@ TMEP adalah platform komunitas open-source untuk mengabadikan tindakan nyata cha
 5. Neraca positif = buffer reputasi, BUKAN uang
 6. **Konservasi nilai (zero-sum):** setiap pemotongan di satu sisi = penambahan di sisi lain. Total neraca semua entitas = 0.
 7. Fibonacci = filosofi eksistensi/penyebaran organik
-8. Log publik tidak boleh hilang — koreksi = entri baru, bukan penghapusan
+8. Log publik tidak boleh hilang — koreksi = entri baru, bukan penghapusan. Identitas & alasan tercatat di log tindakan admin (akuntabilitas).
+
+**Kontrak tanggung jawab (lapak aktif):** Lapak ON = user menyatakan "saya memantau" → kelalaian memantau transaksi sendiri = tanggung jawab user (dispute window tersedia). Lapak OFF = lapak tutup, tidak ada transaksi baru → tidak ada celah dimanfaatkan. Sistem menyediakan semua alat; memakainya = pilihan sadar user.
 
 ---
 
 ## Stack & Deployment
 
-- Next.js 15 (Turbopack) + Firebase (Firestore, Auth) + Vercel (main → production)
+- Next.js 15 (Turbopack) + Firebase (Firestore, Auth, Admin SDK) + Vercel (main → production)
 - Repo: github.com/wahana108/earth-protector-migration | Registry federasi: earth-nft-instances
 - Super admin: ramawan01@gmail.com (super_admin_email di community_config/v1)
-- **Status: LEVEL 2 OTONOM TERCAPAI & LIVE.** Semua fitur AI aktif di production, dalam pemantauan.
+- **Status: SEMUA FASE INTI LIVE + dalam pemantauan produksi.** Level 2 otonom aktif; fase Komunitas & Tata Kelola Mandiri baru saja merge.
 
 ### Environment variables (Vercel production SUDAH di-set)
 ```
@@ -36,12 +38,11 @@ NEXT_PUBLIC_SUPER_ADMIN_EMAIL, NEXT_PUBLIC_FIREBASE_*
 NEXT_PUBLIC_USE_EMULATOR   → hanya 'true' di .env.local dev. TIDAK ADA di Vercel.
 RECALC_SECRET              → /api/recalculate (sama dengan GitHub Secret)
 AI_REVIEW_SECRET           → /api/ai-review-auto (sama dengan GitHub Secret)
-GEMINI_API_KEY             → key dengan akses free tier terbukti (key lama; key BARU
-                             Google tidak dapat free tier — limit 0. Lihat Known Issues)
+GEMINI_API_KEY             → key dengan free tier terbukti (key lama/grandfathered;
+                             key BARU Google tidak dapat free tier — limit 0)
 GEMINI_MODEL               → opsional, override model (format: googleai/nama-model)
 FIREBASE_SERVICE_ACCOUNT_KEY → base64(JSON service account) untuk Admin SDK
-FIRESTORE_EMULATOR_HOST    → HANYA di .env.local dev (127.0.0.1:8082) agar Admin SDK
-                             menulis ke emulator. TIDAK BOLEH ada di Vercel!
+FIRESTORE_EMULATOR_HOST    → HANYA .env.local dev (127.0.0.1:8082). DILARANG di Vercel!
 ```
 ### GitHub Secrets: APP_URL, RECALC_SECRET, AI_REVIEW_SECRET
 
@@ -53,178 +54,235 @@ FIRESTORE_EMULATOR_HOST    → HANYA di .env.local dev (127.0.0.1:8082) agar Adm
 FASE 1-2C ✓ Fondasi, inti, keamanan, tata kelola dasar
 FASE 3    ✓ FIFO-only validation, Fibonacci quota, effective_buyback,
             tiered ranking, batasan stabilitas, recalculate 2 lapis
-RATE LIMITING ✓ Batas harian per-user & global (proteksi biaya)
+RATE LIMITING ✓ Batas harian per-user & global
 AI GOVERNANCE TAHAP A ✓ Manual-bridge, watermark, konservasi nilai,
             unifikasi fee_pool, reward kontributor
-AI OTONOM LEVEL 2 ✓ TERCAPAI: Gemini API bridge + cron bulanan —
-            siklus penuh TANPA manusia terbukti (2026-07):
-            deteksi self-dealing berbasis bukti → vonis → minus →
-            zero-sum → efek peringkat. Dua mode berdampingan
-            (manual-bridge & otonom).
+AI OTONOM LEVEL 2 ✓ Gemini API bridge + cron bulanan — siklus penuh
+            tanpa manusia terbukti (2026-07); dua mode berdampingan
+KOMUNITAS & TATA KELOLA MANDIRI ✓ (2026-07, fase terbaru):
+            lencana kontributor, lapak on/off, admin suspend,
+            dispute auto-cancel, panduan transaksi sehat,
+            hardening rules users, atomic increment fee sharing
 ```
 
 ---
 
-## ARSITEKTUR AI OTONOM LEVEL 2 (fase terbaru)
+## FASE KOMUNITAS & TATA KELOLA MANDIRI (terbaru — detail)
 
-### Endpoint /api/ai-review-auto (POST, header x-ai-review-secret)
+### Lencana Kontributor ("centang biru" TMEP)
 ```
-13 langkah: auth → load config → guard (ai_governance_enabled &&
+Collection infrastructure_claims: {user_id, user_nama, nilai, bukti_link
+(wajib URL), keterangan, status pending/approved/rejected, admin_uid,
+alasan_penolakan, created_at, processed_at}.
+User.badge_kontributor (boolean) + total_kontribusi (akumulasi approved).
+
+ALUR: /infrastructure form klaim (guard 1-pending client-side = soft,
+verifikasi admin = gerbang keras) → neraca_log 'klaim_lencana' delta 0 →
+/admin antrian → SETUJUI (writeContributorRewardTx helper bersama:
+cek saldo DI DALAM transaction; user +nilai +badge +total_kontribusi;
+fee_pool saldo- dialokasikan+; infrastructure_payments tercatat) atau
+TOLAK (alasan wajib, jejak permanen).
+
+BADGE VISUAL: <ContributorBadge> (ShieldCheck emerald + tooltip
+"Kontributor Infrastruktur · Rp X") di dashboard, top-developers,
+project detail, komentar. Komentar = DENORMALIZED saat addComment
+(snapshot seperti display_name, nol read tambahan; komentar lama tanpa
+badge = wajar). Parameter: badge_klaim_enabled (default true).
+
+PENTING — RULES HARDENED (temuan kritis fase ini): cabang isMe(userId)
+dulu memberi tulis penuh SEMUA field → user bisa self-badge! Kini:
+isMe && !affectedKeys().hasAny(['badge_kontributor','total_kontribusi',
+'suspended_by_admin']). Konvensi: setiap field admin-only baru WAJIB
+masuk daftar hasAny ini.
+```
+
+### Lapak Aktif/Nonaktif (kontrak tanggung jawab)
+```
+User.lapak_aktif?: boolean — undefined/true = AKTIF (default ON, user
+lama tanpa field = aktif). Toggle di /dashboard + confirm-off dialog.
+Helper: isLapakAktif(data) di ranking.ts =
+  lapak_aktif !== false && suspended_by_admin !== true
+(SATU helper untuk lapak + suspend — semua filter otomatis berlaku
+untuk keduanya.)
+
+IMPLEMENTASI = FILTER DI TITIK BACA (BUKAN menyentuh neraca/data —
+saat ON kembali, posisi pulih otomatis karena data tak pernah berubah):
+- buyNftUnit: guard keras owner-based (sellerSnap sudah di-fetch) —
+  NFT yang SUDAH dimiliki orang lain tetap tradable
+- fetchNextFifoNft (pool/page.tsx): skip kandidat teratas ber-owner OFF
+  (1 read per kandidat, reason 'lapak_nonaktif')
+- /explore + /pool grid: batch documentId() in chunk 10, dedup owner
+- /projects: piggyback devSnaps yang sudah di-fetch (0 read)
+- /top-developers + recalculateAllDeveloperLevels: filter in-memory
+  sebelum tier/kuota — kuota Fibonacci dihitung dari USER AKTIF saja
+- AI review (client + Admin): exclude OFF devs
+- Kewajiban BERJALAN tetap selesai (OFF hanya blokir transaksi baru)
+
+⚠ JEBAKAN FIRESTORE (pelajaran penting): JANGAN PERNAH
+where('lapak_aktif','!=',false) — inequality query MENGECUALIKAN
+dokumen tanpa field → user lama terkecualikan → kuota runtuh!
+Pola benar: totalAll − totalOff (dua count equality), atau untuk
+suspend: or(where('lapak_aktif','==',false),
+where('suspended_by_admin','==',true)) — composite or() SDK v11.
+```
+
+### Admin Suspend (user berbahaya)
+```
+User.suspended_by_admin?: boolean — HANYA admin (rules hasAny).
+Efek = lapak OFF (via isLapakAktif) + guard aktor: isSuspended() helper
+terpisah di titik aksi (buy/validate/buyback/comment/create) →
+"Akun Anda ditangguhkan administrator." (lapak OFF sendiri TIDAK
+memblokir aksi user di tempat lain — hanya suspend yang memblokir.)
+Dashboard: toggle lapak disabled client-side saat suspended (keputusan
+sadar: tanpa rules tambahan — isLapakAktif tetap menang meski user
+paksa via console).
+/admin: tool email-lookup Tangguhkan/Pulihkan (alasan WAJIB) + card
+"User Ditangguhkan" (query equality suspended==true, pulihkan 1 klik).
+AUDIT TRAIL: neraca_log 'admin_suspend'/'admin_unsuspend' delta 0
+dengan target_email + target_nama + alasan + counterparty_id adminUid —
+siapa pun bisa melihat siapa di-suspend & kenapa dari log, tanpa console.
+```
+
+### Dispute Auto-Cancel (anti-menggantung, simetri auto-complete)
+```
+MASALAH LAMA: reportPurchase set purchase_status 'disputed' →
+autoCompletePurchase no-op → menggantung selamanya menunggu admin.
+KINI: autoCancelDisputedPurchase() — jika dispute TIDAK ditangani
+sampai deadline yang ADA (purchase_auto_complete_at, TANPA delay baru):
+NFT kembali ke penjual, total_poin_pending pembeli dikurangi,
+purchase_status 'cancelled', dispute 'auto_cancelled', neraca_log
+'dispute_auto_cancel' DUA SISI (jejak untuk analisis AI kelak).
+Lazy check di 3 titik (dashboard pembeli, purchase-confirmations
+penjual, /admin loadDisputes — zero extra reads).
+SIMETRI INSENTIF: diam tanpa report = jadi (auto-complete); report +
+admin diam = batal (auto-cancel). Penjual ber-reputasi mudah dihukum
+bila report palsu (pola report berlebihan = anomali di mata AI).
+Admin tetap bisa resolve manual SEBELUM deadline. Scope: purchase
+dispute saja (buyback dispute tidak disentuh).
+```
+
+### Peran (pembagian tugas)
+```
+SUPER ADMIN: kendali node, tak bisa dicabut dari dalam platform.
+ADMIN = menjaga NILAI: klaim, AI review/revert, dispute, suspend,
+parameter, recalculate, angkat moderator. Semua yang menggerakkan
+poin/status = admin (akuntabilitas zero-sum).
+MODERATOR = menjaga RUANG: moderasi komentar/konten. TIDAK menyentuh
+neraca. Hirarki dirancang MENYUSUT: dispute→auto-cancel ✓,
+anomali→AI otonom ✓, klaim→AI (roadmap), sanggahan→AI (roadmap).
+```
+
+---
+
+## ARSITEKTUR AI OTONOM LEVEL 2
+
+### Endpoint /api/ai-review-auto (POST, x-ai-review-secret)
+```
+13 langkah: auth → config → guard (ai_governance_enabled &&
 ai_auto_mode_enabled && GEMINI_API_KEY) → guard interval
-(fee_pool/v1.last_auto_review_at vs ai_auto_interval_days) →
-fetch devs (Admin SDK, top_developer+kandidat, sort last_ai_review_at
-TERTUA dulu/null-first, limit ai_auto_max_devs_per_run) →
-fetch logs (hormati watermark) → aggregate → buildAiReviewPrompt →
-Gemini (fallback chain) → parseAiOutput → applyAiReviewAdmin →
-update last_auto_review_at → response JSON.
-
-Guard yang tidak lolos → { ok:true, skipped:true, reason } (cron tetap hijau).
-Error per langkah → { ok:false, step:'...', error } (mudah debug).
-created_by/counterparty_id run otonom = 'ai-auto' (vs UID admin di manual,
-'system' di operasi sistem lain — tiga aktor, tiga penanda).
-Keputusan otonom = FINAL via masa sanggah (ai_review_revert_days;
-revert manual admin tetap ada sebagai kebijakan).
+(fee_pool/v1.last_auto_review_at vs ai_auto_interval_days) → fetch devs
+(Admin SDK, top_developer+kandidat AKTIF, sort last_ai_review_at tertua/
+null-first, limit ai_auto_max_devs_per_run) → logs (watermark) →
+aggregate → buildAiReviewPrompt → Gemini (fallback chain) →
+parseAiOutput → applyAiReviewAdmin → update timestamp → JSON.
+Guard gagal → {ok:true,skipped:true,reason} (cron hijau).
+Error → {ok:false,step,error}. Aktor otonom: 'ai-auto' (vs UID admin
+manual, 'system' operasi lain). Keputusan FINAL via masa sanggah.
+Cron: monthly-ai-review.yml (tanggal 1, 02:00 WITA + dispatch).
 ```
 
-### Pola Hybrid (Opsi C) — dua SDK berdampingan
+### Pola Hybrid (dua SDK berdampingan)
 ```
-src/lib/ai-review.ts        → client SDK, manual-bridge (TIDAK disentuh)
-src/lib/ai-review-server.ts → Admin SDK: getTopDevsForAiReviewAdmin,
-                              fetchDevLogsAdmin, applyAiReviewAdmin
-src/lib/firebase-admin.ts   → init dari FIREBASE_SERVICE_ACCOUNT_KEY
-                              (base64→JSON), HMR-safe guard
-Fungsi PURE dipakai bersama (satu sumber kebenaran, zero duplikasi):
+ai-review.ts (client, manual-bridge — tak disentuh) +
+ai-review-server.ts (Admin SDK: getTopDevsForAiReviewAdmin,
+fetchDevLogsAdmin, applyAiReviewAdmin) + firebase-admin.ts (init dari
+FIREBASE_SERVICE_ACCOUNT_KEY base64). Fungsi PURE dipakai bersama:
 aggregateDevData, buildAiReviewPrompt, parseAiOutput, calcMinusNeraca.
-firebase-admin WAJIB di dependencies (bukan devDependencies) untuk Vercel.
+firebase-admin di dependencies (bukan dev)!
 ```
 
-### Gemini fallback chain (pelajaran dari lineup model Google yang berubah-ubah)
+### Prompt baku (satu sumber manual & otonom)
 ```
-MODEL_CANDIDATES = [GEMINI_MODEL env, gemini-2.5-flash-lite,
-  gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash-lite, gemini-2.0-flash]
-Coba berurutan; error /404|429|not available|quota|no longer|retired/i
-→ lanjut kandidat berikutnya. Sukses → response menyertakan model_used.
-Konfigurasi genkit.ts (plugin @genkit-ai/google-genai, temperature 0.15).
-```
-
-### Prompt baku (buildAiReviewPrompt — SATU sumber untuk manual & otonom)
-```
-Struktur: peran → KONTEKS KOMUNITAS (total user N, dev dinilai M —
-kalibrasi ukuran komunitas, cegah false positive komunitas kecil) →
-DATA (id 6-char anonim, jual/buyback/counterparty top-3 dua arah) →
-INSTRUKSI: fokus self-dealing/volume/sirkular; ATURAN KRITIS:
-"tanpa aktivitas = WAJIB skor 0" + "skor >0 HANYA dengan bukti konkret
-yang dirujuk di alasan" → format output PERSIS:
-SKOR: [id_6char] | [0-100] | [alasan maks 80 char]
-Terbukti: Gemini merujuk ID counterparty di alasan (mis.
-"Counterparty jual & buyback berulang (bUhVWb)").
+Peran → KONTEKS KOMUNITAS (total user N, dev dinilai M — kalibrasi
+komunitas kecil) → DATA (id 6-char anonim, jual/buyback/counterparty
+top-3 dua arah) → INSTRUKSI: "TANPA aktivitas = WAJIB skor 0, JANGAN
+skor kecil karena ragu" + "skor >0 HANYA dengan bukti konkret dirujuk
+di alasan" → format: SKOR: [id] | [0-100] | [alasan ≤80 char].
+Terbukti: Gemini merujuk ID counterparty di alasan.
 ```
 
-### Cron: .github/workflows/monthly-ai-review.yml
+### AI Governance Tahap A (manual-bridge) — berdampingan
 ```
-Tanggal 1 tiap bulan 02:00 WITA + workflow_dispatch (test manual).
-curl POST + header secret. Node fork: set 3 env Vercel + 1 GitHub Secret
-+ nyalakan parameter → otonom aktif.
-```
-
-### Parameter AI otonom (community_config)
-```
-ai_auto_mode_enabled (master switch otonom), ai_auto_interval_days 30,
-ai_auto_max_devs_per_run 10 (pelindung biaya; fork tinggal naikkan).
-Prioritas run: top developer + kandidat SAAT INI (yang turun peringkat
-tidak direview — posisi teratas = posisi yang diawasi), urut watermark
-tertua (yang paling lama belum dinilai duluan; kembali ke puncak =
-langsung prioritas).
+/ai-review: export → prompt → paste hasil → preview → apply (zero-sum,
+watermark User.last_ai_review_at, log 'anomali_ai'/'anomali_ai_bersih'/
+'anomali_ai_revert' dengan alasan + reverted_by). Revert = kebijakan
+manual admin; watermark tidak mundur. minus = floor(skor/divisor) ×
+harga_dasar; skor<min_skor → dibagi 2.
 ```
 
 ---
 
-## AI GOVERNANCE TAHAP A (manual-bridge) — tetap aktif berdampingan
+## NERACA SISTEM (fee_pool/v1)
 
 ```
-/ai-review (admin): export data → salin ke AI eksternal → paste hasil →
-parse → preview → apply. Parameter: ai_governance_enabled (master),
-ai_review_history_limit 50, ai_review_history_days 50,
-ai_anomali_divisor 10, ai_anomali_min_skor 30, ai_review_revert_days 7.
-minus_nft = floor(skor/divisor); skor<min_skor → floor(skor/divisor/2).
-minus = minus_nft × harga_dasar. Efek peringkat OTOMATIS via
-effective_buyback (tanpa logika hukuman baru).
+saldo_tersedia = KAS AKTIF = (dari_fee + dari_anomali + dari_lain) −
+dialokasikan_lencana. + last_auto_review_at.
 
-WATERMARK: User.last_ai_review_at — log yang sudah dinilai TERSEGEL
-(fetchDevLogs pakai '>'). applyAiReview set watermark SEMUA dev dinilai
-(termasuk skor 0 → log 'anomali_ai_bersih' delta 0 sebagai audit).
-Revert TIDAK memundurkan watermark. Rules: hanya admin (di luar hasOnly).
+FEE SHARING (zero-sum, kini ATOMIC INCREMENT): terpicu saat NFT 'valid'
+terjual & jumlah_nft_terjual % fee_trigger_per_nft == 0. PEMBAYAR:
+developer ASLI. feeInfrastruktur → kas; feeValidator → dibagi
+PROPORSIONAL nilai validasi, langsung saat terpicu, increment() atomik
+(fix race condition — read dipertahankan sebagai existence guard,
+write kini increment). NFT valid diperdagangkan terus di explorer =
+fee berulang validator; masuk FIFO & terbeli → biasa lagi sampai
+revalidasi.
 
-KONSERVASI: user -X → fee_pool total_dari_anomali +X, saldo_tersedia +X.
-Revert simetris per-entry. Log revert menyertakan alasan
-("Pembatalan: [alasan asli]") + reverted_by (UID admin).
-
-MASA SANGGAH: window mencatat keberatan, BUKAN pembalikan otomatis.
-Keputusan AI final; revert admin = kebijakan manual meringankan.
-Log gugatan/report akan masuk agregasi AI di masa depan (roadmap).
-```
-
----
-
-## NERACA SISTEM (fee_pool/v1) — sumber tunggal
-
-```
-saldo_tersedia = KAS AKTIF = (total_dari_fee + total_dari_anomali +
-total_dari_lain) - total_dialokasikan_lencana.
-+ last_auto_review_at (penanda run otonom terakhir).
-total_terkumpul/terdistribusi = audit lama (dipertahankan).
-
-FEE SHARING (terverifikasi zero-sum): terpicu saat NFT 'valid' terjual &
-jumlah_nft_terjual % fee_trigger_per_nft == 0. feeTotal = harga ×
-feeProjectPct%. PEMBAYAR: developer ASLI project. feeInfrastruktur
-(fee_infrastruktur_pct%) → saldo_tersedia + total_dari_fee.
-feeValidator (sisa) → dibagi PROPORSIONAL nilai validasi:
-share = (nilai_validator / total_nilai) × feeValidator, langsung ke
-neraca tiap validator saat fee terpicu (tidak menunggu akumulasi).
-NFT valid yang terus diperdagangkan di explorer = fee berulang bagi
-validator (insentif memvalidasi project berkualitas). NFT valid masuk
-FIFO & terbeli → jadi biasa lagi sampai revalidasi.
-
-REWARD KONTRIBUTOR (jalur aktif): bayar infrastruktur NYATA → bukti →
-admin verifikasi (/admin) → kontributor +nilai, saldo_tersedia -nilai,
-total_dialokasikan_lencana +nilai, tercatat infrastructure_payments
-(publik). Saldo kurang → reward menunggu. DEPRECATED: sertifikat NFT
-pool (double-debit bug; fungsi @deprecated, UI disembunyikan).
+REWARD KONTRIBUTOR: via klaim (di atas) atau langsung admin — helper
+writeContributorRewardTx bersama, saldo dicek dalam transaction.
+DEPRECATED: sertifikat NFT pool (double-debit; @deprecated, UI hidden).
 ```
 
 ---
 
 ## Konvensi kritis
 ```
-- Semua write nilai atomic (tx/batch) → neraca_log. Zero-sum selalu.
-- SETIAP field baru → WAJIB cek hasOnly() allowlist rules (regresi:
-  pending_buyback_actions dulu terlupa → gagal senyap).
-- Log sistem nft_unit_id: 'system' → render plain text, BUKAN Link.
-- RateLimitError & domain error: cek instanceof SEBELUM pesan generik.
-- Emulator: restart setelah ubah rules; NEXT_PUBLIC_USE_EMULATOR untuk
-  client+server; FIRESTORE_EMULATOR_HOST untuk Admin SDK.
-- Deploy rules: $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; firebase deploy --only firestore:rules
-- Rollback: Vercel → Deployments → Promote deployment lama.
-- Test API PowerShell: (Invoke-WebRequest -Uri "..." -Method POST -Headers @{"x-...-secret"="..."} -UseBasicParsing).Content
+- Semua write nilai atomic (tx/batch/increment) → neraca_log. Zero-sum.
+- Field baru → WAJIB cek hasOnly()/hasAny() allowlist rules. Field
+  admin-only → masuk hasAny larangan isMe (badge, total_kontribusi,
+  suspended_by_admin).
+- JANGAN where('field','!=',...) untuk field yang bisa undefined —
+  inequality mengecualikan dokumen tanpa field! Pakai equality count /
+  or() / filter in-memory.
+- Log sistem nft_unit_id 'system' → render plain text, BUKAN Link.
+- Badge/tooltip (Radix div) JANGAN di dalam <p> → hydration error.
+  Wadah: div/span.
+- RateLimitError & error domain: cek instanceof SEBELUM pesan generik.
+- Emulator: restart setelah ubah rules; FIRESTORE_EMULATOR_HOST untuk
+  Admin SDK dev.
+- Deploy rules SEBELUM merge kode yang membutuhkannya:
+  $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; firebase deploy --only firestore:rules
+- Build stuck .next/trace = lingkungan Windows (antivirus/lock), bukan
+  kode → rm .next + rebuild; tsc --noEmit sebagai verifikasi cepat.
+- Rollback: Vercel → Deployments → Promote.
+- Test API: (Invoke-WebRequest -Uri "..." -Method POST -Headers @{"x-...-secret"="..."} -UseBasicParsing).Content
 - Workflow: advisor merancang prompt → Claude CLI eksekusi → laporan
-  via file .txt (lampiran inline sering kosong).
-- Branch fitur: push di awal (git push -u origin feat/...), merge ke
-  main setelah teruji.
+  file .txt. Branch: push -u di awal, merge setelah teruji.
 ```
 
 ---
 
-## Community Config production (nilai riil aktif)
+## Community Config production (aktif)
 ```
 harga_dasar 100000, batas_atas 150000, nilai_min/maks_project 3jt/10jt,
 minimum_buyback_pct 50, minimum_soldNfts_top_developer 24,
-purchase_autoclose_days 7, minimum_holding_days 7, max_projects_per_user 10,
+purchase_autoclose_days 7, minimum_holding_days 7, max_projects 10,
 min_realisasi_pct 20, max_nft_in_pool_per_developer 3, fee 2-5%,
-fee_trigger_per_nft 10, fee_infrastruktur_pct 50, rate limits 20/2/30/20/300,
-AI: governance & auto AKTIF (dipantau), divisor 10, min_skor 30,
-revert_days 7, interval 30 hari, max_devs_per_run 10.
+fee_trigger_per_nft 10, fee_infrastruktur_pct 50, rate limits
+20/2/30/20/300, badge_klaim_enabled true, AI: governance & auto AKTIF
+(dipantau), divisor 10, min_skor 30, revert_days 7, interval 30,
+max_devs_per_run 10.
 > TESTING emulator: holding 0, min_soldNfts 5-8, pool 3-5, revert_days 0,
-> mundurkan last_auto_review_at manual untuk lolos guard interval.
+> mundurkan last_auto_review_at / purchase_auto_complete_at manual.
 ```
 
 ---
@@ -232,45 +290,36 @@ revert_days 7, interval 30 hari, max_devs_per_run 10.
 ## ROADMAP — pengembangan berikutnya
 
 ```
-PRIORITAS BERIKUT — BADGE/LENCANA KONTRIBUTOR (dibahas sesi depan):
-  Badge visual = "centang biru" TMEP: label kontributor di profil & NFT
-  (seperti verified X/Telegram) — user merasa spesial, insentif mudah
-  untuk mendukung eksistensi & update platform. Idealnya menyertakan
-  NILAI kontribusi pada badge. Komponen: tombol "Saya Sudah Berkontribusi"
-  (klaim user → antrian → verifikasi admin/AI), badge visual di profil +
-  disematkan di NFT, tampilan nilai kontribusi. Data infrastructure_payments
-  sudah siap sebagai fondasi.
-
 SANGGAHAN OTONOM: vonis final; keberatan → klarifikasi FORMAT WAJIB →
   antrian → dinilai AI review berikutnya sebagai log khusus (valid →
-  minus berkurang sebagian; alibi → minus BERTAMBAH sbg disinsentif +
-  biaya komputasi). Report user memberatkan, gugatan meringankan —
-  keduanya masuk agregasi prompt AI masa depan.
+  minus berkurang sebagian; alibi → minus BERTAMBAH). Report memberatkan,
+  gugatan meringankan — masuk agregasi prompt AI. Log dispute_auto_cancel
+  & klaim sudah dirancang sebagai bahan analisis ini.
 
-USER AKTIF & PRUNING: nonaktifkan/sembunyikan developer terbawah tanpa
-  aktivitas periodik → total user berubah → kuota Fibonacci menyesuaikan
-  (recalculate). Menjaga slot top developer relevan dengan komunitas hidup.
+VERIFIKASI KLAIM LENCANA OLEH AI: antrian klaim dibaca AI (bukti link
+  dianalisis) → pola manual→otonom yang sama dengan AI review.
 
 PERKAYA DATA AI: proof_link, transaction_description, timestamp detail,
-  jeda antar-transaksi ke export (field sudah ada; makin kaya makin akurat,
-  diparameterkan krn reads). Format log standar + aturan jeda transaksi.
+  jeda antar-transaksi ke export (diparameterkan krn reads). Format log
+  standar + aturan jeda.
 
-PANDUAN /help: "Transaksi Sehat" — AI menilai POLA: anomali = self-dealing/
-  kecepatan tak wajar/tanpa bukti; sehat = counterparty beragam, jeda wajar,
-  ada proof_link. (Draft prompt pernah dibuat, belum diterapkan.)
+BADGE BERTINGKAT (perak/emas berdasar total_kontribusi) — fondasi siap.
 
-KNOWN ISSUES (pre-existing, terdokumentasi sadar):
-- Gemini API key BARU Google tidak dapat free tier (limit 0) — pakai key
-  lama/grandfathered atau aktifkan billing. Fallback chain + GEMINI_MODEL
-  env = mitigasi lineup model yang berubah.
-- Fee sharing: neraca developer/validator ditulis nilai ABSOLUT (bukan
-  increment) → race teoretis. Perbaikan: increment()/transaction.
-- Global rate limit: race minor (diterima sebagai proteksi kasar).
-- Fee edge: totalNilai==0 → feeValidator tak terdistribusi (tak terjadi
-  di operasi normal).
+USER AKTIF LANJUTAN: pruning paksa TERGANTIKAN lapak on/off sukarela.
+  Tersisa jika perlu: auto-OFF setelah tidak aktif periode sangat lama.
 
-FASE JAUH: multi-node federation aktif, snapshot/backup GitHub, Fibonacci
-  node spreading, near-DAPP, fully decentralized (Level 3: DAO, no admin).
+UPDATE ROADMAP PUBLIK di /help (manual, ringan): 4 fase tercapai.
+
+KNOWN ISSUES (terdokumentasi sadar):
+- Gemini key BARU tanpa free tier → pakai key lama/billing; fallback
+  chain + GEMINI_MODEL env = mitigasi lineup model berubah.
+- Global rate limit: race minor (proteksi kasar, diterima).
+- Fee edge totalNilai==0 (tak terjadi normal).
+- Guard 1-pending klaim client-side saja (admin = gerbang keras).
+- Build lokal kadang stuck .next lock (lingkungan Windows, bukan kode).
+
+FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
+  Fibonacci node spreading, near-DAPP, Level 3 (DAO, no admin).
 ```
 
 ---
@@ -280,13 +329,15 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub, Fibonacci
 /, /explore, /projects, /projects/[id], /nft/[id], /validate, /pool,
 /create, /dashboard, /buyback, /buyback-requests, /purchase-confirmations,
 /transactions, /parameters, /top-developers, /admin, /admin/reports,
-/instances, /infrastructure, /help, /ai-review,
-/api/recalculate, /api/ai-review-auto
+/instances, /infrastructure, /help, /ai-review, /profile,
+/recommendations, /api/recalculate, /api/ai-review-auto
 ```
 
 ---
 
-> Versi: 3.2 | LEVEL 2 OTONOM TERCAPAI — siklus AI penuh tanpa manusia
-> terbukti di production (2026-07). Dua mode berdampingan: manual-bridge
-> (admin) & otonom (Gemini + cron). Open source, fork-friendly: 3 env +
-> 1 secret + 1 parameter = node otonom baru.
+> Versi: 3.3 | Fase Komunitas & Tata Kelola Mandiri LIVE (2026-07):
+> lencana kontributor, lapak on/off, admin suspend, dispute auto-cancel,
+> panduan transaksi sehat, hardening rules, atomic increment.
+> Platform kini berakuntabilitas: setiap tindakan admin tercatat publik,
+> setiap sengketa terselesaikan otomatis, setiap kontribusi berlencana.
+> Menuju: sanggahan otonom & verifikasi klaim AI.
