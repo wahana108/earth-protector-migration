@@ -5,6 +5,7 @@ import {
   signInWithPopup,
   signOut,
   sendEmailVerification,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { app, db, googleProvider } from "./firebase";
@@ -15,6 +16,15 @@ export type AuthCredentials = {
 };
 
 const auth = getAuth(app);
+
+// Dilempar saat login berhasil secara kredensial tapi email belum
+// diverifikasi. instanceof-checked di form login, bukan pesan generik.
+export class UnverifiedEmailError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnverifiedEmailError";
+  }
+}
 
 async function createUserDocumentIfNotExists(uid: string, data: {
   email: string | null;
@@ -38,16 +48,17 @@ async function createUserDocumentIfNotExists(uid: string, data: {
   }
 }
 
+// Dokumen users/{uid} SENGAJA belum dibuat di sini — dibuat otomatis saat
+// login pertama SETELAH email terverifikasi (lihat fetchUserProfile
+// fallback di use-auth.tsx). Ini menutup celah spam: pendaftar yang tidak
+// pernah verifikasi tidak pernah punya dokumen, tidak pernah ikut terhitung
+// di totalUsers/kuota Fibonacci.
 export async function signUpWithEmail({ email, password }: AuthCredentials) {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const { user } = userCredential;
     await sendEmailVerification(user);
-    await createUserDocumentIfNotExists(user.uid, {
-      email: user.email,
-      displayName: user.displayName || email.split("@")[0],
-      photoURL: user.photoURL,
-    });
+    await signOut(auth);
     return user;
   } catch (error: any) {
     throw new Error(error.message || "Failed to sign up.");
@@ -57,9 +68,40 @@ export async function signUpWithEmail({ email, password }: AuthCredentials) {
 export async function signInWithEmail({ email, password }: AuthCredentials) {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    const { user } = userCredential;
+    if (!user.emailVerified) {
+      await signOut(auth);
+      throw new UnverifiedEmailError(
+        "Email belum diverifikasi. Cek inbox Anda atau kirim ulang email verifikasi."
+      );
+    }
+    return user;
   } catch (error: any) {
+    if (error instanceof UnverifiedEmailError) throw error;
     throw new Error(error.message || "Failed to sign in.");
+  }
+}
+
+// Dipakai tombol "Kirim ulang" di layar login unverified — sesi sebelumnya
+// sudah di-signOut oleh signInWithEmail, jadi tidak ada auth.currentUser untuk
+// dipakai ulang; login sebentar, kirim verifikasi, signOut lagi.
+export async function resendVerificationEmailFor({ email, password }: AuthCredentials): Promise<void> {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  try {
+    await sendEmailVerification(userCredential.user);
+  } finally {
+    await signOut(auth);
+  }
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error: any) {
+    // auth/user-not-found disembunyikan demi privasi — pesan generik tetap
+    // "berhasil terkirim" ke pemanggil terlepas dari status pendaftaran email.
+    if (error.code === "auth/user-not-found") return;
+    throw new Error(error.message || "Failed to send password reset email.");
   }
 }
 

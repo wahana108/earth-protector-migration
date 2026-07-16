@@ -19,6 +19,8 @@ import {
   signInWithGoogle,
   signOutUser,
   resendEmailVerification,
+  resendVerificationEmailFor,
+  requestPasswordReset,
   AuthCredentials,
 } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +38,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<FirebaseUser>;
   signOut: () => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
+  resendVerificationEmailFor: (credentials: AuthCredentials) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,9 +69,11 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
     };
   }
 
-  // Doc missing — covers race condition between onAuthStateChanged and
-  // createUserDocumentIfNotExists in auth.ts, or a silent creation failure.
-  // Creating here is safe: isMe(uid) rule passes because the user IS authenticated.
+  // Doc missing — normal path for email/password sign-up (signUpWithEmail
+  // deliberately does not create the doc pre-verification) plus race
+  // conditions with createUserDocumentIfNotExists in auth.ts (Google flow).
+  // Creating here is safe: this code only runs when firebaseUser.emailVerified
+  // is true (unverified sessions are force-signed-out earlier in this effect).
   const defaultData = {
     uid: firebaseUser.uid,
     email: firebaseUser.email,
@@ -111,6 +117,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (userState) => {
+      // Defense-in-depth: signUpWithEmail/signInWithEmail sudah signOut sendiri
+      // saat unverified, tapi jalur ini menutup celah sesi unverified yang
+      // entah bagaimana tetap persisted (mis. persistence lokal browser lama).
+      // Tanpa dokumen users/{uid} & tanpa sesi — sama sekali tidak dianggap login.
+      if (userState && !userState.emailVerified) {
+        await signOutUser().catch(() => {});
+        setFirebaseUser(null);
+        setUser(null);
+        setIsSuperAdmin(false);
+        setIsAdmin(false);
+        setIsModerator(false);
+        document.cookie = "__session=; path=/; Max-Age=0";
+        setLoading(false);
+        return;
+      }
+
       setFirebaseUser(userState);
       if (userState) {
         const appUser = await fetchUserProfile(userState);
@@ -162,6 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithGoogle,
     signOut: signOutUser,
     resendVerificationEmail: resendEmailVerification,
+    resendVerificationEmailFor,
+    requestPasswordReset,
   };
 
   return (

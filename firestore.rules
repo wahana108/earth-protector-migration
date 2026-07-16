@@ -43,7 +43,11 @@ service cloud.firestore {
     // Pengecualian: buy flow perlu update total_poin + soldNfts milik counterparty.
     match /users/{userId} {
       allow read:   if isAuth();
-      allow create: if isMe(userId);
+      // email_verified == true lapis kedua server-side — client sudah menutup
+      // gerbang di titik create dokumen (auth.ts/use-auth.tsx), ini backstop
+      // agar spam signup tanpa verifikasi tidak bisa ikut menciptakan dokumen
+      // lewat write langsung ke Firestore SDK.
+      allow create: if isMe(userId) && request.auth.token.email_verified == true;
       // badge_kontributor, total_kontribusi, & suspended_by_admin WAJIB admin-only —
       // isMe(userId) di bawah sengaja dikecualikan dari ketiga field ini (hasAny)
       // agar user tidak bisa memberi badge/nilai ke diri sendiri atau melepas

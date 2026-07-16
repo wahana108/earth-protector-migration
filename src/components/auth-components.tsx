@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
 import { useAuth } from '@/hooks/use-auth';
+import { UnverifiedEmailError, type AuthCredentials } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -21,6 +22,10 @@ import {
 } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { MailCheck } from 'lucide-react';
 
 function GoogleIcon() {
   return (
@@ -45,6 +50,65 @@ function GoogleIcon() {
   );
 }
 
+function ForgotPasswordDialog({ onClose }: { onClose: () => void }) {
+  const { requestPasswordReset } = useAuth();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+
+  async function handleSend() {
+    if (!email.trim()) { setError('Email wajib diisi.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await requestPasswordReset(email.trim());
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal mengirim link reset. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Lupa Password</DialogTitle>
+        </DialogHeader>
+        {sent ? (
+          <p className="text-sm text-muted-foreground py-1">
+            Jika email terdaftar, link reset password telah dikirim. Cek inbox Anda.
+          </p>
+        ) : (
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-muted-foreground">
+              Masukkan email akun Anda. Kami akan mengirim link untuk membuat password baru.
+            </p>
+            <Input
+              type="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
+          </div>
+        )}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>{sent ? 'Tutup' : 'Batal'}</Button>
+          {!sent && (
+            <Button onClick={handleSend} disabled={loading}>
+              {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Kirim Link Reset
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
@@ -61,10 +125,14 @@ const signUpSchema = z.object({
 
 export function LoginForm() {
   const router = useRouter();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, resendVerificationEmailFor } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [unverifiedCredentials, setUnverifiedCredentials] = useState<AuthCredentials | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -74,13 +142,33 @@ export function LoginForm() {
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
     setIsLoading(true);
     setError(null);
+    setUnverifiedCredentials(null);
+    setResent(false);
     try {
       await signIn(values);
       router.push('/explore');
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred.');
+      if (err instanceof UnverifiedEmailError) {
+        setError(err.message);
+        setUnverifiedCredentials(values);
+      } else {
+        setError(err.message || 'An unexpected error occurred.');
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!unverifiedCredentials) return;
+    setIsResending(true);
+    try {
+      await resendVerificationEmailFor(unverifiedCredentials);
+      setResent(true);
+    } catch (err: any) {
+      setError(err.message || 'Gagal mengirim ulang email verifikasi.');
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -102,7 +190,25 @@ export function LoginForm() {
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Login Failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error}
+            {unverifiedCredentials && (
+              resent ? (
+                <p className="mt-2 font-medium">Email verifikasi terkirim ulang. Cek inbox Anda.</p>
+              ) : (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto p-0 mt-2 text-destructive underline"
+                  onClick={handleResend}
+                  disabled={isResending}
+                >
+                  {isResending && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+                  Kirim ulang email verifikasi
+                </Button>
+              )
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -162,12 +268,26 @@ export function LoginForm() {
         </form>
       </Form>
 
+      <p className="text-center text-sm">
+        <button
+          type="button"
+          className="underline text-muted-foreground hover:text-primary"
+          onClick={() => setShowForgotPassword(true)}
+        >
+          Lupa password?
+        </button>
+      </p>
+
       <p className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{' '}
         <Link href="/signup" className="underline hover:text-primary">
           Sign up
         </Link>
       </p>
+
+      {showForgotPassword && (
+        <ForgotPasswordDialog onClose={() => setShowForgotPassword(false)} />
+      )}
     </div>
   );
 }
@@ -178,6 +298,7 @@ export function SignUpForm() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof signUpSchema>>({
     resolver: zodResolver(signUpSchema),
@@ -188,8 +309,8 @@ export function SignUpForm() {
     setIsLoading(true);
     setError(null);
     try {
-      await signUp(values);
-      router.push('/explore');
+      const user = await signUp(values);
+      setSignedUpEmail(user.email);
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred.');
     } finally {
@@ -209,6 +330,21 @@ export function SignUpForm() {
       setIsGoogleLoading(false);
     }
   };
+
+  if (signedUpEmail) {
+    return (
+      <div className="space-y-4 text-center">
+        <MailCheck className="mx-auto h-10 w-10 text-primary" />
+        <p className="text-sm text-muted-foreground">
+          Kami telah mengirim link verifikasi ke <span className="font-medium text-foreground">{signedUpEmail}</span>.
+          Buka email tersebut, klik link verifikasi, lalu login kembali.
+        </p>
+        <Link href="/login" className="underline text-sm hover:text-primary">
+          Kembali ke halaman login
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
