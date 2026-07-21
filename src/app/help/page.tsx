@@ -394,16 +394,16 @@ export default function HelpPage() {
                   <span>Fase 1–2: Fondasi, keamanan, dan mekanisme konsensus komunitas (selesai)</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary font-bold shrink-0">→</span>
-                  <span>Fase 3: FIFO Validation</span>
+                  <span className="text-green-600 font-bold shrink-0">✓</span>
+                  <span>Fase 3: FIFO Validation (selesai)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold shrink-0">✓</span>
+                  <span>Fase Advance: Fibonacci Capacity + AI Anomali (selesai)</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary font-bold shrink-0">→</span>
-                  <span>Fase Advance: Fibonacci Capacity + AI Anomali</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary font-bold shrink-0">→</span>
-                  <span>Fase Otonom: Near-DAPP Architecture</span>
+                  <span>Fase Otonom: Near-DAPP Architecture (dalam pengembangan)</span>
                 </li>
               </ul>
             </div>

@@ -50,6 +50,9 @@ function formatIDR(n: number) {
 
 // ─── Halaman ──────────────────────────────────────────────────────────────────
 
+const HERO_SLIDESHOW_IDS = ['hero-background', 'nft-1', 'nft-2', 'nft-6', 'nft-8'];
+const HERO_SLIDE_INTERVAL_MS = 5000;
+
 const categories = [
   { value: 'tree_planting',         name: 'Penanaman Pohon',       icon: <Leaf      className="w-8 h-8 text-primary" />, description: 'NFT untuk mendanai project penanaman pohon dan restorasi hutan.' },
   { value: 'ocean_cleanup',         name: 'Kebersihan Laut',       icon: <Waves     className="w-8 h-8 text-primary" />, description: 'Dukung inisiatif membersihkan plastik dan polusi dari lautan.' },
@@ -64,7 +67,18 @@ export default function HomePage() {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const heroImage = PlaceHolderImages.find(img => img.id === 'hero-background');
+  const heroSlides = HERO_SLIDESHOW_IDS
+    .map(id => PlaceHolderImages.find(img => img.id === id))
+    .filter((img): img is NonNullable<typeof img> => !!img);
+  const [heroSlide, setHeroSlide] = useState(0);
+
+  useEffect(() => {
+    if (heroSlides.length <= 1) return;
+    const timer = setInterval(() => {
+      setHeroSlide(i => (i + 1) % heroSlides.length);
+    }, HERO_SLIDE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [heroSlides.length]);
 
   useEffect(() => {
     async function load() {
@@ -109,16 +123,17 @@ export default function HomePage() {
 
         {/* ── Hero ── */}
         <section className="relative rounded-xl overflow-hidden min-h-[400px] md:min-h-[500px] flex items-center justify-center text-center p-4">
-          {heroImage && (
+          {heroSlides.map((img, i) => (
             <Image
-              src={heroImage.imageUrl}
-              alt={heroImage.description}
+              key={img.id}
+              src={img.imageUrl}
+              alt={img.description}
               fill
-              className="object-cover"
-              data-ai-hint={heroImage.imageHint}
-              priority
+              className={`object-cover transition-opacity duration-1000 ${i === heroSlide ? 'opacity-100' : 'opacity-0'}`}
+              data-ai-hint={img.imageHint}
+              priority={i === 0}
             />
-          )}
+          ))}
           <div className="absolute inset-0 bg-black/50" />
           <div className="relative z-10 text-white max-w-3xl flex flex-col items-center gap-6">
             <h1 className="text-4xl md:text-6xl font-headline font-bold !leading-tight">
@@ -255,7 +270,7 @@ export default function HomePage() {
                   <h3 className="text-xl font-headline font-semibold">{category.name}</h3>
                   <p className="text-muted-foreground text-sm">{category.description}</p>
                   <Button variant="outline" className="mt-2" asChild>
-                    <Link href={`/explore?category=${category.value}`}>Lihat Koleksi</Link>
+                    <Link href={`/explore?kategori=${category.value}`}>Lihat Koleksi</Link>
                   </Button>
                 </CardContent>
               </Card>

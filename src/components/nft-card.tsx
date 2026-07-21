@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { NFT, User as UserType } from '@/lib/types';
 import { CATEGORY_LABELS, likeNft, hasUserLiked } from '@/lib/firestore';
+import { getPlaceholder } from '@/lib/category-placeholders';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,9 +50,10 @@ export function NftCard({ nft, creator }: NftCardProps) {
         <Link href={`/nft/${nft.id}`} className="block overflow-hidden">
           <div className="h-[240px] w-full overflow-hidden bg-muted flex items-center justify-center">
             <img
-              src={nft.imageUrl}
+              src={nft.imageUrl || getPlaceholder(nft.category)}
               alt={nft.title}
               className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+              onError={(e) => { (e.target as HTMLImageElement).src = getPlaceholder(nft.category); }}
             />
           </div>
         </Link>
@@ -86,7 +88,7 @@ export function NftCard({ nft, creator }: NftCardProps) {
       </CardContent>
       <CardFooter className="p-4 pt-0 flex justify-between">
         <div className="text-sm text-muted-foreground">
-          Category: <Link href={`/explore?category=${nft.category}`} className="hover:text-primary">{categoryLabel}</Link>
+          Category: <Link href={`/explore?kategori=${nft.category}`} className="hover:text-primary">{categoryLabel}</Link>
         </div>
         <Button variant="ghost" size="icon" onClick={handleLike} aria-label="Like NFT">
           <Heart

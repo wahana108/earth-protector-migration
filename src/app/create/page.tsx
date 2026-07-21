@@ -160,8 +160,8 @@ export default function CreatePage() {
       setError('nilai_project', { message: `Maks ${formatIDR(nilaiMaks)} (${maxNft} NFT)` });
       return;
     }
-    if (data.harga_jual < config.harga_dasar) {
-      setError('harga_jual', { message: `Minimum ${formatIDR(config.harga_dasar)}` });
+    if (data.harga_jual <= config.harga_dasar) {
+      setError('harga_jual', { message: `Harus lebih dari ${formatIDR(config.harga_dasar)}` });
       return;
     }
     if (data.harga_jual > config.batas_atas) {
@@ -581,13 +581,17 @@ export default function CreatePage() {
                     id="harga_jual"
                     type="number"
                     step="1000"
-                    min={config.harga_dasar}
+                    min={config.harga_dasar + 1000}
                     max={config.batas_atas}
                     placeholder={String(config.harga_dasar)}
                     {...register('harga_jual')}
                   />
-                  {errors.harga_jual && (
+                  {errors.harga_jual ? (
                     <p className="text-sm text-destructive">{errors.harga_jual.message}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Harus lebih dari {formatIDR(config.harga_dasar)} — Maks {formatIDR(config.batas_atas)}
+                    </p>
                   )}
                 </div>
               </div>

@@ -140,6 +140,16 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
     );
   }
 
+  // Harga jual harus lebih tinggi dari harga dasar komunitas (bukan re-jual di harga dasar)
+  const hargaDasar = config?.harga_dasar ?? 100000;
+  const batasAtas = config?.batas_atas ?? 150000;
+  if (input.harga_jual <= hargaDasar) {
+    throw new Error(`Harga jual harus lebih dari harga dasar komunitas (${hargaDasar}).`);
+  }
+  if (input.harga_jual > batasAtas) {
+    throw new Error(`Harga jual melebihi batas atas komunitas (${batasAtas}).`);
+  }
+
   const jumlah_nft = Math.floor(input.nilai_project / input.harga_dasar);
   const nilai_selisih = input.harga_jual - input.harga_dasar;
 

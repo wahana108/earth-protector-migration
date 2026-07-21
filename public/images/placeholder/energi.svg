@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <rect width="400" height="300" fill="#fef3c7"/>
+  <!-- lightning bolt, generic (parent kategori energi) -->
+  <polygon points="220,60 175,160 210,160 180,240 245,135 208,135 240,60" fill="#b45309"/>
+  <text x="200" y="268" font-family="system-ui,sans-serif" font-size="18" font-weight="600" fill="#78350f" text-anchor="middle">Energi</text>
+</svg>
