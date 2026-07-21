@@ -6,6 +6,7 @@ const CATEGORY_PLACEHOLDER: Record<string, string> = {
   renewable_energy:      '/images/placeholder/energy.svg',
   carbon_reduction:      '/images/placeholder/carbon.svg',
   lingkungan:            '/images/placeholder/lingkungan.svg',
+  energi:                '/images/placeholder/energi.svg',
   sosial:                '/images/placeholder/sosial.svg',
   pendidikan:            '/images/placeholder/pendidikan.svg',
   kesehatan:             '/images/placeholder/kesehatan.svg',
