@@ -22,6 +22,9 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { confirmBuybackRequest, rejectBuybackRequest, BuybackRequestError } from '@/lib/projects';
+import { getCommunityConfig } from '@/lib/community-config';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,10 +53,11 @@ function formatDate(d: Date) {
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmDialog({
-  request, sellerId, onClose, onSuccess,
+  request, sellerId, inflationHistory, onClose, onSuccess,
 }: {
   request: PendingRequest;
   sellerId: string;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: (requestId: string) => void;
 }) {
@@ -96,6 +100,12 @@ function ConfirmDialog({
                 <span className="text-muted-foreground">Harga buyback</span>
                 <span className="font-semibold">{formatIDR(request.harga_buyback)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={request.harga_buyback}
+                createdAt={request.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Kamu terima kembali</span>
                 <span className="font-semibold text-green-600">+{formatIDR(request.nilai_selisih)}</span>
@@ -210,10 +220,11 @@ function RejectDialog({
 // ─── Request Card ─────────────────────────────────────────────────────────────
 
 function RequestCard({
-  request, sellerId, onHandled,
+  request, sellerId, inflationHistory, onHandled,
 }: {
   request: PendingRequest;
   sellerId: string;
+  inflationHistory: InflationEntry[];
   onHandled: (requestId: string) => void;
 }) {
   const [dialog, setDialog] = useState<'confirm' | 'reject' | null>(null);
@@ -239,6 +250,11 @@ function RequestCard({
             <span className="text-muted-foreground">Harga buyback</span>
             <span className="font-semibold">{formatIDR(request.harga_buyback)}</span>
           </div>
+          <HargaEfektifInfo
+            harga={request.harga_buyback}
+            createdAt={request.created_at}
+            inflationHistory={inflationHistory}
+          />
           <div className="flex justify-between">
             <span className="text-muted-foreground">Kamu terima kembali</span>
             <span className="font-semibold text-green-600">+{formatIDR(request.nilai_selisih)}</span>
@@ -285,7 +301,7 @@ function RequestCard({
       </div>
 
       {dialog === 'confirm' && (
-        <ConfirmDialog request={request} sellerId={sellerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
+        <ConfirmDialog request={request} sellerId={sellerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onHandled} />
       )}
       {dialog === 'reject' && (
         <RejectDialog request={request} sellerId={sellerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
@@ -300,17 +316,22 @@ export default function BuybackRequestsPage() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
 
   const loadRequests = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const snap = await getDocs(query(
-        collection(db, 'buyback_requests'),
-        where('seller_id', '==', user.id),
-        where('status', '==', 'pending'),
-        orderBy('created_at', 'asc'),
-      ));
+      const [snap, cfg] = await Promise.all([
+        getDocs(query(
+          collection(db, 'buyback_requests'),
+          where('seller_id', '==', user.id),
+          where('status', '==', 'pending'),
+          orderBy('created_at', 'asc'),
+        )),
+        getCommunityConfig(),
+      ]);
+      setInflationHistory(cfg?.inflation_history ?? []);
 
       if (snap.empty) {
         setRequests([]);
@@ -409,7 +430,7 @@ export default function BuybackRequestsPage() {
             </p>
             <div className="space-y-4">
               {requests.map(req => (
-                <RequestCard key={req.id} request={req} sellerId={user.id} onHandled={handleHandled} />
+                <RequestCard key={req.id} request={req} sellerId={user.id} inflationHistory={inflationHistory} onHandled={handleHandled} />
               ))}
             </div>
           </>

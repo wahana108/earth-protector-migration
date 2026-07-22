@@ -160,6 +160,7 @@ export type CommunityConfig = {
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
   infrastructure_costs?: Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>;
+  inflation_history?: Array<{ tahun: number; pct: number }>;
   updated_at: Date;
   updated_by: string;
 };

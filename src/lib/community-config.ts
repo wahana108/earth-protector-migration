@@ -44,6 +44,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   fase_aktif: 1,
   ai_provider: 'gemini',
   ai_anomali_threshold: { flag: 1, invalid: 100 },
+  inflation_history: [],
 };
 
 export async function getCommunityConfig(): Promise<CommunityConfig | null> {

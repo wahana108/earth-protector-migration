@@ -37,6 +37,8 @@ import type { UserBlock, ContributorCertificate } from '@/lib/types';
 import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -152,11 +154,12 @@ const LOG_TYPE_LABELS: Record<NeracaLog['type'], string> = {
 interface TransferPoolDialogProps {
   unit: NFTUnit;
   userId: string;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function TransferPoolDialog({ unit, userId, onClose, onSuccess }: TransferPoolDialogProps) {
+function TransferPoolDialog({ unit, userId, inflationHistory, onClose, onSuccess }: TransferPoolDialogProps) {
   const { emailVerified } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -199,6 +202,12 @@ function TransferPoolDialog({ unit, userId, onClose, onSuccess }: TransferPoolDi
                 <span className="text-muted-foreground">Harga jual</span>
                 <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={unit.harga_jual}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
             </div>
           </div>
 
@@ -369,11 +378,12 @@ interface DaftarNFTProps {
   units: NFTUnit[];
   toggling: string | null;
   isTopDeveloper: boolean;
+  inflationHistory: InflationEntry[];
   onToggleForSale: (unit: NFTUnit) => void;
   onTransferPool: (unit: NFTUnit) => void;
 }
 
-function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onTransferPool }: DaftarNFTProps) {
+function DaftarNFT({ units, toggling, isTopDeveloper, inflationHistory, onToggleForSale, onTransferPool }: DaftarNFTProps) {
   if (units.length === 0) {
     return (
       <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
@@ -433,6 +443,11 @@ function DaftarNFT({ units, toggling, isTopDeveloper, onToggleForSale, onTransfe
                   {unit.nilai_selisih >= 0 ? '+' : ''}{formatIDR(unit.nilai_selisih)}
                 </span></span>
               </div>
+              <HargaEfektifInfo
+                harga={unit.harga_beli_terakhir}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+              />
             </div>
 
             {/* Tombol */}
@@ -741,6 +756,7 @@ export default function DashboardPage() {
   const [buybackCount, setBuybackCount] = useState(0);
   const [realisasi, setRealisasi] = useState<RealisasiResult | null>(null);
   const [minRealisasiPct, setMinRealisasiPct] = useState(20);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
   const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
   const [logs, setLogs] = useState<NeracaLog[]>([]);
   const [myProjects, setMyProjects] = useState<Project[]>([]);
@@ -817,6 +833,7 @@ export default function DashboardPage() {
       setCertificates(certs);
       setRealisasi(realResult);
       setMinRealisasiPct(cfg?.min_realisasi_pct_untuk_create ?? 20);
+      setInflationHistory(cfg?.inflation_history ?? []);
 
       if (userSnap.exists()) {
         const d = userSnap.data();
@@ -1064,6 +1081,7 @@ export default function DashboardPage() {
                 units={ownedUnits}
                 toggling={toggling}
                 isTopDeveloper={isTopDeveloper}
+                inflationHistory={inflationHistory}
                 onToggleForSale={handleToggleForSale}
                 onTransferPool={setTransferPoolTarget}
               />
@@ -1206,6 +1224,7 @@ export default function DashboardPage() {
         <TransferPoolDialog
           unit={transferPoolTarget}
           userId={user.id}
+          inflationHistory={inflationHistory}
           onClose={() => setTransferPoolTarget(null)}
           onSuccess={() => handleTransferPoolSuccess(transferPoolTarget.id)}
         />

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
   Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
-  Building2, Plus, X, HandCoins, Ban,
+  Building2, Plus, X, HandCoins, Ban, Percent,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -597,6 +597,8 @@ export default function AdminPage() {
   const [rewardLoading, setRewardLoading] = useState(false);
   const [rewardResult, setRewardResult] = useState<string | null>(null);
   const [savingCosts, setSavingCosts] = useState(false);
+  const [inflationHistory, setInflationHistory] = useState<Array<{ tahun: number; pct: number }>>([]);
+  const [savingInflation, setSavingInflation] = useState(false);
 
   // Antrian Klaim Kontribusi
   const [pendingClaims, setPendingClaims] = useState<InfrastructureClaim[]>([]);
@@ -711,6 +713,7 @@ export default function AdminPage() {
           info: (c.info ?? (c as Record<string, unknown>).link as string | undefined) || undefined,
         })),
       );
+      setInflationHistory(config?.inflation_history ?? []);
     } finally {
       setLoadingInfra(false);
     }
@@ -777,6 +780,22 @@ export default function AdminPage() {
       await updateCommunityConfig(user.id, { infrastructure_costs: cleanedCosts });
     } finally {
       setSavingCosts(false);
+    }
+  }
+
+  async function handleSaveInflation() {
+    if (!user) return;
+    setSavingInflation(true);
+    try {
+      // pct BOLEH negatif (deflasi) — jangan clamp. Ini murni info tampilan,
+      // tidak pernah dipakai untuk menulis neraca.
+      const cleanedHistory = inflationHistory.map(item => ({
+        tahun: item.tahun || new Date().getFullYear(),
+        pct: item.pct || 0,
+      }));
+      await updateCommunityConfig(user.id, { inflation_history: cleanedHistory });
+    } finally {
+      setSavingInflation(false);
     }
   }
 
@@ -1316,6 +1335,72 @@ export default function AdminPage() {
                     Simpan
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Info Inflasi/Deflasi — lapisan tampilan */}
+        {isAdmin && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Percent className="h-4 w-4 text-primary" />
+                Info Inflasi/Deflasi (Tampilan)
+              </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                Figur tahunan murni informasi — ditampilkan sebagai &quot;≈ nilai hari ini&quot;
+                di samping harga tercatat. TIDAK pernah menulis/mengubah neraca. pct BOLEH
+                negatif untuk deflasi (compounding simetris).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                {inflationHistory.map((item, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      className="w-24 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      placeholder="Tahun"
+                      value={item.tahun}
+                      onChange={e => setInflationHistory(prev => prev.map((c, idx) => idx === i ? { ...c, tahun: Number(e.target.value) } : c))}
+                    />
+                    <input
+                      type="number"
+                      className="w-24 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      placeholder="pct (mis. -3 utk deflasi)"
+                      value={item.pct}
+                      onChange={e => setInflationHistory(prev => prev.map((c, idx) => idx === i ? { ...c, pct: Number(e.target.value) } : c))}
+                    />
+                    <span className="text-xs text-muted-foreground">%/tahun</span>
+                    <button
+                      className="h-7 w-7 flex items-center justify-center rounded-md border text-muted-foreground hover:text-destructive hover:border-red-300 transition-colors shrink-0"
+                      onClick={() => setInflationHistory(prev => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => setInflationHistory(prev => [...prev, { tahun: new Date().getFullYear(), pct: 0 }])}
+                >
+                  <Plus className="h-3 w-3" />
+                  Tambah Tahun
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={savingInflation}
+                  onClick={handleSaveInflation}
+                >
+                  {savingInflation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Simpan
+                </Button>
               </div>
             </CardContent>
           </Card>

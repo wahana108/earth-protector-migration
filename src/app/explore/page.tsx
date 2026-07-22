@@ -31,6 +31,8 @@ import { getCommunityConfig } from '@/lib/community-config';
 import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, BuyError, RateLimitError, filterUnitsByActiveLapak } from '@/lib/projects';
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
 import { ContributorBadge } from '@/components/contributor-badge';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
   type NFTUnit, type ProjectCategory, type Comment,
@@ -92,11 +94,12 @@ interface BuyDialogProps {
   buyerId: string;
   hargaDasar: number;
   batasAtas: number;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: (nftId: string, buyerId: string) => void;
 }
 
-function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }: BuyDialogProps) {
+function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, inflationHistory, onClose, onSuccess }: BuyDialogProps) {
   const { emailVerified } = useAuth();
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
@@ -154,6 +157,12 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, onClose, onSuccess }:
                 <span className="text-muted-foreground">Harga</span>
                 <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={unit.harga_jual}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Neracamu bertambah</span>
                 <span className="font-semibold text-green-600">
@@ -530,6 +539,7 @@ interface NftUnitCardProps {
   currentUserId: string | undefined;
   currentUserDisplayName: string | null;
   configLoaded: boolean;
+  inflationHistory: InflationEntry[];
   onLike: (unit: NFTUnit) => void;
   onBuy: (unit: NFTUnit) => void;
   onEditGambar: (unit: NFTUnit) => void;
@@ -537,7 +547,7 @@ interface NftUnitCardProps {
 
 function NftUnitCard({
   unit, isLiked, likingId, buyingId, currentUserId, currentUserDisplayName,
-  configLoaded, onLike, onBuy, onEditGambar,
+  configLoaded, inflationHistory, onLike, onBuy, onEditGambar,
 }: NftUnitCardProps) {
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [hasCommentPanelMounted, setHasCommentPanelMounted] = useState(false);
@@ -613,6 +623,11 @@ function NftUnitCard({
             {unit.like_count}
           </span>
         </div>
+        <HargaEfektifInfo
+          harga={unit.harga_jual}
+          createdAt={unit.created_at}
+          inflationHistory={inflationHistory}
+        />
 
         <div className="flex gap-2">
           <Button
@@ -697,7 +712,7 @@ function ExploreContent() {
   const [editTarget, setEditTarget] = useState<NFTUnit | null>(null);
   const [buyTarget, setBuyTarget] = useState<NFTUnit | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
-  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } | null>(null);
 
   const filteredUnits = searchQuery
     ? units.filter(u => {
@@ -735,7 +750,7 @@ function ExploreContent() {
 
   useEffect(() => {
     getCommunityConfig()
-      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas }); })
+      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: c.inflation_history ?? [] }); })
       .catch(() => {});
   }, []);
 
@@ -944,6 +959,7 @@ function ExploreContent() {
                 currentUserId={user?.id}
                 currentUserDisplayName={currentUserDisplayName}
                 configLoaded={!!config}
+                inflationHistory={config?.inflation_history ?? []}
                 onLike={handleLike}
                 onBuy={setBuyTarget}
                 onEditGambar={setEditTarget}
@@ -976,6 +992,7 @@ function ExploreContent() {
           buyerId={user.id}
           hargaDasar={config.harga_dasar}
           batasAtas={config.batas_atas}
+          inflationHistory={config.inflation_history}
           onClose={() => setBuyTarget(null)}
           onSuccess={handleBuySuccess}
         />
