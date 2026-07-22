@@ -29,6 +29,8 @@ import { ContributorBadge } from '@/components/contributor-badge';
 import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -104,12 +106,13 @@ interface BuyDialogProps {
   buyerId: string;
   hargaDasar: number;
   batasAtas: number;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
 function BuyDialog({
-  unit, linkBukti, buyerId, hargaDasar, batasAtas, onClose, onSuccess,
+  unit, linkBukti, buyerId, hargaDasar, batasAtas, inflationHistory, onClose, onSuccess,
 }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
@@ -149,6 +152,12 @@ function BuyDialog({
                 <span className="text-muted-foreground">Harga</span>
                 <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={unit.harga_jual}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Neracamu bertambah</span>
                 <span className="font-semibold text-green-600">
@@ -548,7 +557,7 @@ export default function NftDetailPage({
   const [likeCount, setLikeCount] = useState(0);
 
   const [buyOpen, setBuyOpen] = useState(false);
-  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number } | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } | null>(null);
 
   // Main data
   useEffect(() => {
@@ -640,7 +649,7 @@ export default function NftDetailPage({
   // Community config
   useEffect(() => {
     getCommunityConfig()
-      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas }); })
+      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: c.inflation_history ?? [] }); })
       .catch(() => {});
   }, []);
 
@@ -726,6 +735,12 @@ export default function NftDetailPage({
               <span className="text-muted-foreground">Harga Jual</span>
               <span className="font-bold text-base">{formatIDR(unit.harga_jual)}</span>
             </div>
+            <HargaEfektifInfo
+              harga={unit.harga_jual}
+              createdAt={unit.created_at}
+              inflationHistory={config?.inflation_history ?? []}
+              className="text-[11px] text-muted-foreground italic text-right"
+            />
             <div className="flex justify-between">
               <span className="text-muted-foreground">Neracamu bertambah jika beli</span>
               <span
@@ -870,6 +885,7 @@ export default function NftDetailPage({
           buyerId={user.id}
           hargaDasar={config.harga_dasar}
           batasAtas={config.batas_atas}
+          inflationHistory={config.inflation_history}
           onClose={() => setBuyOpen(false)}
           onSuccess={() => {
             setData(prev =>

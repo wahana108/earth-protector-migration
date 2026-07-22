@@ -31,7 +31,10 @@ import {
 } from '@/lib/projects';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { getCommunityConfig } from '@/lib/community-config';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -109,10 +112,11 @@ function daysUntil(date: Date | null): number | null {
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
 
 function RequestDialog({
-  unit, ownerId, onClose, onSuccess,
+  unit, ownerId, inflationHistory, onClose, onSuccess,
 }: {
   unit: NFTUnit;
   ownerId: string;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -150,6 +154,12 @@ function RequestDialog({
                 <span className="text-muted-foreground">Harga buyback</span>
                 <span className="font-bold">{formatIDR(unit.harga_beli_terakhir)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={unit.harga_beli_terakhir}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
                 <span className={cn('font-semibold', unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
@@ -291,11 +301,12 @@ function DisputeDialog({
 }
 
 function CompleteDialog({
-  unit, request, ownerId, onClose, onSuccess,
+  unit, request, ownerId, inflationHistory, onClose, onSuccess,
 }: {
   unit: NFTUnit;
   request: BuybackReqData;
   ownerId: string;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -330,6 +341,12 @@ function CompleteDialog({
                 <span className="text-muted-foreground">Harga buyback</span>
                 <span className="font-bold">{formatIDR(request.harga_buyback)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={request.harga_buyback}
+                createdAt={unit.created_at}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
                 <span className={cn('font-semibold', request.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
@@ -374,10 +391,11 @@ function CompleteDialog({
 type DialogType = 'request' | 'cancel' | 'complete' | 'dispute' | null;
 
 function BuybackCard({
-  item, ownerId, onSuccess,
+  item, ownerId, inflationHistory, onSuccess,
 }: {
   item: NFTWithReq;
   ownerId: string;
+  inflationHistory: InflationEntry[];
   onSuccess: () => void;
 }) {
   const [dialog, setDialog] = useState<DialogType>(null);
@@ -498,6 +516,11 @@ function BuybackCard({
               <span className="text-muted-foreground">Harga buyback</span>
               <span className="font-semibold">{formatIDR(nft.harga_beli_terakhir)}</span>
             </div>
+            <HargaEfektifInfo
+              harga={nft.harga_beli_terakhir}
+              createdAt={nft.created_at}
+              inflationHistory={inflationHistory}
+            />
             <div className="flex justify-between">
               <span className="text-muted-foreground">Efek neraca</span>
               <span className={cn('font-semibold', nft.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
@@ -516,13 +539,13 @@ function BuybackCard({
       </div>
 
       {dialog === 'request' && (
-        <RequestDialog unit={nft} ownerId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+        <RequestDialog unit={nft} ownerId={ownerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'cancel' && request && (
         <CancelDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'complete' && request && (
-        <CompleteDialog unit={nft} request={request} ownerId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+        <CompleteDialog unit={nft} request={request} ownerId={ownerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'dispute' && request && (
         <DisputeDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
@@ -537,19 +560,22 @@ export default function BuybackPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<NFTWithReq[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [nftsSnap, reqsSnap] = await Promise.all([
+      const [nftsSnap, reqsSnap, cfg] = await Promise.all([
         getDocs(query(collection(db, 'nft_units'), where('owner_id', '==', user.id))),
         getDocs(query(
           collection(db, 'buyback_requests'),
           where('requester_id', '==', user.id),
           orderBy('created_at', 'desc'),
         )),
+        getCommunityConfig(),
       ]);
+      setInflationHistory(cfg?.inflation_history ?? []);
 
       const allReqs = reqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>));
 
@@ -669,7 +695,7 @@ export default function BuybackPage() {
             <p className="text-sm text-muted-foreground">{items.length} NFT tersedia untuk buyback</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map(item => (
-                <BuybackCard key={item.nft.id} item={item} ownerId={user.id} onSuccess={loadData} />
+                <BuybackCard key={item.nft.id} item={item} ownerId={user.id} inflationHistory={inflationHistory} onSuccess={loadData} />
               ))}
             </div>
           </>

@@ -23,6 +23,9 @@ import {
 } from '@/lib/projects';
 import type { ProjectCategory } from '@/lib/types';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { getCommunityConfig } from '@/lib/community-config';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,10 +66,11 @@ function formatDate(d: Date | null) {
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmPurchaseDialog({
-  purchase, developerId, onClose, onSuccess,
+  purchase, developerId, inflationHistory, onClose, onSuccess,
 }: {
   purchase: PendingPurchase;
   developerId: string;
+  inflationHistory: InflationEntry[];
   onClose: () => void;
   onSuccess: (id: string) => void;
 }) {
@@ -100,6 +104,12 @@ function ConfirmPurchaseDialog({
                 <span className="text-muted-foreground">Harga terjual</span>
                 <span className="font-semibold">{formatIDR(purchase.harga_beli)}</span>
               </div>
+              <HargaEfektifInfo
+                harga={purchase.harga_beli}
+                createdAt={purchase.purchased_at ?? new Date()}
+                inflationHistory={inflationHistory}
+                className="text-[11px] text-muted-foreground italic text-right"
+              />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
                 <span className="font-semibold text-destructive">−{formatIDR(purchase.nilai_selisih)}</span>
@@ -191,10 +201,11 @@ function ReportPurchaseDialog({
 // ─── Purchase Card ────────────────────────────────────────────────────────────
 
 function PurchaseCard({
-  purchase, developerId, onHandled,
+  purchase, developerId, inflationHistory, onHandled,
 }: {
   purchase: PendingPurchase;
   developerId: string;
+  inflationHistory: InflationEntry[];
   onHandled: (id: string) => void;
 }) {
   const [dialog, setDialog] = useState<'confirm' | 'report' | null>(null);
@@ -233,6 +244,11 @@ function PurchaseCard({
             <span className="text-muted-foreground">Harga terjual</span>
             <span className="font-semibold">{formatIDR(purchase.harga_beli)}</span>
           </div>
+          <HargaEfektifInfo
+            harga={purchase.harga_beli}
+            createdAt={purchase.purchased_at ?? new Date()}
+            inflationHistory={inflationHistory}
+          />
           <div className="flex justify-between">
             <span className="text-muted-foreground">Efek neracamu jika konfirmasi</span>
             <span className="font-semibold text-destructive">−{formatIDR(purchase.nilai_selisih)}</span>
@@ -269,7 +285,7 @@ function PurchaseCard({
       </div>
 
       {dialog === 'confirm' && (
-        <ConfirmPurchaseDialog purchase={purchase} developerId={developerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
+        <ConfirmPurchaseDialog purchase={purchase} developerId={developerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onHandled} />
       )}
       {dialog === 'report' && (
         <ReportPurchaseDialog purchase={purchase} developerId={developerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
@@ -284,6 +300,7 @@ export default function PurchaseConfirmationsPage() {
   const { user } = useAuth();
   const [purchases, setPurchases] = useState<PendingPurchase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -297,14 +314,16 @@ export default function PurchaseConfirmationsPage() {
       // Query terpisah untuk disputed — tidak ditampilkan di halaman ini (sudah
       // bukan wewenang seller, menunggu admin), tapi tetap perlu di-sweep lazy
       // agar tidak menggantung jika deadline lewat sebelum admin bertindak.
-      const [pendingSnap, disputedSnap] = await Promise.all([
+      const [pendingSnap, disputedSnap, cfg] = await Promise.all([
         getDocs(pendingQuery),
         getDocs(query(
           collection(db, 'nft_units'),
           where('developer_id', '==', user.id),
           where('purchase_status', '==', 'disputed'),
         )),
+        getCommunityConfig(),
       ]);
+      setInflationHistory(cfg?.inflation_history ?? []);
 
       // Lazy eval: auto-complete pending yang expired, auto-cancel disputed yang
       // expired (deadline sama — purchase_auto_complete_at tidak berubah saat
@@ -428,7 +447,7 @@ export default function PurchaseConfirmationsPage() {
             </p>
             <div className="space-y-4">
               {purchases.map(p => (
-                <PurchaseCard key={p.nft_unit_id} purchase={p} developerId={user.id} onHandled={handleHandled} />
+                <PurchaseCard key={p.nft_unit_id} purchase={p} developerId={user.id} inflationHistory={inflationHistory} onHandled={handleHandled} />
               ))}
             </div>
           </>

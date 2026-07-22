@@ -20,7 +20,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { db } from '@/lib/firebase';
+import { getCommunityConfig } from '@/lib/community-config';
 import { KATEGORI_LABELS, type ProjectCategory } from '@/lib/types';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +69,7 @@ export default function HomePage() {
   const [stats, setStats] = useState<CommunityStats | null>(null);
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
 
   const heroSlides = HERO_SLIDESHOW_IDS
     .map(id => PlaceHolderImages.find(img => img.id === id))
@@ -83,11 +87,13 @@ export default function HomePage() {
   useEffect(() => {
     async function load() {
       try {
-        const [projectsSnap, topDevSnap, poolSnap] = await Promise.all([
+        const [projectsSnap, topDevSnap, poolSnap, cfg] = await Promise.all([
           getDocs(collection(db, 'projects')),
           getDocs(query(collection(db, 'users'), where('level', '==', 'top_developer'))),
           getDoc(doc(db, 'pool_rekomendasi', 'v1')),
+          getCommunityConfig(),
         ]);
+        setInflationHistory(cfg?.inflation_history ?? []);
 
         setStats({
           totalProjects: projectsSnap.size,
@@ -245,6 +251,11 @@ export default function HomePage() {
                     <p className="text-xs text-muted-foreground">
                       {project.jumlah_nft} NFT · {formatIDR(project.harga_jual)}/unit
                     </p>
+                    <HargaEfektifInfo
+                      harga={project.harga_jual}
+                      createdAt={project.created_at}
+                      inflationHistory={inflationHistory}
+                    />
                   </div>
                 </Link>
               ))}

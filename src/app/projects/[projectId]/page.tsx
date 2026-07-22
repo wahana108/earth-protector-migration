@@ -25,12 +25,15 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { checkLinkBukti } from '@/lib/link-checker';
 import { updateNftUnitGambar } from '@/lib/projects';
+import { getCommunityConfig } from '@/lib/community-config';
 import { ContributorBadge } from '@/components/contributor-badge';
 import {
   KATEGORI_LABELS,
   type Project, type NFTUnit, type ProjectCategory,
 } from '@/lib/types';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { HargaEfektifInfo } from '@/components/harga-efektif';
+import type { InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -210,10 +213,11 @@ function EditGambarNftDialog({ unit, onClose, onSaved }: EditGambarNftDialogProp
 // ─── Mini NFT Card ────────────────────────────────────────────────────────────
 
 function MiniNftCard({
-  unit, isDeveloper, onEditGambar,
+  unit, isDeveloper, inflationHistory, onEditGambar,
 }: {
   unit: NFTUnit;
   isDeveloper?: boolean;
+  inflationHistory: InflationEntry[];
   onEditGambar?: (unit: NFTUnit) => void;
 }) {
   return (
@@ -245,6 +249,12 @@ function MiniNftCard({
         <div className="p-2 space-y-0.5">
           <p className="text-xs font-semibold leading-snug line-clamp-1">{unit.nama_nft}</p>
           <p className="text-xs text-muted-foreground font-medium">{formatIDR(unit.harga_jual)}</p>
+          <HargaEfektifInfo
+            harga={unit.harga_jual}
+            createdAt={unit.created_at}
+            inflationHistory={inflationHistory}
+            className="text-[10px] text-muted-foreground italic"
+          />
         </div>
       </Link>
 
@@ -299,6 +309,7 @@ export default function ProjectDetailPage({
   const [missing, setMissing] = useState(false);
   const [linkStatus, setLinkStatus] = useState<Project['link_bukti_status']>('belum_dicek');
   const [editNftTarget, setEditNftTarget] = useState<NFTUnit | null>(null);
+  const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -308,10 +319,12 @@ export default function ProjectDetailPage({
 
         const project = toProject(projectSnap.id, projectSnap.data() as Record<string, unknown>);
 
-        const [unitsSnap, devSnap] = await Promise.all([
+        const [unitsSnap, devSnap, cfg] = await Promise.all([
           getDocs(query(collection(db, 'nft_units'), where('project_id', '==', projectId))),
           getDoc(doc(db, 'users', project.developer_id)),
+          getCommunityConfig(),
         ]);
+        setInflationHistory(cfg?.inflation_history ?? []);
 
         const units = unitsSnap.docs.map(d =>
           toNFTUnit(d.id, d.data() as Record<string, unknown>),
@@ -512,6 +525,12 @@ export default function ProjectDetailPage({
             </span>
             <span className="font-medium">{formatIDR(project.harga_jual)}/NFT</span>
           </div>
+          <HargaEfektifInfo
+            harga={project.harga_jual}
+            createdAt={project.created_at}
+            inflationHistory={inflationHistory}
+            className="text-[11px] text-muted-foreground italic text-right"
+          />
         </section>
 
         {/* Validator */}
@@ -596,6 +615,7 @@ export default function ProjectDetailPage({
                   key={u.id}
                   unit={u}
                   isDeveloper={isDeveloper}
+                  inflationHistory={inflationHistory}
                   onEditGambar={setEditNftTarget}
                 />
               ))}
