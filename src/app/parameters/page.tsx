@@ -18,7 +18,8 @@ import {
   DEFAULT_COMMUNITY_CONFIG,
 } from '@/lib/community-config';
 import { useAuth } from '@/hooks/use-auth';
-import type { CommunityConfig, FeePool } from '@/lib/types';
+import { getInflationLog } from '@/lib/inflation';
+import type { CommunityConfig, FeePool, InflationLog } from '@/lib/types';
 
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
@@ -61,6 +62,7 @@ type EditValues = {
   ai_auto_interval_days: number;
   ai_auto_max_devs_per_run: number;
   badge_klaim_enabled: boolean;
+  inflation_enabled: boolean;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -102,6 +104,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     ai_auto_interval_days: c.ai_auto_interval_days ?? 30,
     ai_auto_max_devs_per_run: c.ai_auto_max_devs_per_run ?? 10,
     badge_klaim_enabled: c.badge_klaim_enabled ?? true,
+    inflation_enabled: c.inflation_enabled ?? true,
   };
 }
 
@@ -142,6 +145,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     ai_auto_interval_days: e.ai_auto_interval_days,
     ai_auto_max_devs_per_run: e.ai_auto_max_devs_per_run,
     badge_klaim_enabled: e.badge_klaim_enabled,
+    inflation_enabled: e.inflation_enabled,
   };
 }
 
@@ -202,6 +206,7 @@ export default function ParametersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feePool, setFeePool] = useState<FeePool | null>(null);
+  const [inflationLog, setInflationLog] = useState<InflationLog[]>([]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValues, setEditValues] = useState<EditValues | null>(null);
@@ -216,8 +221,10 @@ export default function ParametersPage() {
     Promise.all([
       getCommunityConfig(),
       getDoc(doc(db, 'fee_pool', 'v1')),
+      getInflationLog(20).catch(() => []),
     ])
-      .then(([data, feeSnap]) => {
+      .then(([data, feeSnap, log]) => {
+        setInflationLog(log);
         if (data) {
           setConfig(data);
         } else {
@@ -637,6 +644,34 @@ export default function ParametersPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Inflasi/Deflasi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-muted-foreground">Info Inflasi/Deflasi</span>
+                    <select
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                      value={editValues.inflation_enabled ? 'true' : 'false'}
+                      onChange={e => setField('inflation_enabled', e.target.value === 'true')}
+                    >
+                      <option value="true">Aktif (default)</option>
+                      <option value="false">Nonaktif</option>
+                    </select>
+                  </div>
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Saat nonaktif, &quot;≈ nilai hari ini&quot; disembunyikan di seluruh halaman dan
+                      aksi pencatatan resmi di /admin disembunyikan. Murni lapisan tampilan —
+                      tidak pernah menulis/mengubah neraca.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           ) : config ? (
             // ── READ-ONLY MODE ──────────────────────────────────────────────
@@ -871,6 +906,46 @@ export default function ParametersPage() {
                       Lencana kontributor yang sudah diberikan tetap tampil.
                     </p>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Inflasi/Deflasi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Info Inflasi/Deflasi" value={(config.inflation_enabled ?? true) ? 'Aktif (default)' : 'Nonaktif'} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Saat nonaktif, &quot;≈ nilai hari ini&quot; disembunyikan di seluruh halaman dan
+                      aksi pencatatan resmi di /admin disembunyikan. Murni lapisan tampilan —
+                      tidak pernah menulis/mengubah neraca.
+                    </p>
+                  </div>
+                  {inflationLog.length > 0 && (
+                    <div className="pt-3 pb-1 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Riwayat Perubahan Inflasi/Deflasi
+                      </p>
+                      {inflationLog.map(entry => (
+                        <div key={entry.id} className="text-xs border rounded-md p-2 space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">
+                              {entry.tahun} → {entry.pct > 0 ? '+' : ''}{entry.pct}%
+                            </span>
+                            <span className="text-muted-foreground">
+                              {entry.created_at.toLocaleDateString('id-ID')}
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground">
+                            {entry.aktor_nama} — {entry.alasan}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>
