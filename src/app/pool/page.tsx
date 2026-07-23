@@ -39,7 +39,7 @@ import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -652,7 +652,7 @@ export default function PoolPage() {
 
       if (cfg) {
         setKapasitasMinimum(cfg.kapasitas_pool_minimum);
-        setConfig({ harga_dasar: cfg.harga_dasar, batas_atas: cfg.batas_atas, inflation_history: cfg.inflation_history ?? [] });
+        setConfig({ harga_dasar: cfg.harga_dasar, batas_atas: cfg.batas_atas, inflation_history: effectiveInflationHistory(cfg.inflation_history, cfg.inflation_enabled) });
       }
 
       const fetchedUnits = nftsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>));

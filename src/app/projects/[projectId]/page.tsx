@@ -33,7 +33,7 @@ import {
 } from '@/lib/types';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -324,7 +324,7 @@ export default function ProjectDetailPage({
           getDoc(doc(db, 'users', project.developer_id)),
           getCommunityConfig(),
         ]);
-        setInflationHistory(cfg?.inflation_history ?? []);
+        setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
 
         const units = unitsSnap.docs.map(d =>
           toNFTUnit(d.id, d.data() as Record<string, unknown>),

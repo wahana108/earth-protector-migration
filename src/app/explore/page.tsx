@@ -32,7 +32,7 @@ import { toggleNftLike, updateNftUnitGambar, updateProjectGambar, buyNftUnit, Bu
 import { fetchComments, addComment, deleteComment, reportComment } from '@/lib/comments';
 import { ContributorBadge } from '@/components/contributor-badge';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
   type NFTUnit, type ProjectCategory, type Comment,
@@ -750,7 +750,7 @@ function ExploreContent() {
 
   useEffect(() => {
     getCommunityConfig()
-      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: c.inflation_history ?? [] }); })
+      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled) }); })
       .catch(() => {});
   }, []);
 

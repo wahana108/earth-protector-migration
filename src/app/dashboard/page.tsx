@@ -38,7 +38,7 @@ import type { NFTUnit, NeracaLog, Project, ProjectCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -833,7 +833,7 @@ export default function DashboardPage() {
       setCertificates(certs);
       setRealisasi(realResult);
       setMinRealisasiPct(cfg?.min_realisasi_pct_untuk_create ?? 20);
-      setInflationHistory(cfg?.inflation_history ?? []);
+      setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
 
       if (userSnap.exists()) {
         const d = userSnap.data();

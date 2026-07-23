@@ -30,7 +30,7 @@ import { KATEGORI_LABELS, type NFTUnit, type ProjectCategory, type Comment } fro
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -649,7 +649,7 @@ export default function NftDetailPage({
   // Community config
   useEffect(() => {
     getCommunityConfig()
-      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: c.inflation_history ?? [] }); })
+      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled) }); })
       .catch(() => {});
   }, []);
 

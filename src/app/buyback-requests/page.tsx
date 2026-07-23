@@ -24,7 +24,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { confirmBuybackRequest, rejectBuybackRequest, BuybackRequestError } from '@/lib/projects';
 import { getCommunityConfig } from '@/lib/community-config';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -331,7 +331,7 @@ export default function BuybackRequestsPage() {
         )),
         getCommunityConfig(),
       ]);
-      setInflationHistory(cfg?.inflation_history ?? []);
+      setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
 
       if (snap.empty) {
         setRequests([]);

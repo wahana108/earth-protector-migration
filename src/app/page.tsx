@@ -23,7 +23,7 @@ import { db } from '@/lib/firebase';
 import { getCommunityConfig } from '@/lib/community-config';
 import { KATEGORI_LABELS, type ProjectCategory } from '@/lib/types';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ export default function HomePage() {
           getDoc(doc(db, 'pool_rekomendasi', 'v1')),
           getCommunityConfig(),
         ]);
-        setInflationHistory(cfg?.inflation_history ?? []);
+        setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
 
         setStats({
           totalProjects: projectsSnap.size,

@@ -25,7 +25,7 @@ import type { ProjectCategory } from '@/lib/types';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { getCommunityConfig } from '@/lib/community-config';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
-import type { InflationEntry } from '@/lib/inflation';
+import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -323,7 +323,7 @@ export default function PurchaseConfirmationsPage() {
         )),
         getCommunityConfig(),
       ]);
-      setInflationHistory(cfg?.inflation_history ?? []);
+      setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
 
       // Lazy eval: auto-complete pending yang expired, auto-cancel disputed yang
       // expired (deadline sama — purchase_auto_complete_at tidak berubah saat
