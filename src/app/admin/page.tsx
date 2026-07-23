@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, RefreshCcw, ShieldAlert, ArrowUpRight, ArrowDownRight,
   Minus, Flag, AlertTriangle, CheckCircle2, XCircle, Trash2, Search, UserX, ShieldOff,
-  Building2, Plus, X, HandCoins, Ban, Percent,
+  Building2, Plus, X, HandCoins, Ban, Percent, Copy, Check,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -31,7 +31,7 @@ import {
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
 import { updateCommunityConfig } from '@/lib/community-config';
-import { recordInflation } from '@/lib/inflation';
+import { recordInflation, buildInflationPrompt, parseInflationOutput } from '@/lib/inflation';
 import type { InfrastructureClaim, UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
@@ -559,6 +559,23 @@ function RejectClaimDialog({
   );
 }
 
+// ─── Copy button (pola sama dengan /ai-review) ────────────────────────────────
+
+function CopyButton({ text, label = 'Salin' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function handleCopy() {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <Button size="sm" variant="outline" onClick={handleCopy} className="h-7 text-xs gap-1.5">
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? 'Tersalin' : label}
+    </Button>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -605,6 +622,8 @@ export default function AdminPage() {
   const [recordAlasan, setRecordAlasan] = useState('');
   const [recordingInflation, setRecordingInflation] = useState(false);
   const [recordResult, setRecordResult] = useState<string | null>(null);
+  const [pastedInflationOutput, setPastedInflationOutput] = useState('');
+  const [inflationParseError, setInflationParseError] = useState('');
 
   // Antrian Klaim Kontribusi
   const [pendingClaims, setPendingClaims] = useState<InfrastructureClaim[]>([]);
@@ -790,6 +809,17 @@ export default function AdminPage() {
     }
   }
 
+  function handleParseInflation() {
+    setInflationParseError('');
+    const result = parseInflationOutput(pastedInflationOutput);
+    if (typeof result === 'string') {
+      setInflationParseError(result);
+    } else {
+      setRecordPct(String(result.pct));
+      setRecordAlasan(result.alasan);
+    }
+  }
+
   async function handleRecordInflation() {
     if (!user) return;
     const pctNum = parseFloat(recordPct.replace(',', '.'));
@@ -803,7 +833,7 @@ export default function AdminPage() {
       const tahunBerjalan = new Date().getFullYear();
       await recordInflation(tahunBerjalan, pctNum, user.id, user.displayName ?? 'Admin', recordAlasan.trim());
       setRecordResult(`Tercatat: ${tahunBerjalan} → ${pctNum > 0 ? '+' : ''}${pctNum}%.`);
-      setRecordPct(''); setRecordAlasan('');
+      setRecordPct(''); setRecordAlasan(''); setPastedInflationOutput(''); setInflationParseError('');
       await loadInfra();
     } catch (e) {
       setRecordResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
@@ -1394,35 +1424,76 @@ export default function AdminPage() {
                   </p>
                 ) : (
                   <>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="number"
-                        step="0.1"
-                        className="w-32 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder={`pct ${new Date().getFullYear()} (mis. -3 utk deflasi)`}
-                        value={recordPct}
-                        onChange={e => setRecordPct(e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground">%/tahun {new Date().getFullYear()}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          Prompt untuk AI eksternal (Gemini, GPT, dll)
+                        </span>
+                        <CopyButton text={buildInflationPrompt(new Date().getFullYear())} label="Salin Prompt" />
+                      </div>
+                      <pre className="text-xs bg-muted rounded-lg p-3 overflow-auto max-h-40 whitespace-pre-wrap font-mono leading-relaxed">
+                        {buildInflationPrompt(new Date().getFullYear())}
+                      </pre>
                     </div>
-                    <Textarea
-                      className="text-xs min-h-[60px]"
-                      placeholder="Alasan/rujukan resmi (wajib) — mis. sumber data inflasi BPS"
-                      value={recordAlasan}
-                      onChange={e => setRecordAlasan(e.target.value)}
-                    />
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={recordingInflation}
-                      onClick={handleRecordInflation}
-                    >
-                      {recordingInflation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                      Catat Peristiwa Resmi
-                    </Button>
-                    {recordResult && (
-                      <p className="text-xs text-muted-foreground">{recordResult}</p>
-                    )}
+
+                    <div className="space-y-2">
+                      <span className="text-xs text-muted-foreground">
+                        Tempel hasil AI — format: <code className="bg-muted px-1 rounded">INFLASI: [n] | [alasan]</code>
+                      </span>
+                      <Textarea
+                        className="text-xs min-h-[50px] font-mono"
+                        placeholder={'INFLASI: 4 | Estimasi BPS Q3 2026'}
+                        value={pastedInflationOutput}
+                        onChange={e => setPastedInflationOutput(e.target.value)}
+                      />
+                      {inflationParseError && (
+                        <p className="text-xs text-destructive bg-destructive/10 rounded-md px-2 py-1.5">{inflationParseError}</p>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={!pastedInflationOutput.trim()}
+                        onClick={handleParseInflation}
+                      >
+                        Parse &amp; Isi Otomatis
+                      </Button>
+                    </div>
+
+                    <div className="pt-2 border-t space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Tinjau/koreksi sebelum mencatat (boleh diisi manual tanpa AI):
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="w-32 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder={`pct ${new Date().getFullYear()} (mis. -3 utk deflasi)`}
+                          value={recordPct}
+                          onChange={e => setRecordPct(e.target.value)}
+                        />
+                        <span className="text-xs text-muted-foreground">%/tahun {new Date().getFullYear()}</span>
+                      </div>
+                      <Textarea
+                        className="text-xs min-h-[60px]"
+                        placeholder="Alasan/rujukan resmi (wajib) — mis. sumber data inflasi BPS"
+                        value={recordAlasan}
+                        onChange={e => setRecordAlasan(e.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={recordingInflation}
+                        onClick={handleRecordInflation}
+                      >
+                        {recordingInflation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Catat Peristiwa Resmi
+                      </Button>
+                      {recordResult && (
+                        <p className="text-xs text-muted-foreground">{recordResult}</p>
+                      )}
+                    </div>
                   </>
                 )}
               </div>

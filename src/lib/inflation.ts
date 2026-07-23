@@ -42,6 +42,36 @@ export function effectiveInflationHistory(
   return inflationHistory ?? [];
 }
 
+// ─── Prompt baku manual-bridge (pola sama dengan buildAiReviewPrompt) ───────
+// Dipakai ulang oleh versi otonom kelak — tahun disuntik dinamis, tidak ada
+// data developer yang diekspor (inflasi bukan penilaian per-developer).
+export function buildInflationPrompt(tahun: number): string {
+  return `Kamu adalah asisten data ekonomi untuk platform komunitas NFT nirlaba. Beri estimasi inflasi tahunan Rupiah Indonesia untuk tahun ${tahun}. Ini bukan keputusan final — hanya estimasi transparan yang ditinjau administrator.
+INSTRUKSI:
+- Berikan satu bilangan bulat persen (boleh negatif = deflasi).
+- Gunakan data resmi terbaru (mis. BPS) bila ada; jika tahun berjalan belum lengkap, beri estimasi terbaik + sebutkan dasarnya.
+- Output HANYA satu baris, FORMAT PERSIS:
+  INFLASI: [bilangan bulat] | [alasan/sumber singkat, maks 80 char]
+- Jangan tambahkan narasi lain.`;
+}
+
+export type ParsedInflation = { pct: number; alasan: string };
+
+// ─── Parse output AI → entri tervalidasi (mirror parseAiOutput) ────────────
+export function parseInflationOutput(text: string): ParsedInflation | string {
+  const line = text.split('\n').map(l => l.trim()).find(l => l.toUpperCase().startsWith('INFLASI:'));
+  if (!line) return 'Tidak ada baris "INFLASI:" ditemukan. Pastikan output AI sesuai format.';
+
+  const parts = line.replace(/^INFLASI:\s*/i, '').split('|').map(p => p.trim());
+  if (parts.length < 2) return `Format salah (kurang dari 2 bagian): "${line.substring(0, 60)}"`;
+
+  const pct = parseInt(parts[0], 10);
+  const alasan = parts.slice(1).join('|').trim();
+  if (isNaN(pct)) return `Bilangan tidak valid: "${parts[0]}"`;
+
+  return { pct, alasan };
+}
+
 // ─── Catat peristiwa resmi inflasi/deflasi tahunan ───────────────────────────
 // Meniru pola suspendUser/unsuspendUser (projects.ts): satu writeBatch, dua
 // tulisan. TIDAK pernah runTransaction — tidak ada saldo yang dicek, murni
