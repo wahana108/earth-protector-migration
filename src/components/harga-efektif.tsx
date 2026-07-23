@@ -17,6 +17,9 @@ type HargaEfektifInfoProps = {
 
 // Info MURNI TAMPILAN — estimasi nilai Rupiah hari ini dari sebuah harga
 // tercatat. Tidak pernah dipakai untuk menghitung/menulis neraca.
+// Gerbang inflation_enabled diterapkan di sumber data (lihat
+// effectiveInflationHistory di lib/inflation.ts) — saat nonaktif,
+// inflationHistory yang diterima di sini sudah berupa array kosong.
 export function HargaEfektifInfo({ harga, createdAt, inflationHistory, className }: HargaEfektifInfoProps) {
   if (!inflationHistory || inflationHistory.length === 0) return null;
   const efektif = hargaEfektifTampilan(harga, createdAt, inflationHistory);

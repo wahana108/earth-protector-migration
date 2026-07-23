@@ -160,6 +160,7 @@ export type CommunityConfig = {
   ai_provider: string;
   ai_anomali_threshold: { flag: number; invalid: number };
   infrastructure_costs?: Array<{ nama: string; jumlah: number; periode: 'bulan' | 'tahun' | 'sekali' | 'gratis'; info?: string }>;
+  inflation_enabled: boolean;
   inflation_history?: Array<{ tahun: number; pct: number }>;
   updated_at: Date;
   updated_by: string;
@@ -214,6 +215,16 @@ export type InfrastructureClaim = {
   alasan_penolakan?: string;
   created_at: Date;
   processed_at?: Date | null;
+};
+
+export type InflationLog = {
+  id: string;
+  tahun: number;
+  pct: number;
+  aktor_uid: string;
+  aktor_nama: string;
+  alasan: string;
+  created_at: Date;
 };
 
 export type AiReviewStatus = 'applied' | 'reverted' | 'final';

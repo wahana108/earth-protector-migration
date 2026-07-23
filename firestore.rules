@@ -374,6 +374,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── inflation_log/{logId} ────────────────────────────────────────────────
+    // Jejak publik pencatatan info inflasi/deflasi tahunan (recordInflation).
+    // Delta 0 murni — tidak pernah menyentuh saldo. Sama seperti
+    // infrastructure_payments: publik dibaca demi transparansi, tulis hanya
+    // admin, tidak pernah dihapus (log publik tidak boleh hilang).
+    match /inflation_log/{logId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
     // ─── infrastructure_claims/{claimId} ─────────────────────────────────────
     // User mengklaim sudah membayar infrastruktur nyata; admin verifikasi.
     // Publik untuk dibaca (transparansi). Create: hanya pemilik klaim, status
