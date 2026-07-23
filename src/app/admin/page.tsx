@@ -31,6 +31,7 @@ import {
   type InfrastructureFundStatus,
 } from '@/lib/infrastructure';
 import { updateCommunityConfig } from '@/lib/community-config';
+import { recordInflation } from '@/lib/inflation';
 import type { InfrastructureClaim, UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
@@ -599,6 +600,11 @@ export default function AdminPage() {
   const [savingCosts, setSavingCosts] = useState(false);
   const [inflationHistory, setInflationHistory] = useState<Array<{ tahun: number; pct: number }>>([]);
   const [savingInflation, setSavingInflation] = useState(false);
+  const [inflationEnabled, setInflationEnabled] = useState(true);
+  const [recordPct, setRecordPct] = useState('');
+  const [recordAlasan, setRecordAlasan] = useState('');
+  const [recordingInflation, setRecordingInflation] = useState(false);
+  const [recordResult, setRecordResult] = useState<string | null>(null);
 
   // Antrian Klaim Kontribusi
   const [pendingClaims, setPendingClaims] = useState<InfrastructureClaim[]>([]);
@@ -714,6 +720,7 @@ export default function AdminPage() {
         })),
       );
       setInflationHistory(config?.inflation_history ?? []);
+      setInflationEnabled(config?.inflation_enabled ?? true);
     } finally {
       setLoadingInfra(false);
     }
@@ -780,6 +787,28 @@ export default function AdminPage() {
       await updateCommunityConfig(user.id, { infrastructure_costs: cleanedCosts });
     } finally {
       setSavingCosts(false);
+    }
+  }
+
+  async function handleRecordInflation() {
+    if (!user) return;
+    const pctNum = parseFloat(recordPct.replace(',', '.'));
+    if (isNaN(pctNum) || !recordAlasan.trim()) {
+      setRecordResult('Persentase dan alasan wajib diisi.');
+      return;
+    }
+    setRecordingInflation(true);
+    setRecordResult(null);
+    try {
+      const tahunBerjalan = new Date().getFullYear();
+      await recordInflation(tahunBerjalan, pctNum, user.id, user.displayName ?? 'Admin', recordAlasan.trim());
+      setRecordResult(`Tercatat: ${tahunBerjalan} → ${pctNum > 0 ? '+' : ''}${pctNum}%.`);
+      setRecordPct(''); setRecordAlasan('');
+      await loadInfra();
+    } catch (e) {
+      setRecordResult(`Gagal: ${e instanceof Error ? e.message : 'Terjadi kesalahan.'}`);
+    } finally {
+      setRecordingInflation(false);
     }
   }
 
@@ -1354,7 +1383,53 @@ export default function AdminPage() {
                 negatif untuk deflasi (compounding simetris).
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
+              <div className="space-y-2 pb-4 border-b">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Catat Peristiwa Resmi Tahun Ini
+                </p>
+                {!inflationEnabled ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    Fitur inflasi/deflasi nonaktif (lihat /parameters) — aksi pencatatan resmi disembunyikan.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        step="0.1"
+                        className="w-32 h-7 px-2 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder={`pct ${new Date().getFullYear()} (mis. -3 utk deflasi)`}
+                        value={recordPct}
+                        onChange={e => setRecordPct(e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">%/tahun {new Date().getFullYear()}</span>
+                    </div>
+                    <Textarea
+                      className="text-xs min-h-[60px]"
+                      placeholder="Alasan/rujukan resmi (wajib) — mis. sumber data inflasi BPS"
+                      value={recordAlasan}
+                      onChange={e => setRecordAlasan(e.target.value)}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={recordingInflation}
+                      onClick={handleRecordInflation}
+                    >
+                      {recordingInflation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Catat Peristiwa Resmi
+                    </Button>
+                    {recordResult && (
+                      <p className="text-xs text-muted-foreground">{recordResult}</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <p className="text-xs font-medium text-muted-foreground">
+                Koreksi Data Historis
+              </p>
               <div className="space-y-2">
                 {inflationHistory.map((item, i) => (
                   <div key={i} className="flex gap-2 items-center">
