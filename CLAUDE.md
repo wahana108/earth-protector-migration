@@ -38,13 +38,14 @@ NEXT_PUBLIC_SUPER_ADMIN_EMAIL, NEXT_PUBLIC_FIREBASE_*
 NEXT_PUBLIC_USE_EMULATOR   → hanya 'true' di .env.local dev. TIDAK ADA di Vercel.
 RECALC_SECRET              → /api/recalculate (sama dengan GitHub Secret)
 AI_REVIEW_SECRET           → /api/ai-review-auto (sama dengan GitHub Secret)
+INFLATION_AUTO_SECRET      → /api/inflation-auto (sama dengan GitHub Secret)
 GEMINI_API_KEY             → key dengan free tier terbukti (key lama/grandfathered;
                              key BARU Google tidak dapat free tier — limit 0)
 GEMINI_MODEL               → opsional, override model (format: googleai/nama-model)
 FIREBASE_SERVICE_ACCOUNT_KEY → base64(JSON service account) untuk Admin SDK
 FIRESTORE_EMULATOR_HOST    → HANYA .env.local dev (127.0.0.1:8082). DILARANG di Vercel!
 ```
-### GitHub Secrets: APP_URL, RECALC_SECRET, AI_REVIEW_SECRET
+### GitHub Secrets: APP_URL, RECALC_SECRET, AI_REVIEW_SECRET, INFLATION_AUTO_SECRET
 
 ---
 
@@ -59,15 +60,45 @@ AI GOVERNANCE TAHAP A ✓ Manual-bridge, watermark, konservasi nilai,
             unifikasi fee_pool, reward kontributor
 AI OTONOM LEVEL 2 ✓ Gemini API bridge + cron bulanan — siklus penuh
             tanpa manusia terbukti (2026-07); dua mode berdampingan
-KOMUNITAS & TATA KELOLA MANDIRI ✓ (2026-07, fase terbaru):
+KOMUNITAS & TATA KELOLA MANDIRI ✓ (2026-07):
             lencana kontributor, lapak on/off, admin suspend,
             dispute auto-cancel, panduan transaksi sehat,
             hardening rules users, atomic increment fee sharing
+VERIFIED SIGNUP ✓ (2026-07, feat/verified-signup):
+            dokumen users/{uid} HANYA dibuat setelah email
+            terverifikasi (dibuat saat login pertama pasca-verifikasi
+            via fallback fetchUserProfile). Signup → sendEmailVerification
+            → layar "cek email" → signOut. Login unverified →
+            UnverifiedEmailError + tombol kirim ulang + signOut.
+            Google Sign-In tak berubah (emailVerified true). firestore.rules:
+            create users/{userId} wajib request.auth.token.email_verified
+            == true (lapis server-side). Reset password via
+            sendPasswordResetEmail, pesan generik demi privasi.
+            onAuthStateChanged force-signOut sesi unverified (defense-in-depth).
+HOME POLISH & PRICE GUARD ✓ (2026-07, feat/home-polish-price-guard):
+            fix param nav kategori (category→kategori di page.tsx &
+            nft-card.tsx — bug sama 2 tempat); guard harga_jual HARUS >
+            harga_dasar (validasi form + server createProject; lapis
+            firestore.rules DITUNDA — perlu uji batch get() di emulator);
+            slideshow hero (cross-fade CSS, 5 foto, tanpa library);
+            roadmap /help ditandai ✓; fallback onError NftCard;
+            placeholder kategori 'energi' (map CATEGORY_PLACEHOLDER dulu
+            tak punya key parent 'energi' → fallback default.svg berteks
+            "Lainnya"; kini 12 kategori lengkap). Audit: 0 dari 102
+            nft_units seharga harga_dasar (tak ada grandfathered).
+INFLASI/DEFLASI — TAMPILAN + OTONOM ✓ (2026-07, feat/inflation-trigger-log
+            + feat/inflation-auto): lapisan info "≈ nilai hari ini" MURNI
+            TAMPILAN — poin/neraca TIDAK tersentuh, zero-sum aman. Manual
+            (admin, jembatan prompt) + otonom (cron tahunan, mirror pola
+            AI Governance Level 2). Lihat detail di bawah.
+COMMUNITY LINKS ✓ (2026-07, feat/community-links): /help subsection
+            "Komunitas / Diskusi" — link Discord & Telegram, mengikuti
+            gaya link Ekosistem yang sudah ada.
 ```
 
 ---
 
-## FASE KOMUNITAS & TATA KELOLA MANDIRI (terbaru — detail)
+## FASE KOMUNITAS & TATA KELOLA MANDIRI (detail)
 
 ### Lencana Kontributor ("centang biru" TMEP)
 ```
@@ -141,6 +172,8 @@ paksa via console).
 AUDIT TRAIL: neraca_log 'admin_suspend'/'admin_unsuspend' delta 0
 dengan target_email + target_nama + alasan + counterparty_id adminUid —
 siapa pun bisa melihat siapa di-suspend & kenapa dari log, tanpa console.
+Catatan: suspend user MENGURANGI hitungan user aktif (via isLapakAktif)
+→ sesuai konsep (mengeluarkan dari totalUsers/kuota Fibonacci).
 ```
 
 ### Dispute Auto-Cancel (anti-menggantung, simetri auto-complete)
@@ -222,6 +255,69 @@ harga_dasar; skor<min_skor → dibagi 2.
 
 ---
 
+## SISTEM INFLASI/DEFLASI (detail)
+
+### Konsep & lapisan tampilan
+```
+Poin/neraca TIDAK tersentuh (zero-sum aman) — inflasi HANYA lapisan
+info Rupiah dunia-nyata di atas harga tercatat (kekal), bukan demurrage
+pada harga_dasar/revaluasi NFT seperti rancangan awal di roadmap lama.
+Multiplier compounding per tahun sejak NFT dibuat; pct boleh negatif
+(deflasi). lib/inflation.ts: hargaEfektifTampilan, buildInflationPrompt,
+parseInflationOutput, recordInflation (client, writeBatch upsert
+inflation_history + inflation_log — dua tulisan, bukan transaction,
+tidak ada saldo dicek).
+```
+
+### Otonom (mirror pola AI Governance Level 2)
+```
+lib/inflation-server.ts: recordInflationAdmin — mirror Admin SDK dari
+recordInflation, dipakai cron tanpa auth user (rules community_config/
+inflation_log butuh isAdmin(), server-to-server tak punya request.auth
+→ client SDK ditolak). Koleksi inflation_log (top-level, jiplak
+infrastructure_payments: publik dibaca, admin-only tulis, delete: if
+false) — SENGAJA TERPISAH dari neraca_log (subcollection per-user) agar
+tidak mengontaminasi agregasi AI review (fetchDevLogs query per-user)
+maupun dashboard personal user.
+
+Toggle inflation_enabled (master, default true) + inflation_auto_enabled
+(default false) di community_config/v1 — mirror ai_governance_enabled/
+ai_auto_mode_enabled, independen total dari toggle AI.
+
+Endpoint /api/inflation-auto (POST, x-inflation-auto-secret): auth →
+config → guard (inflation_enabled && inflation_auto_enabled &&
+GEMINI_API_KEY) → tahunTarget = getFullYear()-1 (tahun yang baru
+selesai) → idempotency guard (skip SEBELUM panggil Gemini jika tahun
+sudah tercatat — menghormati override admin, tidak pernah menimpa) →
+buildInflationPrompt → Gemini (fallback chain sama persis
+ai-review-auto) → parseInflationOutput → recordInflationAdmin (aktor
+'ai-auto' / 'AI Otonom'). Cron: yearly-inflation.yml ('0 0 2 1 *' — 2
+Januari 00:00 UTC, sengaja di Januari UTC agar getFullYear()-1 benar)
++ dispatch manual. Admin tetap bisa catat manual kapan saja.
+```
+
+### UI
+```
+/admin: aksi "Catat Peristiwa Resmi" — jembatan prompt manual-bridge
+(buildInflationPrompt → salin ke AI eksternal → tempel hasil →
+parseInflationOutput mengisi pct+alasan otomatis, tetap bisa dikoreksi
+manual) → recordInflation. Editor "Koreksi Data Historis" TETAP ada
+di sebelahnya untuk perbaikan senyap (updateCommunityConfig langsung,
+tanpa log). /parameters: toggle inflation_enabled + inflation_auto_enabled
+di card "Inflasi/Deflasi", plus "Riwayat Perubahan Inflasi/Deflasi"
+(getInflationLog, publik). "≈ nilai hari ini" tampil di ~9 halaman
+transaksi, di-gate lewat effectiveInflationHistory() di titik sumber
+data config — nol prop baru di komponen kartu/dialog turunan.
+```
+
+### Env baru
+```
+INFLATION_AUTO_SECRET (Vercel + GitHub Secret) — pola identik
+AI_REVIEW_SECRET, dipakai header x-inflation-auto-secret.
+```
+
+---
+
 ## NERACA SISTEM (fee_pool/v1)
 
 ```
@@ -256,17 +352,32 @@ DEPRECATED: sertifikat NFT pool (double-debit; @deprecated, UI hidden).
 - Log sistem nft_unit_id 'system' → render plain text, BUKAN Link.
 - Badge/tooltip (Radix div) JANGAN di dalam <p> → hydration error.
   Wadah: div/span.
-- RateLimitError & error domain: cek instanceof SEBELUM pesan generik.
+- RateLimitError, UnverifiedEmailError & error domain: cek instanceof
+  SEBELUM pesan generik.
 - Emulator: restart setelah ubah rules; FIRESTORE_EMULATOR_HOST untuk
   Admin SDK dev.
-- Deploy rules SEBELUM merge kode yang membutuhkannya:
-  $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; firebase deploy --only firestore:rules
+- URUTAN DEPLOY RULES vs KODE — tergantung ARAH perubahan rules:
+  • Rules MEMPERKETAT (menolak perilaku kode LAMA, mis. verified-signup
+    yang mensyaratkan email_verified): deploy KODE dulu ke produksi,
+    BARU rules. Kalau rules duluan, kode lama yang masih jalan ditolak
+    → fitur rusak sampai kode baru live.
+  • Rules MENAMBAH izin yang dibutuhkan kode BARU: deploy rules dulu,
+    baru kode.
+  • Perintah: $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; firebase deploy
+    --only firestore:rules (NODE_TLS=0 workaround TLS lokal, jangan
+    dijadikan setelan permanen). Alternatif: paste manual di Console.
 - Build stuck .next/trace = lingkungan Windows (antivirus/lock), bukan
   kode → rm .next + rebuild; tsc --noEmit sebagai verifikasi cepat.
-- Rollback: Vercel → Deployments → Promote.
+- Rollback: Vercel → Deployments → Promote. (Aman untuk branch yang
+  tidak mengubah data/rules — balik kode saja.)
 - Test API: (Invoke-WebRequest -Uri "..." -Method POST -Headers @{"x-...-secret"="..."} -UseBasicParsing).Content
 - Workflow: advisor merancang prompt → Claude CLI eksekusi → laporan
   file .txt. Branch: push -u di awal, merge setelah teruji.
+- DISIPLIN DUA FASE: untuk prompt yang menyebut "INVESTIGASI", BERHENTI
+  setelah memaparkan temuan + rancangan. JANGAN implementasi/commit
+  sebelum developer bilang "implementasikan" — sekalipun yakin.
+  Investigasi read-only (grep/read/cat) boleh otomatis; gerbang ada
+  tepat sebelum perubahan kode.
 ```
 
 ---
@@ -290,11 +401,21 @@ max_devs_per_run 10.
 ## ROADMAP — pengembangan berikutnya
 
 ```
+LAPIS RULES GUARD HARGA (ditunda dari feat/home-polish): get()-based
+  check harga_jual > harga_dasar di firestore.rules. Perlu uji batch
+  get() di emulator dulu (createProject menulis puluhan nft_units per
+  batch — tiap create trigger get() sendiri, cek limit/latency).
+
 SANGGAHAN OTONOM: vonis final; keberatan → klarifikasi FORMAT WAJIB →
   antrian → dinilai AI review berikutnya sebagai log khusus (valid →
   minus berkurang sebagian; alibi → minus BERTAMBAH). Report memberatkan,
   gugatan meringankan — masuk agregasi prompt AI. Log dispute_auto_cancel
   & klaim sudah dirancang sebagai bahan analisis ini.
+
+MODERASI USER OTONOM: auto-suspend berbasis ambang (mis. blocklist),
+  dengan mitigasi manipulasi (hitung hanya user verified/aktif/berbobot
+  reputasi, bukan hitungan kepala mentah) + jendela veto admin. Otonom
+  boleh SUSPEND (reversibel), JANGAN auto-delete.
 
 VERIFIKASI KLAIM LENCANA OLEH AI: antrian klaim dibaca AI (bukti link
   dianalisis) → pola manual→otonom yang sama dengan AI review.
@@ -305,10 +426,14 @@ PERKAYA DATA AI: proof_link, transaction_description, timestamp detail,
 
 BADGE BERTINGKAT (perak/emas berdasar total_kontribusi) — fondasi siap.
 
+DARK MODE TOGGLE: opsi tema terang/gelap (perlu token warna konsisten).
+
 USER AKTIF LANJUTAN: pruning paksa TERGANTIKAN lapak on/off sukarela.
   Tersisa jika perlu: auto-OFF setelah tidak aktif periode sangat lama.
 
-UPDATE ROADMAP PUBLIK di /help (manual, ringan): 4 fase tercapai.
+AKUN UNVERIFIED LAMA (dari sebelum verified-signup): 5 akun tester
+  (luki_gama, jono, agus108, gogreen2371, onooppo011) — putuskan manual
+  via /admin (suspend) atau Firebase Console. Tidak dihapus otomatis.
 
 KNOWN ISSUES (terdokumentasi sadar):
 - Gemini key BARU tanpa free tier → pakai key lama/billing; fallback
@@ -317,6 +442,12 @@ KNOWN ISSUES (terdokumentasi sadar):
 - Fee edge totalNilai==0 (tak terjadi normal).
 - Guard 1-pending klaim client-side saja (admin = gerbang keras).
 - Build lokal kadang stuck .next lock (lingkungan Windows, bukan kode).
+- Workflow cron pakai ${{ secrets.APP_URL }} (BUKAN vars.APP_URL). APP_URL
+  sempat TIDAK ADA sebagai repository Secret → daily-recalculate,
+  monthly-ai-review, yearly-inflation gagal (exit code 3, URL kosong).
+  DIPERBAIKI dengan menambah APP_URL sebagai Secret. Idealnya URL bukan
+  rahasia → Variable (vars.APP_URL) lebih tepat secara semantik — kandidat
+  rapikan nanti (ganti secrets→vars di ketiga workflow sekaligus).
 
 FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
   Fibonacci node spreading, near-DAPP, Level 3 (DAO, no admin).
@@ -335,9 +466,12 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
 
 ---
 
-> Versi: 3.3 | Fase Komunitas & Tata Kelola Mandiri LIVE (2026-07):
-> lencana kontributor, lapak on/off, admin suspend, dispute auto-cancel,
-> panduan transaksi sehat, hardening rules, atomic increment.
-> Platform kini berakuntabilitas: setiap tindakan admin tercatat publik,
-> setiap sengketa terselesaikan otomatis, setiap kontribusi berlencana.
-> Menuju: sanggahan otonom & verifikasi klaim AI.
+> Versi: 3.5 | feat/inflation-trigger-log + feat/inflation-auto +
+> feat/community-links LIVE (2026-07). Inflasi/Deflasi: lapisan "≈ nilai
+> hari ini" murni tampilan (poin/neraca tak tersentuh) — manual (jembatan
+> prompt di /admin) + otonom (cron tahunan, mirror AI Governance Level 2,
+> koleksi inflation_log terpisah dari neraca_log). /help: subsection
+> Komunitas/Diskusi (Discord+Telegram).
+> Sebelumnya (3.4): feat/verified-signup + feat/home-polish-price-guard —
+> gate email_verified, guard harga > harga dasar, slideshow, roadmap /help.
+> Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom.
