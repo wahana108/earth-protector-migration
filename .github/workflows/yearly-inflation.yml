@@ -1,0 +1,16 @@
+name: Yearly Inflation
+
+on:
+  schedule:
+    - cron: '0 0 2 1 *'  # 2 Januari 00:00 UTC = 2 Januari 08:00 WITA — sengaja di bulan Januari UTC agar getFullYear()-1 = tahun yang baru selesai
+  workflow_dispatch:       # bisa dijalankan manual dari GitHub Actions tab (untuk test)
+
+jobs:
+  inflation-auto:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Inflation Auto
+        run: |
+          curl -f -X POST "${{ secrets.APP_URL }}/api/inflation-auto" \
+            -H "x-inflation-auto-secret: ${{ secrets.INFLATION_AUTO_SECRET }}" \
+            -H "Content-Type: application/json"

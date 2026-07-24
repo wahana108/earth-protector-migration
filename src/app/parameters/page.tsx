@@ -63,6 +63,7 @@ type EditValues = {
   ai_auto_max_devs_per_run: number;
   badge_klaim_enabled: boolean;
   inflation_enabled: boolean;
+  inflation_auto_enabled: boolean;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -105,6 +106,7 @@ function configToEdit(c: CommunityConfig): EditValues {
     ai_auto_max_devs_per_run: c.ai_auto_max_devs_per_run ?? 10,
     badge_klaim_enabled: c.badge_klaim_enabled ?? true,
     inflation_enabled: c.inflation_enabled ?? true,
+    inflation_auto_enabled: c.inflation_auto_enabled ?? false,
   };
 }
 
@@ -146,6 +148,7 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     ai_auto_max_devs_per_run: e.ai_auto_max_devs_per_run,
     badge_klaim_enabled: e.badge_klaim_enabled,
     inflation_enabled: e.inflation_enabled,
+    inflation_auto_enabled: e.inflation_auto_enabled,
   };
 }
 
@@ -670,6 +673,24 @@ export default function ParametersPage() {
                       tidak pernah menulis/mengubah neraca.
                     </p>
                   </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-muted-foreground">Mode Otonom (Level 2)</span>
+                    <select
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                      value={editValues.inflation_auto_enabled ? 'true' : 'false'}
+                      onChange={e => setField('inflation_auto_enabled', e.target.value === 'true')}
+                    >
+                      <option value="false">Nonaktif (default)</option>
+                      <option value="true">Aktif</option>
+                    </select>
+                  </div>
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Cron tahunan (1x, awal Januari) mencatat estimasi inflasi tahun yang baru
+                      selesai via AI, HANYA jika tahun tsb belum tercatat (tidak menimpa entri
+                      manual/otonom yang sudah ada). Independen dari AI Governance di atas.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </>
@@ -922,6 +943,14 @@ export default function ParametersPage() {
                       Saat nonaktif, &quot;≈ nilai hari ini&quot; disembunyikan di seluruh halaman dan
                       aksi pencatatan resmi di /admin disembunyikan. Murni lapisan tampilan —
                       tidak pernah menulis/mengubah neraca.
+                    </p>
+                  </div>
+                  <ParamRow label="Mode Otonom (Level 2)" value={(config.inflation_auto_enabled ?? false) ? 'Aktif' : 'Nonaktif (default)'} />
+                  <div className="pt-2 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Cron tahunan (1x, awal Januari) mencatat estimasi inflasi tahun yang baru
+                      selesai via AI, HANYA jika tahun tsb belum tercatat (tidak menimpa entri
+                      manual/otonom yang sudah ada). Independen dari AI Governance di atas.
                     </p>
                   </div>
                   {inflationLog.length > 0 && (

@@ -45,6 +45,7 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   ai_provider: 'gemini',
   ai_anomali_threshold: { flag: 1, invalid: 100 },
   inflation_enabled: true,
+  inflation_auto_enabled: false,
   inflation_history: [],
 };
 
