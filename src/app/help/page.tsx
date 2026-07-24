@@ -12,6 +12,8 @@ import {
 
 const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration';
 const GITHUB_INSTANCES = 'https://github.com/wahana108/earth-nft-instances';
+const DISCORD_URL = 'https://discord.gg/CHd7TKCMTq';
+const TELEGRAM_URL = 'https://t.me/+a2fePe09QPI2Yjc1';
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 export default function HelpPage() {
@@ -368,6 +370,34 @@ export default function HelpPage() {
                     className="text-primary hover:underline inline-flex items-center gap-1"
                   >
                     earth-nft-instances — Community Registry
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-semibold text-foreground">Komunitas / Diskusi</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>
+                  <a
+                    href={DISCORD_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Discord
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={TELEGRAM_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Telegram
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </li>
