@@ -94,6 +94,28 @@ INFLASI/DEFLASI — TAMPILAN + OTONOM ✓ (2026-07, feat/inflation-trigger-log
 COMMUNITY LINKS ✓ (2026-07, feat/community-links): /help subsection
             "Komunitas / Diskusi" — link Discord & Telegram, mengikuti
             gaya link Ekosistem yang sudah ada.
+SEO FASE 1 — RUTE PUBLIK & METADATA ✓ (2026-07, feat/seo + feat/gsc-verify):
+            src/lib/public-routes.ts (sumber tunggal): / dan /help kini
+            publik — middleware TIDAK redirect ke /login, dan AuthProvider
+            skip AuthLoader untuk rute ini agar HTML awal berisi konten
+            asli (SSR), bukan skeleton kosong. Halaman fungsional/sensitif
+            (dashboard, admin, transaksi, dst.) tetap digerbangi login.
+            Landing (/): intro statis SSR (satu H1) DI BAWAH slideshow
+            hero lama, warna brand (headline #0f5c56, body #35433f, frasa
+            kunci hijau #1f7a72). Metadata TMEP di layout.tsx (global) +
+            per-halaman (/, /help): title/description/canonical/Open
+            Graph; metadataBase = domain Vercel produksi. OG image dinamis
+            via app/opengraph-image.tsx (logo bumi + Sri Yantra). Favicon
+            dari public/tmep-logo.svg. Logo TMEP juga tampil di
+            header/sidebar (menggantikan ikon daun lama). app/robots.ts +
+            app/sitemap.ts (daftar rute publik). Verifikasi Google Search
+            Console via metadata.verification.google (JANGAN dihapus).
+            /help subsection Komunitas: Discord, Telegram, YouTube
+            (@ispirabetterworld8258).
+            CATATAN: menambah rute publik baru = ubah HANYA
+            src/lib/public-routes.ts; JANGAN buka halaman fungsional/
+            sensitif. Fase 2 (listing publik crawlable, mis. /explore,
+            /projects) BELUM dikerjakan.
 ```
 
 ---
@@ -466,12 +488,14 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
 
 ---
 
-> Versi: 3.5 | feat/inflation-trigger-log + feat/inflation-auto +
-> feat/community-links LIVE (2026-07). Inflasi/Deflasi: lapisan "≈ nilai
-> hari ini" murni tampilan (poin/neraca tak tersentuh) — manual (jembatan
-> prompt di /admin) + otonom (cron tahunan, mirror AI Governance Level 2,
-> koleksi inflation_log terpisah dari neraca_log). /help: subsection
-> Komunitas/Diskusi (Discord+Telegram).
-> Sebelumnya (3.4): feat/verified-signup + feat/home-polish-price-guard —
-> gate email_verified, guard harga > harga dasar, slideshow, roadmap /help.
-> Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom.
+> Versi: 3.6 | feat/seo + feat/gsc-verify LIVE (2026-07). SEO Fase 1: rute
+> publik (/, /help) via src/lib/public-routes.ts (sumber tunggal),
+> AuthLoader di-skip untuk rute publik agar SSR penuh, intro statis di
+> landing, metadata/OG/canonical TMEP, app/robots.ts + app/sitemap.ts,
+> verifikasi Google Search Console, logo TMEP di header. Fase 2 (listing
+> publik crawlable) belum digarap.
+> Sebelumnya (3.5): feat/inflation-trigger-log + feat/inflation-auto +
+> feat/community-links — inflasi/deflasi lapisan tampilan (manual+otonom),
+> link Discord/Telegram di /help.
+> Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom;
+> SEO Fase 2 (listing publik crawlable).
