@@ -3,10 +3,27 @@ import './globals.css';
 import { AuthProvider } from '@/hooks/use-auth';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
+import { SITE_URL, SITE_NAME } from '@/lib/site-config';
 
 export const metadata: Metadata = {
-  title: 'Earth Firebase Sanctuary',
-  description: 'An NFT marketplace with an environmental focus, built on Firebase.',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'The Mother Earth Project (TMEP)',
+    template: '%s · TMEP',
+  },
+  description:
+    'Eksperimen terbuka menghasilkan kredit sosial dari tindakan charity nyata — NFT sebagai sertifikat pengakuan yang nilainya dijaga komunitas.',
+  icons: {
+    icon: '/tmep-logo.svg',
+    shortcut: '/tmep-logo.svg',
+  },
+  openGraph: {
+    title: 'The Mother Earth Project (TMEP)',
+    description:
+      'Eksperimen terbuka menghasilkan kredit sosial dari tindakan charity nyata — NFT sebagai sertifikat pengakuan yang nilainya dijaga komunitas.',
+    siteName: SITE_NAME,
+    type: 'website',
+  },
 };
 
 export default function RootLayout({

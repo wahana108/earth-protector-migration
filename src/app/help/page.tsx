@@ -1,5 +1,6 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ExternalLink, Github } from 'lucide-react';
+import { ExternalLink, Github, Youtube } from 'lucide-react';
 
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,12 +10,28 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { SITE_URL } from '@/lib/site-config';
 
 const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration';
 const GITHUB_INSTANCES = 'https://github.com/wahana108/earth-nft-instances';
 const DISCORD_URL = 'https://discord.gg/CHd7TKCMTq';
 const TELEGRAM_URL = 'https://t.me/+a2fePe09QPI2Yjc1';
+const YOUTUBE_URL = 'https://www.youtube.com/@ispirabetterworld8258';
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
+
+export const metadata: Metadata = {
+  title: 'Bantuan & Manifesto',
+  description:
+    'Manifesto The Mother Earth Project: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
+  alternates: { canonical: `${SITE_URL}/help` },
+  openGraph: {
+    title: 'Bantuan & Manifesto — The Mother Earth Project',
+    description:
+      'Manifesto The Mother Earth Project: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
+    url: `${SITE_URL}/help`,
+    type: 'website',
+  },
+};
 
 export default function HelpPage() {
   return (
@@ -398,6 +415,18 @@ export default function HelpPage() {
                     className="text-primary hover:underline inline-flex items-center gap-1"
                   >
                     Telegram
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={YOUTUBE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <Youtube className="h-3.5 w-3.5" />
+                    YouTube
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </li>
