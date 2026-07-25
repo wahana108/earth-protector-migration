@@ -7,12 +7,14 @@ import React, {
   useState,
   ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { User } from "@/lib/types";
 import { getCommunityConfig } from "@/lib/community-config";
 import { maybeAutoRecalculate } from "@/lib/projects";
+import { PUBLIC_ROUTES } from "@/lib/public-routes";
 import {
   signInWithEmail,
   signUpWithEmail,
@@ -108,6 +110,8 @@ async function fetchUserProfile(firebaseUser: FirebaseUser): Promise<User> {
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {loading ? <AuthLoader /> : children}
+      {loading && !isPublicRoute ? <AuthLoader /> : children}
     </AuthContext.Provider>
   );
 }
