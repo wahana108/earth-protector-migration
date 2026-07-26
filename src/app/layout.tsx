@@ -8,19 +8,19 @@ import { SITE_URL, SITE_NAME } from '@/lib/site-config';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'The Mother Earth Project (TMEP)',
-    template: '%s · TMEP',
+    default: 'Inspira Better World — Open Charity Action Index',
+    template: '%s · Inspira Better World',
   },
   description:
-    'Eksperimen terbuka menghasilkan kredit sosial dari tindakan charity nyata — NFT sebagai sertifikat pengakuan yang nilainya dijaga komunitas.',
+    'Inspira Better World: NFT certificates for real-world good deeds. Sebuah charity action index terbuka berbasis community consensus dan AI governance — kredit sosial dari tindakan charity nyata, bukan aset spekulatif.',
   icons: {
     icon: '/tmep-logo.svg',
     shortcut: '/tmep-logo.svg',
   },
   openGraph: {
-    title: 'The Mother Earth Project (TMEP)',
+    title: 'Inspira Better World — Open Charity Action Index',
     description:
-      'Eksperimen terbuka menghasilkan kredit sosial dari tindakan charity nyata — NFT sebagai sertifikat pengakuan yang nilainya dijaga komunitas.',
+      'Inspira Better World: NFT certificates for real-world good deeds. Sebuah charity action index terbuka berbasis community consensus dan AI governance — kredit sosial dari tindakan charity nyata, bukan aset spekulatif.',
     siteName: SITE_NAME,
     type: 'website',
   },

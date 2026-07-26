@@ -1,10 +1,10 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'The Mother Earth Project';
+export const alt = 'Inspira Better World';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-const LOGO_SVG = `<svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Mother Earth Project logo">
+const LOGO_SVG = `<svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Inspira Better World logo">
   <defs>
     <radialGradient id="ocean" cx="40%" cy="34%" r="82%">
       <stop offset="0%" stop-color="#3a97dd"/><stop offset="55%" stop-color="#1c6bb0"/><stop offset="100%" stop-color="#0a3765"/>
@@ -54,7 +54,7 @@ export default function OpengraphImage() {
           <img src={LOGO_DATA_URI} width={220} height={220} alt="" />
           <div style={{ display: 'flex', flexDirection: 'column', color: '#f6edd6', maxWidth: 760 }}>
             <div style={{ fontSize: 60, fontWeight: 700, lineHeight: 1.1 }}>
-              The Mother Earth Project
+              Inspira Better World
             </div>
             <div style={{ fontSize: 28, opacity: 0.85, marginTop: 16 }}>
               Kredit sosial dari tindakan charity nyata

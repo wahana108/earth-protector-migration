@@ -129,7 +129,7 @@ export default function InfrastructurePage() {
           <Building2 className="h-7 w-7 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">Dana Sistem</h1>
-            <p className="text-sm text-muted-foreground">Transparansi infrastruktur jaringan TMEP</p>
+            <p className="text-sm text-muted-foreground">Transparansi infrastruktur jaringan Inspira Better World</p>
           </div>
         </div>
 

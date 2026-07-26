@@ -163,7 +163,7 @@ export function HomeClient() {
 
       {/* ── Stats ── */}
       <section>
-        <h2 className="text-2xl font-headline font-semibold mb-6">Komunitas TMEP</h2>
+        <h2 className="text-2xl font-headline font-semibold mb-6">Komunitas Inspira</h2>
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}

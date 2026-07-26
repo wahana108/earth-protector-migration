@@ -264,7 +264,7 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-3xl font-bold mb-1">Index Project</h1>
           <p className="text-muted-foreground">
-            Semua project charity yang terdaftar di komunitas TMEP, diurutkan berdasarkan like terbanyak.
+            Semua project charity yang terdaftar di komunitas Inspira Better World, diurutkan berdasarkan like terbanyak.
           </p>
         </div>
 

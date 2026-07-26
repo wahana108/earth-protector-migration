@@ -239,7 +239,7 @@ export default function TransactionsPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             100 transaksi terbaru dari seluruh anggota. Semua transaksi bersifat publik
-            sesuai prinsip transparansi TMEP.
+            sesuai prinsip transparansi Inspira Better World.
           </p>
         </div>
 

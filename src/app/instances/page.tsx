@@ -68,7 +68,7 @@ export default function InstancesPage() {
           Komunitas
         </h1>
         <p className="text-muted-foreground mt-1">
-          Jaringan komunitas yang menggunakan platform TMEP
+          Jaringan komunitas yang menggunakan platform Inspira Better World
         </p>
       </div>
 

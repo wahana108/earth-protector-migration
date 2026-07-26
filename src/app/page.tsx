@@ -9,13 +9,13 @@ import { HomeClient } from './home-client';
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'The Mother Earth Project (TMEP) — Kredit Sosial dari Tindakan Charity Nyata',
+    absolute: 'Inspira Better World — Open Charity Action Index',
   },
   description:
-    'TMEP mengubah tindakan charity nyata menjadi kredit sosial yang tercatat lewat NFT — sertifikat pengakuan komunitas, bukan aset spekulatif. Dijaga oleh buyback, validasi konsensus, dan tata kelola AI.',
+    'Inspira Better World mengubah tindakan charity nyata menjadi kredit sosial yang tercatat lewat NFT certificates for real-world good deeds — bukan aset spekulatif. Dijaga oleh buyback, community consensus, dan AI governance.',
   alternates: { canonical: SITE_URL },
   openGraph: {
-    title: 'The Mother Earth Project (TMEP)',
+    title: 'Inspira Better World',
     description:
       'Kredit sosial dari tindakan charity nyata — NFT sebagai sertifikat pengakuan yang nilainya dijaga komunitas, bukan marketplace spekulatif.',
     url: SITE_URL,
@@ -38,7 +38,7 @@ export default function HomePage() {
             Kredit Sosial dari Tindakan Charity Nyata
           </h1>
           <p className="text-[#35433f] leading-relaxed">
-            The Mother Earth Project (TMEP) mengubah aksi charity nyata — tanam pohon,
+            Inspira Better World mengubah aksi charity nyata — tanam pohon,
             bersihkan laut, lindungi satwa — menjadi{' '}
             <strong className="text-[#1f7a72]">kredit sosial</strong> yang tercatat lewat NFT.
             Bukan marketplace spekulatif: setiap NFT adalah sertifikat pengakuan atas

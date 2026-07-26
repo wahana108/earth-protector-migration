@@ -135,7 +135,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           <footer className="border-t bg-muted/20 px-6 py-6 text-xs text-muted-foreground">
             <div className="max-w-2xl mx-auto flex flex-col items-center gap-3 text-center">
               <div>
-                <span className="text-sm font-medium text-foreground">🌿 The Mother Earth Project</span>
+                <span className="text-sm font-medium text-foreground">🌿 Inspira Better World</span>
                 <p className="mt-0.5">Platform NFT Charity Open Source</p>
               </div>
               <p className="text-muted-foreground/70">Built with Next.js · Firebase · Vercel</p>

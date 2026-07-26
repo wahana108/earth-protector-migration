@@ -16,18 +16,18 @@ const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration'
 const GITHUB_INSTANCES = 'https://github.com/wahana108/earth-nft-instances';
 const DISCORD_URL = 'https://discord.gg/CHd7TKCMTq';
 const TELEGRAM_URL = 'https://t.me/+a2fePe09QPI2Yjc1';
-const YOUTUBE_URL = 'https://www.youtube.com/@ispirabetterworld8258';
+const YOUTUBE_URL = 'https://www.youtube.com/@inspirabetterworld';
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
 
 export const metadata: Metadata = {
   title: 'Bantuan & Manifesto',
   description:
-    'Manifesto The Mother Earth Project: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
+    'Manifesto Inspira Better World: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
   alternates: { canonical: `${SITE_URL}/help` },
   openGraph: {
-    title: 'Bantuan & Manifesto — The Mother Earth Project',
+    title: 'Bantuan & Manifesto — Inspira Better World',
     description:
-      'Manifesto The Mother Earth Project: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
+      'Manifesto Inspira Better World: apa itu NFT sertifikat charity, cara validasi konsensus, tata kelola AI, dan cara ikut komunitas.',
     url: `${SITE_URL}/help`,
     type: 'website',
   },
@@ -50,9 +50,13 @@ export default function HelpPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed">
             <p>
-              <strong>The Mother Earth Project (TMEP)</strong> adalah platform komunitas untuk
+              <strong>Inspira Better World</strong> adalah platform komunitas untuk
               mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus.
               Nilai berasal dari tindakan nyata yang dapat diverifikasi — bukan spekulasi aset digital.
+              <br />
+              <span className="text-xs text-muted-foreground">
+                Sebelumnya dikenal sebagai The Mother Earth Project.
+              </span>
             </p>
             <p>
               Setiap NFT merepresentasikan satu unit kontribusi dari sebuah project lingkungan,
@@ -143,7 +147,7 @@ export default function HelpPage() {
                   Apa itu NFT di platform ini?
                 </AccordionTrigger>
                 <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
-                  NFT di TMEP adalah sertifikat digital yang merepresentasikan tindakan charity
+                  NFT di Inspira Better World adalah sertifikat digital yang merepresentasikan tindakan charity
                   nyata. Setiap unit NFT terikat pada satu project yang bisa diverifikasi buktinya.
                   Nilainya berasal dari kontribusi nyata, bukan spekulasi pasar.
                 </AccordionContent>

@@ -321,7 +321,7 @@ export default function ParametersPage() {
               <h1 className="text-2xl font-headline font-bold">Parameter Komunitas</h1>
             </div>
             <p className="text-sm text-muted-foreground">
-              Kontrak sosial TMEP — variabel sistem yang berlaku untuk seluruh transaksi.
+              Kontrak sosial Inspira Better World — variabel sistem yang berlaku untuk seluruh transaksi.
               {isAdmin
                 ? ' Mode admin aktif — kamu dapat mengubah nilai ini.'
                 : ' Hanya administrator yang dapat mengubah nilai ini.'}
