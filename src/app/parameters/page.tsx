@@ -19,6 +19,7 @@ import {
 } from '@/lib/community-config';
 import { useAuth } from '@/hooks/use-auth';
 import { getInflationLog } from '@/lib/inflation';
+import { formatCurrency } from '@/lib/format-currency';
 import type { CommunityConfig, FeePool, InflationLog } from '@/lib/types';
 
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ?? '';
@@ -64,6 +65,9 @@ type EditValues = {
   badge_klaim_enabled: boolean;
   inflation_enabled: boolean;
   inflation_auto_enabled: boolean;
+  currency_code: string;
+  currency_locale: string;
+  currency_decimals: number;
 };
 
 function configToEdit(c: CommunityConfig): EditValues {
@@ -107,6 +111,9 @@ function configToEdit(c: CommunityConfig): EditValues {
     badge_klaim_enabled: c.badge_klaim_enabled ?? true,
     inflation_enabled: c.inflation_enabled ?? true,
     inflation_auto_enabled: c.inflation_auto_enabled ?? false,
+    currency_code: c.currency_code ?? 'IDR',
+    currency_locale: c.currency_locale ?? 'id-ID',
+    currency_decimals: c.currency_decimals ?? 0,
   };
 }
 
@@ -149,16 +156,13 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     badge_klaim_enabled: e.badge_klaim_enabled,
     inflation_enabled: e.inflation_enabled,
     inflation_auto_enabled: e.inflation_auto_enabled,
+    currency_code: e.currency_code,
+    currency_locale: e.currency_locale,
+    currency_decimals: e.currency_decimals,
   };
 }
 
 // ─── Sub-komponen ─────────────────────────────────────────────────────────────
-function formatRupiah(v: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', minimumFractionDigits: 0,
-  }).format(v);
-}
-
 function ParamRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-2.5">
@@ -424,13 +428,13 @@ export default function ParametersPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="divide-y divide-border">
-                  <EditRow label="Harga Dasar (Rp)" value={editValues.harga_dasar}
+                  <EditRow label={`Harga Dasar (${editValues.currency_code})`} value={editValues.harga_dasar}
                     onChange={v => setField('harga_dasar', v as number)} />
-                  <EditRow label="Batas Atas (Rp)" value={editValues.batas_atas}
+                  <EditRow label={`Batas Atas (${editValues.currency_code})`} value={editValues.batas_atas}
                     onChange={v => setField('batas_atas', v as number)} />
-                  <EditRow label="Min. Project (Rp)" value={editValues.nilai_minimum_project}
+                  <EditRow label={`Min. Project (${editValues.currency_code})`} value={editValues.nilai_minimum_project}
                     onChange={v => setField('nilai_minimum_project', v as number)} />
-                  <EditRow label="Maks. Project (Rp)" value={editValues.nilai_maksimum_project}
+                  <EditRow label={`Maks. Project (${editValues.currency_code})`} value={editValues.nilai_maksimum_project}
                     onChange={v => setField('nilai_maksimum_project', v as number)} />
                   <EditRow label="Min. Buyback (%)" value={editValues.minimum_buyback_pct}
                     onChange={v => setField('minimum_buyback_pct', v as number)} />
@@ -438,6 +442,22 @@ export default function ParametersPage() {
                     onChange={v => setField('fee_min', v as number)} />
                   <EditRow label="Fee Max (%)" value={editValues.fee_max}
                     onChange={v => setField('fee_max', v as number)} />
+                </CardContent>
+              </Card>
+
+              <Card className="ring-2 ring-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Mata Uang
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <EditRow label="Kode Mata Uang (ISO 4217)" type="text" value={editValues.currency_code}
+                    onChange={v => setField('currency_code', v as string)} />
+                  <EditRow label="Locale (BCP-47)" type="text" value={editValues.currency_locale}
+                    onChange={v => setField('currency_locale', v as string)} />
+                  <EditRow label="Desimal" value={editValues.currency_decimals}
+                    onChange={v => setField('currency_decimals', v as number)} />
                 </CardContent>
               </Card>
 
@@ -704,13 +724,26 @@ export default function ParametersPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="divide-y divide-border">
-                  <ParamRow label="Harga Dasar" value={formatRupiah(config.harga_dasar)} />
-                  <ParamRow label="Batas Atas" value={formatRupiah(config.batas_atas)} />
-                  <ParamRow label="Nilai Min. Project" value={formatRupiah(config.nilai_minimum_project)} />
-                  <ParamRow label="Nilai Maks. Project" value={formatRupiah(config.nilai_maksimum_project ?? 10000000)} />
+                  <ParamRow label="Harga Dasar" value={formatCurrency(config.harga_dasar, config)} />
+                  <ParamRow label="Batas Atas" value={formatCurrency(config.batas_atas, config)} />
+                  <ParamRow label="Nilai Min. Project" value={formatCurrency(config.nilai_minimum_project, config)} />
+                  <ParamRow label="Nilai Maks. Project" value={formatCurrency(config.nilai_maksimum_project ?? 10000000, config)} />
                   <ParamRow label="Min. Buyback" value={`${config.minimum_buyback_pct}%`} />
                   <ParamRow label="Fee Project"
                     value={`${config.fee_project_pct.min}% – ${config.fee_project_pct.max}%`} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Mata Uang
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <ParamRow label="Kode Mata Uang" value={config.currency_code ?? 'IDR'} />
+                  <ParamRow label="Locale" value={config.currency_locale ?? 'id-ID'} />
+                  <ParamRow label="Desimal" value={String(config.currency_decimals ?? 0)} />
                 </CardContent>
               </Card>
 
@@ -895,13 +928,13 @@ export default function ParametersPage() {
                   {feePool && (
                     <>
                       <ParamRow label="Saldo kas sistem"
-                        value={formatRupiah(feePool.saldo_tersedia ?? 0)} />
+                        value={formatCurrency(feePool.saldo_tersedia ?? 0, config)} />
                       <ParamRow label="Dari fee sharing (kas)"
-                        value={formatRupiah(feePool.total_dari_fee ?? 0)} />
+                        value={formatCurrency(feePool.total_dari_fee ?? 0, config)} />
                       <ParamRow label="Dari hukuman anomali"
-                        value={formatRupiah(feePool.total_dari_anomali ?? 0)} />
+                        value={formatCurrency(feePool.total_dari_anomali ?? 0, config)} />
                       <ParamRow label="Terdistribusi ke validator"
-                        value={formatRupiah(feePool.total_terdistribusi)} />
+                        value={formatCurrency(feePool.total_terdistribusi, config)} />
                     </>
                   )}
                   <div className="pt-2 pb-1">
