@@ -34,14 +34,9 @@ import {
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function formatDate(dateStr: string) {
   try {
@@ -213,11 +208,12 @@ function EditGambarNftDialog({ unit, onClose, onSaved }: EditGambarNftDialogProp
 // ─── Mini NFT Card ────────────────────────────────────────────────────────────
 
 function MiniNftCard({
-  unit, isDeveloper, inflationHistory, onEditGambar,
+  unit, isDeveloper, inflationHistory, currency, onEditGambar,
 }: {
   unit: NFTUnit;
   isDeveloper?: boolean;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onEditGambar?: (unit: NFTUnit) => void;
 }) {
   return (
@@ -248,11 +244,12 @@ function MiniNftCard({
         </div>
         <div className="p-2 space-y-0.5">
           <p className="text-xs font-semibold leading-snug line-clamp-1">{unit.nama_nft}</p>
-          <p className="text-xs text-muted-foreground font-medium">{formatIDR(unit.harga_jual)}</p>
+          <p className="text-xs text-muted-foreground font-medium">{formatCurrency(unit.harga_jual, currency)}</p>
           <HargaEfektifInfo
             harga={unit.harga_jual}
             createdAt={unit.created_at}
             inflationHistory={inflationHistory}
+            currency={currency}
             className="text-[10px] text-muted-foreground italic"
           />
         </div>
@@ -310,6 +307,7 @@ export default function ProjectDetailPage({
   const [linkStatus, setLinkStatus] = useState<Project['link_bukti_status']>('belum_dicek');
   const [editNftTarget, setEditNftTarget] = useState<NFTUnit | null>(null);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   useEffect(() => {
     async function load() {
@@ -325,6 +323,7 @@ export default function ProjectDetailPage({
           getCommunityConfig(),
         ]);
         setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+        setCurrencyCfg(cfg ?? undefined);
 
         const units = unitsSnap.docs.map(d =>
           toNFTUnit(d.id, d.data() as Record<string, unknown>),
@@ -498,7 +497,7 @@ export default function ProjectDetailPage({
             <div>
               <div className="font-semibold leading-snug flex items-center gap-1.5">
                 {developer.displayName}
-                {developer.badge_kontributor && <ContributorBadge nilai={developer.total_kontribusi} />}
+                {developer.badge_kontributor && <ContributorBadge nilai={developer.total_kontribusi} currency={currencyCfg} />}
               </div>
               <p className="text-xs text-muted-foreground">
                 {developer.level === 'top_developer' ? '⭐ Top Developer' : 'Developer Biasa'}
@@ -523,12 +522,13 @@ export default function ProjectDetailPage({
             <span className="text-muted-foreground">
               {terjual} terjual dari {project.jumlah_nft} unit
             </span>
-            <span className="font-medium">{formatIDR(project.harga_jual)}/NFT</span>
+            <span className="font-medium">{formatCurrency(project.harga_jual, currencyCfg)}/NFT</span>
           </div>
           <HargaEfektifInfo
             harga={project.harga_jual}
             createdAt={project.created_at}
             inflationHistory={inflationHistory}
+            currency={currencyCfg}
             className="text-[11px] text-muted-foreground italic text-right"
           />
         </section>
@@ -553,7 +553,7 @@ export default function ProjectDetailPage({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  Pool: {formatIDR(project.pool_jaminan)}
+                  Pool: {formatCurrency(project.pool_jaminan, currencyCfg)}
                 </span>
               </div>
 
@@ -583,7 +583,7 @@ export default function ProjectDetailPage({
                           {validatorNames[v.user_id] ?? v.user_id.slice(0, 8) + '…'}
                         </td>
                         <td className="px-3 py-2 text-right border-t">
-                          {formatIDR(v.nilai)}
+                          {formatCurrency(v.nilai, currencyCfg)}
                         </td>
                         <td className="px-3 py-2 text-right text-xs text-muted-foreground border-t">
                           {v.timestamp
@@ -616,6 +616,7 @@ export default function ProjectDetailPage({
                   unit={u}
                   isDeveloper={isDeveloper}
                   inflationHistory={inflationHistory}
+                  currency={currencyCfg}
                   onEditGambar={setEditNftTarget}
                 />
               ))}

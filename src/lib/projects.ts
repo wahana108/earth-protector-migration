@@ -5,6 +5,7 @@ import {
   setDoc, increment, arrayUnion, Timestamp, getCountFromServer, documentId, limit,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
+import { formatCurrency } from './format-currency';
 // checkAndIssueCertificate dinonaktifkan — digantikan rewardInfrastructureContributor
 import { checkLinkBukti } from './link-checker';
 import { isBlocked } from './blocks';
@@ -134,9 +135,8 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   const nilaiMaks = config?.nilai_maksimum_project ?? 10000000;
   if (input.nilai_project > nilaiMaks) {
     const maxNft = Math.floor(nilaiMaks / (config?.harga_dasar ?? 100000));
-    const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
     throw new Error(
-      `Nilai project melebihi batas maksimum komunitas (${fmt.format(nilaiMaks)} = ${maxNft} NFT). Ini melindungi kapasitas sistem.`,
+      `Nilai project melebihi batas maksimum komunitas (${formatCurrency(nilaiMaks, config)} = ${maxNft} NFT). Ini melindungi kapasitas sistem.`,
     );
   }
 

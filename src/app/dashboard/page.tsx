@@ -39,18 +39,13 @@ import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
-
-function formatDelta(delta: number) {
+function formatDelta(delta: number, config?: CurrencyConfig | null) {
   const prefix = delta > 0 ? '+' : '';
-  return `${prefix}${formatIDR(delta)}`;
+  return `${prefix}${formatCurrency(delta, config)}`;
 }
 
 function relativeTime(date: Date): string {
@@ -155,11 +150,12 @@ interface TransferPoolDialogProps {
   unit: NFTUnit;
   userId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function TransferPoolDialog({ unit, userId, inflationHistory, onClose, onSuccess }: TransferPoolDialogProps) {
+function TransferPoolDialog({ unit, userId, inflationHistory, currency, onClose, onSuccess }: TransferPoolDialogProps) {
   const { emailVerified } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -200,12 +196,13 @@ function TransferPoolDialog({ unit, userId, inflationHistory, onClose, onSuccess
             <div className="pt-2 border-t">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga jual</span>
-                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+                <span className="font-bold">{formatCurrency(unit.harga_jual, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_jual}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
             </div>
@@ -307,9 +304,10 @@ interface RingkasanProps {
   nftDimiliki: number;
   soldNfts: number;
   buybackCount: number;
+  currency: CurrencyConfig | undefined;
 }
 
-function RingkasanNeraca({ totalPoin, totalPoinPending, nftDimiliki, soldNfts, buybackCount }: RingkasanProps) {
+function RingkasanNeraca({ totalPoin, totalPoinPending, nftDimiliki, soldNfts, buybackCount, currency }: RingkasanProps) {
   const buybackPct = soldNfts > 0 ? Math.round((buybackCount / soldNfts) * 100) : 0;
   const isPositif = totalPoin >= 0;
 
@@ -321,7 +319,7 @@ function RingkasanNeraca({ totalPoin, totalPoinPending, nftDimiliki, soldNfts, b
         </CardHeader>
         <CardContent>
           <p className={cn('text-2xl font-bold', isPositif ? 'text-green-600' : 'text-destructive')}>
-            {totalPoin >= 0 ? '+' : ''}{formatIDR(totalPoin)}
+            {totalPoin >= 0 ? '+' : ''}{formatCurrency(totalPoin, currency)}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isPositif ? 'akumulasi dari pembelian' : 'akumulasi dari penjualan'}
@@ -329,7 +327,7 @@ function RingkasanNeraca({ totalPoin, totalPoinPending, nftDimiliki, soldNfts, b
           {totalPoinPending > 0 && (
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" />
-              +{formatIDR(totalPoinPending)} pending
+              +{formatCurrency(totalPoinPending, currency)} pending
             </p>
           )}
         </CardContent>
@@ -379,11 +377,12 @@ interface DaftarNFTProps {
   toggling: string | null;
   isTopDeveloper: boolean;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onToggleForSale: (unit: NFTUnit) => void;
   onTransferPool: (unit: NFTUnit) => void;
 }
 
-function DaftarNFT({ units, toggling, isTopDeveloper, inflationHistory, onToggleForSale, onTransferPool }: DaftarNFTProps) {
+function DaftarNFT({ units, toggling, isTopDeveloper, inflationHistory, currency, onToggleForSale, onTransferPool }: DaftarNFTProps) {
   if (units.length === 0) {
     return (
       <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
@@ -438,15 +437,16 @@ function DaftarNFT({ units, toggling, isTopDeveloper, inflationHistory, onToggle
               </div>
               <p className="text-xs text-muted-foreground">{unit.nama_project}</p>
               <div className="flex gap-3 text-xs text-muted-foreground">
-                <span>Beli: <span className="text-foreground font-medium">{formatIDR(unit.harga_beli_terakhir)}</span></span>
+                <span>Beli: <span className="text-foreground font-medium">{formatCurrency(unit.harga_beli_terakhir, currency)}</span></span>
                 <span>Selisih: <span className={cn('font-medium', unit.nilai_selisih > 0 ? 'text-green-600' : unit.nilai_selisih < 0 ? 'text-destructive' : 'text-foreground')}>
-                  {unit.nilai_selisih >= 0 ? '+' : ''}{formatIDR(unit.nilai_selisih)}
+                  {unit.nilai_selisih >= 0 ? '+' : ''}{formatCurrency(unit.nilai_selisih, currency)}
                 </span></span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_beli_terakhir}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
               />
             </div>
 
@@ -498,10 +498,11 @@ function DaftarNFT({ units, toggling, isTopDeveloper, inflationHistory, onToggle
 // ─── Section: Log Transaksi ───────────────────────────────────────────────────
 
 function LogTransaksi({
-  logs, currentUserId, onBlockRequest,
+  logs, currentUserId, currency, onBlockRequest,
 }: {
   logs: NeracaLog[];
   currentUserId?: string;
+  currency: CurrencyConfig | undefined;
   onBlockRequest?: (userId: string) => void;
 }) {
   if (logs.length === 0) {
@@ -546,7 +547,7 @@ function LogTransaksi({
                 'font-bold',
                 isPos ? 'text-green-600' : isNeg ? 'text-destructive' : 'text-muted-foreground',
               )}>
-                {formatDelta(log.delta)}
+                {formatDelta(log.delta, currency)}
               </span>
               {canBlock && (
                 <button
@@ -757,6 +758,7 @@ export default function DashboardPage() {
   const [realisasi, setRealisasi] = useState<RealisasiResult | null>(null);
   const [minRealisasiPct, setMinRealisasiPct] = useState(20);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
   const [ownedUnits, setOwnedUnits] = useState<NFTUnit[]>([]);
   const [logs, setLogs] = useState<NeracaLog[]>([]);
   const [myProjects, setMyProjects] = useState<Project[]>([]);
@@ -834,6 +836,7 @@ export default function DashboardPage() {
       setRealisasi(realResult);
       setMinRealisasiPct(cfg?.min_realisasi_pct_untuk_create ?? 20);
       setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+      setCurrencyCfg(cfg ?? undefined);
 
       if (userSnap.exists()) {
         const d = userSnap.data();
@@ -979,7 +982,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold mb-0.5">Dashboard</h1>
             <div className="text-muted-foreground text-sm flex items-center gap-1.5">
               {user?.displayName ?? user?.email}
-              {user?.badge_kontributor && <ContributorBadge nilai={user.total_kontribusi ?? 0} />}
+              {user?.badge_kontributor && <ContributorBadge nilai={user.total_kontribusi ?? 0} currency={currencyCfg} />}
             </div>
           </div>
           <Button asChild>
@@ -1035,6 +1038,7 @@ export default function DashboardPage() {
                 nftDimiliki={ownedUnits.length}
                 soldNfts={soldNfts}
                 buybackCount={buybackCount}
+                currency={currencyCfg}
               />
               {realisasi && (
                 <StatusRealisasi realisasi={realisasi} minPct={minRealisasiPct} />
@@ -1082,6 +1086,7 @@ export default function DashboardPage() {
                 toggling={toggling}
                 isTopDeveloper={isTopDeveloper}
                 inflationHistory={inflationHistory}
+                currency={currencyCfg}
                 onToggleForSale={handleToggleForSale}
                 onTransferPool={setTransferPoolTarget}
               />
@@ -1098,6 +1103,7 @@ export default function DashboardPage() {
               <LogTransaksi
                 logs={logs}
                 currentUserId={user?.id}
+                currency={currencyCfg}
                 onBlockRequest={(uid) => setBlockTarget({ userId: uid, name: uid.slice(0, 8) + '…' })}
               />
             </section>
@@ -1198,7 +1204,7 @@ export default function DashboardPage() {
                           Infrastructure Contributor
                         </Badge>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(cert.nilai)}
+                          {formatCurrency(cert.nilai, currencyCfg)}
                         </p>
                       </div>
                     </div>
@@ -1225,6 +1231,7 @@ export default function DashboardPage() {
           unit={transferPoolTarget}
           userId={user.id}
           inflationHistory={inflationHistory}
+          currency={currencyCfg}
           onClose={() => setTransferPoolTarget(null)}
           onSuccess={() => handleTransferPoolSuccess(transferPoolTarget.id)}
         />

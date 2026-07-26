@@ -40,14 +40,9 @@ import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function toNFTUnit(id: string, data: Record<string, unknown>): NFTUnit {
   return {
@@ -144,11 +139,12 @@ interface BuyDialogProps {
   batasAtas: number;
   via: 'fifo' | 'pick';
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig;
   onClose: () => void;
   onSuccess: (nftId: string) => void;
 }
 
-function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, via, inflationHistory, onClose, onSuccess }: BuyDialogProps) {
+function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, via, inflationHistory, currency, onClose, onSuccess }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   const [txDescription, setTxDescription] = useState('');
@@ -185,17 +181,18 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, via, inflationHistory
             <div className="pt-2 border-t space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga</span>
-                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+                <span className="font-bold">{formatCurrency(unit.harga_jual, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_jual}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Neracamu bertambah</span>
-                <span className="font-semibold text-green-600">+{formatIDR(unit.nilai_selisih)}</span>
+                <span className="font-semibold text-green-600">+{formatCurrency(unit.nilai_selisih, currency)}</span>
               </div>
             </div>
           </div>
@@ -430,10 +427,11 @@ interface NftPoolCardProps {
   currentUserId?: string;
   isTopDeveloper?: boolean;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onBuy: (unit: NFTUnit) => void;
 }
 
-function NftPoolCard({ unit, currentUserId, isTopDeveloper, inflationHistory, onBuy }: NftPoolCardProps) {
+function NftPoolCard({ unit, currentUserId, isTopDeveloper, inflationHistory, currency, onBuy }: NftPoolCardProps) {
   const isOwn = !!currentUserId && currentUserId === unit.owner_id;
   const canBuy = !!currentUserId && !isOwn && unit.for_sale && !isTopDeveloper;
 
@@ -467,7 +465,7 @@ function NftPoolCard({ unit, currentUserId, isTopDeveloper, inflationHistory, on
         </div>
 
         <div className="flex items-center justify-between mt-auto">
-          <span className="font-bold text-sm">{formatIDR(unit.harga_jual)}</span>
+          <span className="font-bold text-sm">{formatCurrency(unit.harga_jual, currency)}</span>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Heart className="h-3 w-3" />
             {unit.like_count}
@@ -477,6 +475,7 @@ function NftPoolCard({ unit, currentUserId, isTopDeveloper, inflationHistory, on
           harga={unit.harga_jual}
           createdAt={unit.created_at}
           inflationHistory={inflationHistory}
+          currency={currency}
         />
 
         <Button
@@ -512,11 +511,12 @@ interface FifoCardProps {
   userId: string;
   isTopDeveloper: boolean;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onBuy: (unit: NFTUnit) => void;
   onSkip: (unit: NFTUnit) => void;
 }
 
-function FifoCard({ unit, userId, isTopDeveloper, inflationHistory, onBuy, onSkip }: FifoCardProps) {
+function FifoCard({ unit, userId, isTopDeveloper, inflationHistory, currency, onBuy, onSkip }: FifoCardProps) {
   const isOwn = unit.owner_id === userId;
   const canBuy = !isOwn && unit.for_sale;
 
@@ -547,13 +547,14 @@ function FifoCard({ unit, userId, isTopDeveloper, inflationHistory, onBuy, onSki
           </div>
           <p className="text-xs text-muted-foreground">{unit.nama_project}</p>
           <div className="flex gap-3 text-xs text-muted-foreground">
-            <span>Harga: <span className="font-semibold text-foreground">{formatIDR(unit.harga_jual)}</span></span>
-            <span>Selisih: <span className="font-semibold text-green-600">+{formatIDR(unit.nilai_selisih)}</span></span>
+            <span>Harga: <span className="font-semibold text-foreground">{formatCurrency(unit.harga_jual, currency)}</span></span>
+            <span>Selisih: <span className="font-semibold text-green-600">+{formatCurrency(unit.nilai_selisih, currency)}</span></span>
           </div>
           <HargaEfektifInfo
             harga={unit.harga_jual}
             createdAt={unit.created_at}
             inflationHistory={inflationHistory}
+            currency={currency}
           />
           {(unit.fifo_skip_count ?? 0) > 0 && (
             <p className="text-xs text-muted-foreground">
@@ -623,7 +624,7 @@ export default function PoolPage() {
   const [buyFifoTarget, setBuyFifoTarget] = useState<NFTUnit | null>(null);
   const [buyGridTarget, setBuyGridTarget] = useState<NFTUnit | null>(null);
   const [skipTarget, setSkipTarget] = useState<NFTUnit | null>(null);
-  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } & CurrencyConfig | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -652,7 +653,11 @@ export default function PoolPage() {
 
       if (cfg) {
         setKapasitasMinimum(cfg.kapasitas_pool_minimum);
-        setConfig({ harga_dasar: cfg.harga_dasar, batas_atas: cfg.batas_atas, inflation_history: effectiveInflationHistory(cfg.inflation_history, cfg.inflation_enabled) });
+        setConfig({
+          harga_dasar: cfg.harga_dasar, batas_atas: cfg.batas_atas,
+          inflation_history: effectiveInflationHistory(cfg.inflation_history, cfg.inflation_enabled),
+          currency_code: cfg.currency_code, currency_locale: cfg.currency_locale, currency_decimals: cfg.currency_decimals,
+        });
       }
 
       const fetchedUnits = nftsSnap.docs.map(d => toNFTUnit(d.id, d.data() as Record<string, unknown>));
@@ -740,6 +745,7 @@ export default function PoolPage() {
                 userId={user.id}
                 isTopDeveloper={isTopDeveloper}
                 inflationHistory={config?.inflation_history ?? []}
+                currency={config ?? undefined}
                 onBuy={setBuyFifoTarget}
                 onSkip={setSkipTarget}
               />
@@ -781,6 +787,7 @@ export default function PoolPage() {
                     currentUserId={user?.id}
                     isTopDeveloper={isTopDeveloper}
                     inflationHistory={config?.inflation_history ?? []}
+                    currency={config ?? undefined}
                     onBuy={setBuyGridTarget}
                   />
                 ))}
@@ -803,6 +810,7 @@ export default function PoolPage() {
           batasAtas={config.batas_atas}
           via="fifo"
           inflationHistory={config.inflation_history}
+          currency={config}
           onClose={() => setBuyFifoTarget(null)}
           onSuccess={handleFifoBuySuccess}
         />
@@ -817,6 +825,7 @@ export default function PoolPage() {
           batasAtas={config.batas_atas}
           via="pick"
           inflationHistory={config.inflation_history}
+          currency={config}
           onClose={() => setBuyGridTarget(null)}
           onSuccess={handleGridBuySuccess}
         />

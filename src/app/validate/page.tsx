@@ -25,14 +25,9 @@ import type { Project, NFTUnit, ProjectCategory } from '@/lib/types';
 import { KATEGORI_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function toProject(id: string, data: Record<string, unknown>): Project {
   return {
@@ -97,6 +92,7 @@ type PoolStatus = {
   minPool: number;
   poolCukup: boolean;
   minimumHoldingDays: number;
+  currency: CurrencyConfig;
 };
 
 async function fetchPoolStatus(): Promise<PoolStatus> {
@@ -113,6 +109,10 @@ async function fetchPoolStatus(): Promise<PoolStatus> {
     minPool,
     poolCukup: jumlahNftValid >= minPool,
     minimumHoldingDays: config?.minimum_holding_days ?? 7,
+    currency: {
+      currency_code: config?.currency_code, currency_locale: config?.currency_locale,
+      currency_decimals: config?.currency_decimals,
+    },
   };
 }
 
@@ -190,6 +190,7 @@ interface ValidationPanelProps {
   userId: string;
   isRevalidasi: boolean;
   minimumHoldingDays: number;
+  currency: CurrencyConfig | undefined;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
@@ -201,7 +202,7 @@ function holdingCheck(nft: NFTUnit, days: number): { eligible: boolean; daysRema
   return { eligible: false, daysRemaining: Math.ceil((requiredMs - holdingMs) / 86400000) };
 }
 
-function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, onValidated }: ValidationPanelProps) {
+function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, currency, onValidated }: ValidationPanelProps) {
   const { emailVerified } = useAuth();
   const [loadingNfts, setLoadingNfts] = useState(true);
   const [eligibleNfts, setEligibleNfts] = useState<NFTUnit[]>([]);
@@ -347,10 +348,10 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
                 </div>
                 <div className="text-right shrink-0 space-y-0.5">
                   <p className="text-xs text-muted-foreground">
-                    Beli: {formatIDR(unit.harga_beli_terakhir)}
+                    Beli: {formatCurrency(unit.harga_beli_terakhir, currency)}
                   </p>
                   <p className="text-xs font-semibold text-green-600">
-                    +{formatIDR(unit.nilai_selisih)}
+                    +{formatCurrency(unit.nilai_selisih, currency)}
                   </p>
                 </div>
               </label>
@@ -383,10 +384,10 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
                   </div>
                   <div className="text-right shrink-0 space-y-0.5">
                     <p className="text-xs text-muted-foreground">
-                      Beli: {formatIDR(unit.harga_beli_terakhir)}
+                      Beli: {formatCurrency(unit.harga_beli_terakhir, currency)}
                     </p>
                     <p className="text-xs font-semibold text-muted-foreground">
-                      +{formatIDR(unit.nilai_selisih)}
+                      +{formatCurrency(unit.nilai_selisih, currency)}
                     </p>
                   </div>
                 </div>
@@ -412,7 +413,7 @@ function ValidationPanel({ project, userId, isRevalidasi, minimumHoldingDays, on
             'font-bold',
             totalSelisih > 0 ? 'text-green-600' : 'text-muted-foreground',
           )}>
-            {formatIDR(totalSelisih)}
+            {formatCurrency(totalSelisih, currency)}
           </span>
         </div>
 
@@ -443,10 +444,11 @@ interface ProjectValidasiCardProps {
   userId: string;
   poolCukup: boolean;
   minimumHoldingDays: number;
+  currency: CurrencyConfig | undefined;
   onValidated: (projectId: string, totalSelisih: number, count: number) => void;
 }
 
-function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, onValidated }: ProjectValidasiCardProps) {
+function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, currency, onValidated }: ProjectValidasiCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [justValidated, setJustValidated] = useState(false);
 
@@ -511,7 +513,7 @@ function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, o
               Validator: <span className="font-medium text-foreground">{project.jumlah_validator}</span>
             </span>
             <span>
-              Pool: <span className="font-medium text-foreground">{formatIDR(project.pool_jaminan)}</span>
+              Pool: <span className="font-medium text-foreground">{formatCurrency(project.pool_jaminan, currency)}</span>
             </span>
           </div>
 
@@ -519,7 +521,7 @@ function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, o
           <div className="space-y-1">
             <Progress value={progressPct} className="h-1.5" />
             <p className="text-xs text-muted-foreground">
-              {progressPct}% dari target pool ({formatIDR(project.nilai_project)})
+              {progressPct}% dari target pool ({formatCurrency(project.nilai_project, currency)})
             </p>
           </div>
 
@@ -549,6 +551,7 @@ function ProjectValidasiCard({ project, userId, poolCukup, minimumHoldingDays, o
           userId={userId}
           isRevalidasi={isRevalidasi}
           minimumHoldingDays={minimumHoldingDays}
+          currency={currency}
           onValidated={handleValidated}
         />
       )}
@@ -564,7 +567,10 @@ export default function ValidatePage() {
 
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectWithDev[]>([]);
-  const [poolStatus, setPoolStatus] = useState<PoolStatus>({ jumlahNftValid: 0, minPool: 90, poolCukup: false, minimumHoldingDays: 7 });
+  const [poolStatus, setPoolStatus] = useState<PoolStatus>({
+    jumlahNftValid: 0, minPool: 90, poolCukup: false, minimumHoldingDays: 7,
+    currency: { currency_code: undefined, currency_locale: undefined, currency_decimals: undefined },
+  });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -658,6 +664,7 @@ export default function ValidatePage() {
                 userId={user!.id}
                 poolCukup={poolStatus.poolCukup}
                 minimumHoldingDays={poolStatus.minimumHoldingDays}
+                currency={poolStatus.currency}
                 onValidated={handleValidated}
               />
             ))}

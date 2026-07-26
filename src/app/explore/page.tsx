@@ -39,17 +39,9 @@ import {
 } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 const PAGE_SIZE = 24;
-
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function relativeTime(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -95,11 +87,12 @@ interface BuyDialogProps {
   hargaDasar: number;
   batasAtas: number;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig;
   onClose: () => void;
   onSuccess: (nftId: string, buyerId: string) => void;
 }
 
-function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, inflationHistory, onClose, onSuccess }: BuyDialogProps) {
+function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, inflationHistory, currency, onClose, onSuccess }: BuyDialogProps) {
   const { emailVerified } = useAuth();
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
@@ -155,18 +148,19 @@ function BuyDialog({ unit, buyerId, hargaDasar, batasAtas, inflationHistory, onC
             <div className="pt-2 border-t space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga</span>
-                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+                <span className="font-bold">{formatCurrency(unit.harga_jual, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_jual}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Neracamu bertambah</span>
                 <span className="font-semibold text-green-600">
-                  +{formatIDR(unit.nilai_selisih)}
+                  +{formatCurrency(unit.nilai_selisih, currency)}
                 </span>
               </div>
             </div>
@@ -323,12 +317,13 @@ interface CommentPanelProps {
   nftId: string;
   currentUserId: string | undefined;
   currentUserDisplayName: string | null;
+  currency: CurrencyConfig | undefined;
   onCommentAdded: () => void;
   onCommentDeleted: () => void;
 }
 
 function CommentPanel({
-  nftId, currentUserId, currentUserDisplayName, onCommentAdded, onCommentDeleted,
+  nftId, currentUserId, currentUserDisplayName, currency, onCommentAdded, onCommentDeleted,
 }: CommentPanelProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -450,7 +445,7 @@ function CommentPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-1.5 flex-wrap">
                       <span className="font-semibold text-foreground">{c.display_name}</span>
-                      {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} size="sm" />}
+                      {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} size="sm" currency={currency} />}
                       <span className="text-[10px] text-muted-foreground">{relativeTime(c.timestamp)}</span>
                     </div>
                     <p className="text-foreground/80 leading-snug break-words mt-0.5">{c.text}</p>
@@ -540,6 +535,7 @@ interface NftUnitCardProps {
   currentUserDisplayName: string | null;
   configLoaded: boolean;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onLike: (unit: NFTUnit) => void;
   onBuy: (unit: NFTUnit) => void;
   onEditGambar: (unit: NFTUnit) => void;
@@ -547,7 +543,7 @@ interface NftUnitCardProps {
 
 function NftUnitCard({
   unit, isLiked, likingId, buyingId, currentUserId, currentUserDisplayName,
-  configLoaded, inflationHistory, onLike, onBuy, onEditGambar,
+  configLoaded, inflationHistory, currency, onLike, onBuy, onEditGambar,
 }: NftUnitCardProps) {
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [hasCommentPanelMounted, setHasCommentPanelMounted] = useState(false);
@@ -617,7 +613,7 @@ function NftUnitCard({
         </div>
 
         <div className="flex items-center justify-between mt-auto">
-          <span className="font-bold text-sm">{formatIDR(unit.harga_jual)}</span>
+          <span className="font-bold text-sm">{formatCurrency(unit.harga_jual, currency)}</span>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Heart className="h-3 w-3" />
             {unit.like_count}
@@ -627,6 +623,7 @@ function NftUnitCard({
           harga={unit.harga_jual}
           createdAt={unit.created_at}
           inflationHistory={inflationHistory}
+          currency={currency}
         />
 
         <div className="flex gap-2">
@@ -686,6 +683,7 @@ function NftUnitCard({
             nftId={unit.id}
             currentUserId={currentUserId}
             currentUserDisplayName={currentUserDisplayName}
+            currency={currency}
             onCommentAdded={() => setLocalCount((prev) => prev + 1)}
             onCommentDeleted={() => setLocalCount((prev) => Math.max(0, prev - 1))}
           />
@@ -712,7 +710,7 @@ function ExploreContent() {
   const [editTarget, setEditTarget] = useState<NFTUnit | null>(null);
   const [buyTarget, setBuyTarget] = useState<NFTUnit | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
-  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } & CurrencyConfig | null>(null);
 
   const filteredUnits = searchQuery
     ? units.filter(u => {
@@ -750,7 +748,11 @@ function ExploreContent() {
 
   useEffect(() => {
     getCommunityConfig()
-      .then((c) => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled) }); })
+      .then((c) => { if (c) setConfig({
+        harga_dasar: c.harga_dasar, batas_atas: c.batas_atas,
+        inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled),
+        currency_code: c.currency_code, currency_locale: c.currency_locale, currency_decimals: c.currency_decimals,
+      }); })
       .catch(() => {});
   }, []);
 
@@ -960,6 +962,7 @@ function ExploreContent() {
                 currentUserDisplayName={currentUserDisplayName}
                 configLoaded={!!config}
                 inflationHistory={config?.inflation_history ?? []}
+                currency={config ?? undefined}
                 onLike={handleLike}
                 onBuy={setBuyTarget}
                 onEditGambar={setEditTarget}
@@ -993,6 +996,7 @@ function ExploreContent() {
           hargaDasar={config.harga_dasar}
           batasAtas={config.batas_atas}
           inflationHistory={config.inflation_history}
+          currency={config}
           onClose={() => setBuyTarget(null)}
           onSuccess={handleBuySuccess}
         />

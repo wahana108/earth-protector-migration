@@ -21,12 +21,7 @@ import {
 import type { CommunityConfig, InfrastructureClaim, InfrastructurePayment } from '@/lib/types';
 import { getCommunityConfig } from '@/lib/community-config';
 import type { ContributorCertificate } from '@/lib/types';
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
+import { formatCurrency } from '@/lib/format-currency';
 
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat('id-ID', {
@@ -155,25 +150,25 @@ export default function InfrastructurePage() {
                   <>
                     <div className="flex justify-between py-2">
                       <span className="font-semibold">Saldo Tersedia</span>
-                      <span className="font-mono font-bold text-green-600">{formatIDR(status.saldo_tersedia)}</span>
+                      <span className="font-mono font-bold text-green-600">{formatCurrency(status.saldo_tersedia, config)}</span>
                     </div>
                     <p className="py-2 text-xs text-muted-foreground font-medium">── Rincian Asal ──</p>
                     <div className="flex justify-between py-2">
                       <span className="text-muted-foreground">Dari Fee Sharing</span>
-                      <span className="font-mono">{formatIDR(status.total_dari_fee)}</span>
+                      <span className="font-mono">{formatCurrency(status.total_dari_fee, config)}</span>
                     </div>
                     <div className="flex justify-between py-2">
                       <span className="text-muted-foreground">Dari Hukuman Anomali</span>
-                      <span className="font-mono">{formatIDR(status.total_dari_anomali)}</span>
+                      <span className="font-mono">{formatCurrency(status.total_dari_anomali, config)}</span>
                     </div>
                     <div className="flex justify-between py-2">
                       <span className="text-muted-foreground">Dari Sumber Lain</span>
-                      <span className="font-mono">{formatIDR(status.total_dari_lain)}</span>
+                      <span className="font-mono">{formatCurrency(status.total_dari_lain, config)}</span>
                     </div>
                     <p className="py-2 text-xs text-muted-foreground font-medium">── Pengeluaran ──</p>
                     <div className="flex justify-between py-2">
                       <span className="text-muted-foreground">Reward ke Kontributor</span>
-                      <span className="font-mono text-orange-600">{formatIDR(status.total_dialokasikan_lencana)}</span>
+                      <span className="font-mono text-orange-600">{formatCurrency(status.total_dialokasikan_lencana, config)}</span>
                     </div>
                     <p className="pt-3 pb-1 text-xs text-muted-foreground leading-relaxed">
                       Neraca sistem selalu seimbang — setiap poin yang masuk berasal dari mekanisme transparan
@@ -227,9 +222,9 @@ export default function InfrastructurePage() {
                               {item.periode === 'gratis' || item.jumlah === 0 ? (
                                 <Badge variant="secondary" className="text-xs">Gratis</Badge>
                               ) : item.periode === 'sekali' ? (
-                                `${formatIDR(item.jumlah)} (sekali)`
+                                `${formatCurrency(item.jumlah, config)} (sekali)`
                               ) : (
-                                `${formatIDR(item.jumlah)}/${item.periode}`
+                                `${formatCurrency(item.jumlah, config)}/${item.periode}`
                               )}
                             </span>
                           </div>
@@ -282,7 +277,7 @@ export default function InfrastructurePage() {
                           <p className="text-xs text-muted-foreground">{formatDate(p.created_at)}</p>
                         </div>
                         <div className="text-right shrink-0 space-y-0.5">
-                          <p className="font-mono font-medium text-green-600">+{formatIDR(p.nilai)}</p>
+                          <p className="font-mono font-medium text-green-600">+{formatCurrency(p.nilai, config)}</p>
                           {p.bukti_link && (
                             <a
                               href={p.bukti_link.startsWith('http') ? p.bukti_link : `https://${p.bukti_link}`}
@@ -329,7 +324,7 @@ export default function InfrastructurePage() {
                           <input
                             type="text"
                             inputMode="numeric"
-                            placeholder="Nilai (Rp)"
+                            placeholder={`Nilai (${config?.currency_code ?? 'IDR'})`}
                             value={claimNilai}
                             onChange={e => setClaimNilai(e.target.value.replace(/\D/g, ''))}
                             className="w-full rounded-md border px-3 py-2 text-sm"
@@ -368,7 +363,7 @@ export default function InfrastructurePage() {
                           {userClaims.map(c => (
                             <div key={c.id} className="flex items-start gap-3 px-4 py-3 bg-card text-sm">
                               <div className="flex-1 min-w-0">
-                                <p className="font-mono font-medium">{formatIDR(c.nilai)}</p>
+                                <p className="font-mono font-medium">{formatCurrency(c.nilai, config)}</p>
                                 <p className="text-xs text-muted-foreground">{formatDate(c.created_at)}</p>
                                 {c.status === 'rejected' && c.alasan_penolakan && (
                                   <p className="text-xs text-red-600 mt-1">Ditolak: {c.alasan_penolakan}</p>
@@ -422,7 +417,7 @@ export default function InfrastructurePage() {
                           <p className="text-xs text-muted-foreground">{formatDate(cert.purchased_at)}</p>
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0">
-                          {formatIDR(cert.nilai)}
+                          {formatCurrency(cert.nilai, config)}
                         </span>
                       </div>
                     ))}

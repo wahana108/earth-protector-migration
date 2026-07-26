@@ -32,6 +32,7 @@ import {
 } from '@/lib/infrastructure';
 import { updateCommunityConfig } from '@/lib/community-config';
 import { recordInflation, buildInflationPrompt, parseInflationOutput } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 import type { InfrastructureClaim, UserBlock } from '@/lib/types';
 import { db } from '@/lib/firebase';
 
@@ -415,10 +416,11 @@ function SuspendUserDialog({
 // ─── Klaim Kontribusi Card ──────────────────────────────────────────────────
 
 function ClaimAdminCard({
-  claim, adminId, onProcessed,
+  claim, adminId, currency, onProcessed,
 }: {
   claim: InfrastructureClaim;
   adminId: string;
+  currency: CurrencyConfig | undefined;
   onProcessed: (id: string) => void;
 }) {
   const [approving, setApproving] = useState(false);
@@ -447,7 +449,7 @@ function ClaimAdminCard({
             <p className="text-xs text-muted-foreground">{formatDate(claim.created_at)}</p>
           </div>
           <p className="font-mono font-bold text-sm shrink-0">
-            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(claim.nilai)}
+            {formatCurrency(claim.nilai, currency)}
           </p>
         </div>
 
@@ -490,6 +492,7 @@ function ClaimAdminCard({
         <RejectClaimDialog
           claim={claim}
           adminId={adminId}
+          currency={currency}
           onClose={() => setRejectOpen(false)}
           onRejected={onProcessed}
         />
@@ -499,10 +502,11 @@ function ClaimAdminCard({
 }
 
 function RejectClaimDialog({
-  claim, adminId, onClose, onRejected,
+  claim, adminId, currency, onClose, onRejected,
 }: {
   claim: InfrastructureClaim;
   adminId: string;
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onRejected: (id: string) => void;
 }) {
@@ -535,7 +539,7 @@ function RejectClaimDialog({
           <div className="rounded-lg border p-3 space-y-1.5 text-sm">
             <p className="font-semibold">{claim.user_nama}</p>
             <p className="text-xs text-muted-foreground">
-              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(claim.nilai)}
+              {formatCurrency(claim.nilai, currency)}
             </p>
           </div>
           <Textarea
@@ -618,6 +622,7 @@ export default function AdminPage() {
   const [inflationHistory, setInflationHistory] = useState<Array<{ tahun: number; pct: number }>>([]);
   const [savingInflation, setSavingInflation] = useState(false);
   const [inflationEnabled, setInflationEnabled] = useState(true);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
   const [recordPct, setRecordPct] = useState('');
   const [recordAlasan, setRecordAlasan] = useState('');
   const [recordingInflation, setRecordingInflation] = useState(false);
@@ -740,6 +745,7 @@ export default function AdminPage() {
       );
       setInflationHistory(config?.inflation_history ?? []);
       setInflationEnabled(config?.inflation_enabled ?? true);
+      setCurrencyCfg(config ?? undefined);
     } finally {
       setLoadingInfra(false);
     }
@@ -783,7 +789,7 @@ export default function AdminPage() {
         kontributorId, kontributorNama, nilaiNum,
         rewardBuktiLink.trim(), rewardKeterangan.trim(), user.id,
       );
-      setRewardResult(`Reward Rp ${nilaiNum.toLocaleString('id-ID')} berhasil diberikan ke ${kontributorNama}.`);
+      setRewardResult(`Reward ${formatCurrency(nilaiNum, currencyCfg)} berhasil diberikan ke ${kontributorNama}.`);
       setRewardEmail(''); setRewardNilai(''); setRewardBuktiLink(''); setRewardKeterangan('');
       await loadInfra();
     } catch (e) {
@@ -1241,15 +1247,15 @@ export default function AdminPage() {
                   <div className="grid grid-cols-3 gap-3 text-center text-sm">
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground mb-0.5">Total Masuk</p>
-                      <p className="font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_terkumpul)}</p>
+                      <p className="font-bold">{formatCurrency(infraStatus.total_terkumpul, currencyCfg)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground mb-0.5">Reward Diberikan</p>
-                      <p className="font-bold text-orange-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(infraStatus.total_digunakan)}</p>
+                      <p className="font-bold text-orange-600">{formatCurrency(infraStatus.total_digunakan, currencyCfg)}</p>
                     </div>
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground mb-0.5">Saldo Tersedia</p>
-                      <p className="font-bold text-green-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Math.max(0, infraStatus.sisa))}</p>
+                      <p className="font-bold text-green-600">{formatCurrency(Math.max(0, infraStatus.sisa), currencyCfg)}</p>
                     </div>
                   </div>
                   {/* Dinonaktifkan — digantikan reward kontributor (rewardInfrastructureContributor).
@@ -1296,7 +1302,7 @@ export default function AdminPage() {
                       <input
                         type="number"
                         className="w-full h-8 px-3 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        placeholder={`Nilai reward (Rp) — saldo tersedia: ${new Intl.NumberFormat('id-ID').format(infraStatus.saldo_tersedia)}`}
+                        placeholder={`Nilai reward (${currencyCfg?.currency_code ?? 'IDR'}) — saldo tersedia: ${formatCurrency(infraStatus.saldo_tersedia, currencyCfg)}`}
                         value={rewardNilai}
                         onChange={e => setRewardNilai(e.target.value)}
                       />
@@ -1429,10 +1435,10 @@ export default function AdminPage() {
                         <span className="text-xs text-muted-foreground">
                           Prompt untuk AI eksternal (Gemini, GPT, dll)
                         </span>
-                        <CopyButton text={buildInflationPrompt(new Date().getFullYear())} label="Salin Prompt" />
+                        <CopyButton text={buildInflationPrompt(new Date().getFullYear(), currencyCfg?.currency_code ?? 'Rupiah Indonesia')} label="Salin Prompt" />
                       </div>
                       <pre className="text-xs bg-muted rounded-lg p-3 overflow-auto max-h-40 whitespace-pre-wrap font-mono leading-relaxed">
-                        {buildInflationPrompt(new Date().getFullYear())}
+                        {buildInflationPrompt(new Date().getFullYear(), currencyCfg?.currency_code ?? 'Rupiah Indonesia')}
                       </pre>
                     </div>
 
@@ -1583,7 +1589,7 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-3">
                   {pendingClaims.map(c => (
-                    <ClaimAdminCard key={c.id} claim={c} adminId={user!.id} onProcessed={handleClaimProcessed} />
+                    <ClaimAdminCard key={c.id} claim={c} adminId={user!.id} currency={currencyCfg} onProcessed={handleClaimProcessed} />
                   ))}
                 </div>
               )}

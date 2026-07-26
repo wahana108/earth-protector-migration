@@ -21,6 +21,8 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import type { NeracaLog } from '@/lib/types';
+import { getCommunityConfig } from '@/lib/community-config';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,12 +59,6 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function relativeTime(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -166,6 +162,7 @@ export default function TransactionsPage() {
   const [filter, setFilter] = useState<FilterTab>('semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [reporting, setReporting] = useState<LogEntry | null>(null);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
@@ -176,7 +173,8 @@ export default function TransactionsPage() {
           orderBy('timestamp', 'desc'),
           limit(100),
         );
-        const snap = await getDocs(q);
+        const [snap, cfg] = await Promise.all([getDocs(q), getCommunityConfig()]);
+        setCurrencyCfg(cfg ?? undefined);
         const entries: LogEntry[] = snap.docs.map(d => {
           const data = d.data();
           return {
@@ -342,7 +340,7 @@ export default function TransactionsPage() {
                         : 'text-muted-foreground',
                     )}>
                       {entry.delta !== 0
-                        ? `${entry.delta > 0 ? '+' : ''}${formatIDR(entry.delta)}`
+                        ? `${entry.delta > 0 ? '+' : ''}${formatCurrency(entry.delta, currencyCfg)}`
                         : '—'}
                     </td>
                     <td className="px-4 py-2.5 border-t text-right text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">

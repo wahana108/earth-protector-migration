@@ -29,6 +29,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { createProject, calculateRealisasiPct, type RealisasiResult } from '@/lib/projects';
+import { formatCurrency } from '@/lib/format-currency';
 import { checkLinkBukti } from '@/lib/link-checker';
 import {
   KATEGORI_LABELS, KATEGORI_UTAMA, KATEGORI_CHILDREN, KATEGORI_PARENT,
@@ -61,14 +62,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 export default function CreatePage() {
   const { user, emailVerified } = useAuth();
@@ -151,21 +144,21 @@ export default function CreatePage() {
 
     // Config-dependent validation (values come from Firestore, not hardcoded)
     if (data.nilai_project < config.nilai_minimum_project) {
-      setError('nilai_project', { message: `Minimum ${formatIDR(config.nilai_minimum_project)}` });
+      setError('nilai_project', { message: `Minimum ${formatCurrency(config.nilai_minimum_project, config)}` });
       return;
     }
     const nilaiMaks = config.nilai_maksimum_project ?? 10000000;
     if (data.nilai_project > nilaiMaks) {
       const maxNft = Math.floor(nilaiMaks / config.harga_dasar);
-      setError('nilai_project', { message: `Maks ${formatIDR(nilaiMaks)} (${maxNft} NFT)` });
+      setError('nilai_project', { message: `Maks ${formatCurrency(nilaiMaks, config)} (${maxNft} NFT)` });
       return;
     }
     if (data.harga_jual <= config.harga_dasar) {
-      setError('harga_jual', { message: `Harus lebih dari ${formatIDR(config.harga_dasar)}` });
+      setError('harga_jual', { message: `Harus lebih dari ${formatCurrency(config.harga_dasar, config)}` });
       return;
     }
     if (data.harga_jual > config.batas_atas) {
-      setError('harga_jual', { message: `Maximum ${formatIDR(config.batas_atas)}` });
+      setError('harga_jual', { message: `Maximum ${formatCurrency(config.batas_atas, config)}` });
       return;
     }
 
@@ -313,11 +306,11 @@ export default function CreatePage() {
         <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
           <Info className="h-4 w-4 mt-0.5 shrink-0" />
           <span>
-            Harga dasar: <strong>{formatIDR(config.harga_dasar)}</strong>
+            Harga dasar: <strong>{formatCurrency(config.harga_dasar, config)}</strong>
             {' · '}
-            Batas atas: <strong>{formatIDR(config.batas_atas)}</strong>
+            Batas atas: <strong>{formatCurrency(config.batas_atas, config)}</strong>
             {' · '}
-            Nilai min project: <strong>{formatIDR(config.nilai_minimum_project)}</strong>
+            Nilai min project: <strong>{formatCurrency(config.nilai_minimum_project, config)}</strong>
           </span>
         </div>
 
@@ -549,17 +542,17 @@ export default function CreatePage() {
             <CardHeader>
               <CardTitle>Nilai &amp; Harga NFT</CardTitle>
               <CardDescription>
-                Jumlah NFT dihitung otomatis: nilai project ÷ harga dasar ({formatIDR(config.harga_dasar)}).
+                Jumlah NFT dihitung otomatis: nilai project ÷ harga dasar ({formatCurrency(config.harga_dasar, config)}).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nilai_project">Nilai Project (Rp) *</Label>
+                  <Label htmlFor="nilai_project">Nilai Project ({config?.currency_code ?? 'IDR'}) *</Label>
                   <Input
                     id="nilai_project"
                     type="number"
-                    step="100000"
+                    step="any"
                     min={config.nilai_minimum_project}
                     placeholder={String(config.nilai_minimum_project)}
                     {...register('nilai_project')}
@@ -568,19 +561,19 @@ export default function CreatePage() {
                     <p className="text-sm text-destructive">{errors.nilai_project.message}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Min {formatIDR(config.nilai_minimum_project)} —{' '}
-                      Maks {formatIDR(config.nilai_maksimum_project ?? 10000000)}{' '}
+                      Min {formatCurrency(config.nilai_minimum_project, config)} —{' '}
+                      Maks {formatCurrency(config.nilai_maksimum_project ?? 10000000, config)}{' '}
                       ({Math.floor((config.nilai_maksimum_project ?? 10000000) / config.harga_dasar)} NFT)
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="harga_jual">Harga Jual per NFT (Rp) *</Label>
+                  <Label htmlFor="harga_jual">Harga Jual per NFT ({config?.currency_code ?? 'IDR'}) *</Label>
                   <Input
                     id="harga_jual"
                     type="number"
-                    step="1000"
+                    step="any"
                     min={config.harga_dasar + 1000}
                     max={config.batas_atas}
                     placeholder={String(config.harga_dasar)}
@@ -590,7 +583,7 @@ export default function CreatePage() {
                     <p className="text-sm text-destructive">{errors.harga_jual.message}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Harus lebih dari {formatIDR(config.harga_dasar)} — Maks {formatIDR(config.batas_atas)}
+                      Harus lebih dari {formatCurrency(config.harga_dasar, config)} — Maks {formatCurrency(config.batas_atas, config)}
                     </p>
                   )}
                 </div>
@@ -609,14 +602,14 @@ export default function CreatePage() {
                       <span className="text-muted-foreground">Nilai selisih per NFT</span>
                       <span className="font-semibold">
                         {nilaiSelisih >= 0 ? '+' : ''}
-                        {formatIDR(nilaiSelisih)}
+                        {formatCurrency(nilaiSelisih, config)}
                       </span>
                     </div>
                   )}
                   {nilaiSelisih !== null && nilaiSelisih > 0 && (
                     <p className="text-xs text-muted-foreground pt-1 border-t">
-                      Saat NFT terjual, neracamu berkurang {formatIDR(nilaiSelisih)}{' '}
-                      dan neraca pembeli bertambah {formatIDR(nilaiSelisih)}.
+                      Saat NFT terjual, neracamu berkurang {formatCurrency(nilaiSelisih, config)}{' '}
+                      dan neraca pembeli bertambah {formatCurrency(nilaiSelisih, config)}.
                     </p>
                   )}
                 </div>

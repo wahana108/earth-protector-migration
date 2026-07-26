@@ -25,6 +25,7 @@ import { confirmBuybackRequest, rejectBuybackRequest, BuybackRequestError } from
 import { getCommunityConfig } from '@/lib/community-config';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,12 +41,6 @@ type PendingRequest = {
   created_at: Date;
 };
 
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
-
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
 }
@@ -53,11 +48,12 @@ function formatDate(d: Date) {
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmDialog({
-  request, sellerId, inflationHistory, onClose, onSuccess,
+  request, sellerId, inflationHistory, currency, onClose, onSuccess,
 }: {
   request: PendingRequest;
   sellerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onSuccess: (requestId: string) => void;
 }) {
@@ -98,17 +94,18 @@ function ConfirmDialog({
             <div className="pt-2 border-t space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga buyback</span>
-                <span className="font-semibold">{formatIDR(request.harga_buyback)}</span>
+                <span className="font-semibold">{formatCurrency(request.harga_buyback, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={request.harga_buyback}
                 createdAt={request.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Kamu terima kembali</span>
-                <span className="font-semibold text-green-600">+{formatIDR(request.nilai_selisih)}</span>
+                <span className="font-semibold text-green-600">+{formatCurrency(request.nilai_selisih, currency)}</span>
               </div>
             </div>
           </div>
@@ -220,11 +217,12 @@ function RejectDialog({
 // ─── Request Card ─────────────────────────────────────────────────────────────
 
 function RequestCard({
-  request, sellerId, inflationHistory, onHandled,
+  request, sellerId, inflationHistory, currency, onHandled,
 }: {
   request: PendingRequest;
   sellerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onHandled: (requestId: string) => void;
 }) {
   const [dialog, setDialog] = useState<'confirm' | 'reject' | null>(null);
@@ -248,16 +246,17 @@ function RequestCard({
         <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Harga buyback</span>
-            <span className="font-semibold">{formatIDR(request.harga_buyback)}</span>
+            <span className="font-semibold">{formatCurrency(request.harga_buyback, currency)}</span>
           </div>
           <HargaEfektifInfo
             harga={request.harga_buyback}
             createdAt={request.created_at}
             inflationHistory={inflationHistory}
+            currency={currency}
           />
           <div className="flex justify-between">
             <span className="text-muted-foreground">Kamu terima kembali</span>
-            <span className="font-semibold text-green-600">+{formatIDR(request.nilai_selisih)}</span>
+            <span className="font-semibold text-green-600">+{formatCurrency(request.nilai_selisih, currency)}</span>
           </div>
         </div>
 
@@ -301,7 +300,7 @@ function RequestCard({
       </div>
 
       {dialog === 'confirm' && (
-        <ConfirmDialog request={request} sellerId={sellerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onHandled} />
+        <ConfirmDialog request={request} sellerId={sellerId} inflationHistory={inflationHistory} currency={currency} onClose={() => setDialog(null)} onSuccess={onHandled} />
       )}
       {dialog === 'reject' && (
         <RejectDialog request={request} sellerId={sellerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
@@ -317,6 +316,7 @@ export default function BuybackRequestsPage() {
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   const loadRequests = useCallback(async () => {
     if (!user) return;
@@ -332,6 +332,7 @@ export default function BuybackRequestsPage() {
         getCommunityConfig(),
       ]);
       setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+      setCurrencyCfg(cfg ?? undefined);
 
       if (snap.empty) {
         setRequests([]);
@@ -430,7 +431,7 @@ export default function BuybackRequestsPage() {
             </p>
             <div className="space-y-4">
               {requests.map(req => (
-                <RequestCard key={req.id} request={req} sellerId={user.id} inflationHistory={inflationHistory} onHandled={handleHandled} />
+                <RequestCard key={req.id} request={req} sellerId={user.id} inflationHistory={inflationHistory} currency={currencyCfg} onHandled={handleHandled} />
               ))}
             </div>
           </>

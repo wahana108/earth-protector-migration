@@ -31,14 +31,9 @@ import { cn } from '@/lib/utils';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function relativeTime(date: Date): string {
   const diff = Date.now() - date.getTime();
@@ -107,12 +102,13 @@ interface BuyDialogProps {
   hargaDasar: number;
   batasAtas: number;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 function BuyDialog({
-  unit, linkBukti, buyerId, hargaDasar, batasAtas, inflationHistory, onClose, onSuccess,
+  unit, linkBukti, buyerId, hargaDasar, batasAtas, inflationHistory, currency, onClose, onSuccess,
 }: BuyDialogProps) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
@@ -150,18 +146,19 @@ function BuyDialog({
             <div className="pt-2 border-t space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga</span>
-                <span className="font-bold">{formatIDR(unit.harga_jual)}</span>
+                <span className="font-bold">{formatCurrency(unit.harga_jual, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_jual}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Neracamu bertambah</span>
                 <span className="font-semibold text-green-600">
-                  +{formatIDR(unit.nilai_selisih)}
+                  +{formatCurrency(unit.nilai_selisih, currency)}
                 </span>
               </div>
             </div>
@@ -236,9 +233,10 @@ interface CommentSectionProps {
   projectDeveloperId: string;
   currentUserId: string | undefined;
   currentUserDisplayName: string | null;
+  currency: CurrencyConfig | undefined;
 }
 
-function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, currentUserDisplayName }: CommentSectionProps) {
+function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, currentUserDisplayName, currency }: CommentSectionProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -440,7 +438,7 @@ function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="font-semibold">{c.display_name}</span>
-                    {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} />}
+                    {c.badge_kontributor && <ContributorBadge nilai={c.total_kontribusi ?? 0} currency={currency} />}
                     <span className="text-xs text-muted-foreground">{relativeTime(c.timestamp)}</span>
                     {c.is_pinned && (
                       <span className="text-xs text-primary font-medium">📌 Disematkan</span>
@@ -557,7 +555,7 @@ export default function NftDetailPage({
   const [likeCount, setLikeCount] = useState(0);
 
   const [buyOpen, setBuyOpen] = useState(false);
-  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } | null>(null);
+  const [config, setConfig] = useState<{ harga_dasar: number; batas_atas: number; inflation_history: InflationEntry[] } & CurrencyConfig | null>(null);
 
   // Main data
   useEffect(() => {
@@ -649,7 +647,11 @@ export default function NftDetailPage({
   // Community config
   useEffect(() => {
     getCommunityConfig()
-      .then(c => { if (c) setConfig({ harga_dasar: c.harga_dasar, batas_atas: c.batas_atas, inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled) }); })
+      .then(c => { if (c) setConfig({
+        harga_dasar: c.harga_dasar, batas_atas: c.batas_atas,
+        inflation_history: effectiveInflationHistory(c.inflation_history, c.inflation_enabled),
+        currency_code: c.currency_code, currency_locale: c.currency_locale, currency_decimals: c.currency_decimals,
+      }); })
       .catch(() => {});
   }, []);
 
@@ -733,12 +735,13 @@ export default function NftDetailPage({
           <div className="rounded-lg border p-3 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Harga Jual</span>
-              <span className="font-bold text-base">{formatIDR(unit.harga_jual)}</span>
+              <span className="font-bold text-base">{formatCurrency(unit.harga_jual, config)}</span>
             </div>
             <HargaEfektifInfo
               harga={unit.harga_jual}
               createdAt={unit.created_at}
               inflationHistory={config?.inflation_history ?? []}
+              currency={config}
               className="text-[11px] text-muted-foreground italic text-right"
             />
             <div className="flex justify-between">
@@ -749,7 +752,7 @@ export default function NftDetailPage({
                   unit.nilai_selisih > 0 ? 'text-green-600' : 'text-muted-foreground',
                 )}
               >
-                {unit.nilai_selisih > 0 ? '+' : ''}{formatIDR(unit.nilai_selisih)}
+                {unit.nilai_selisih > 0 ? '+' : ''}{formatCurrency(unit.nilai_selisih, config)}
               </span>
             </div>
             <div className="flex justify-between pt-1.5 border-t">
@@ -831,7 +834,7 @@ export default function NftDetailPage({
                       <tr className={cn('border-t', i % 2 === 0 ? 'bg-background' : 'bg-muted/20')}>
                         <td className="px-3 py-2 font-medium">{h.dari_name}</td>
                         <td className="px-3 py-2 font-medium">{h.ke_name}</td>
-                        <td className="px-3 py-2 text-right">{formatIDR(h.harga)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(h.harga, config)}</td>
                         <td className="px-3 py-2 text-right text-xs text-muted-foreground">
                           {relativeTime(h.timestamp)}
                         </td>
@@ -873,6 +876,7 @@ export default function NftDetailPage({
           projectDeveloperId={unit.developer_id}
           currentUserId={user?.id}
           currentUserDisplayName={currentUserDisplayName}
+          currency={config ?? undefined}
         />
 
       </div>
@@ -886,6 +890,7 @@ export default function NftDetailPage({
           hargaDasar={config.harga_dasar}
           batasAtas={config.batas_atas}
           inflationHistory={config.inflation_history}
+          currency={config}
           onClose={() => setBuyOpen(false)}
           onSuccess={() => {
             setData(prev =>

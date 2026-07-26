@@ -26,6 +26,7 @@ import { getPlaceholder } from '@/lib/category-placeholders';
 import { getCommunityConfig } from '@/lib/community-config';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,12 +43,6 @@ type PendingPurchase = {
   purchased_at: Date | null;
   purchase_auto_complete_at: Date | null;
 };
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function daysUntil(date: Date | null): number | null {
   if (!date) return null;
@@ -66,11 +61,12 @@ function formatDate(d: Date | null) {
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmPurchaseDialog({
-  purchase, developerId, inflationHistory, onClose, onSuccess,
+  purchase, developerId, inflationHistory, currency, onClose, onSuccess,
 }: {
   purchase: PendingPurchase;
   developerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onSuccess: (id: string) => void;
 }) {
@@ -102,17 +98,18 @@ function ConfirmPurchaseDialog({
             <div className="pt-2 border-t space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga terjual</span>
-                <span className="font-semibold">{formatIDR(purchase.harga_beli)}</span>
+                <span className="font-semibold">{formatCurrency(purchase.harga_beli, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={purchase.harga_beli}
                 createdAt={purchase.purchased_at ?? new Date()}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
-                <span className="font-semibold text-destructive">−{formatIDR(purchase.nilai_selisih)}</span>
+                <span className="font-semibold text-destructive">−{formatCurrency(purchase.nilai_selisih, currency)}</span>
               </div>
             </div>
           </div>
@@ -201,11 +198,12 @@ function ReportPurchaseDialog({
 // ─── Purchase Card ────────────────────────────────────────────────────────────
 
 function PurchaseCard({
-  purchase, developerId, inflationHistory, onHandled,
+  purchase, developerId, inflationHistory, currency, onHandled,
 }: {
   purchase: PendingPurchase;
   developerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onHandled: (id: string) => void;
 }) {
   const [dialog, setDialog] = useState<'confirm' | 'report' | null>(null);
@@ -242,16 +240,17 @@ function PurchaseCard({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Harga terjual</span>
-            <span className="font-semibold">{formatIDR(purchase.harga_beli)}</span>
+            <span className="font-semibold">{formatCurrency(purchase.harga_beli, currency)}</span>
           </div>
           <HargaEfektifInfo
             harga={purchase.harga_beli}
             createdAt={purchase.purchased_at ?? new Date()}
             inflationHistory={inflationHistory}
+            currency={currency}
           />
           <div className="flex justify-between">
             <span className="text-muted-foreground">Efek neracamu jika konfirmasi</span>
-            <span className="font-semibold text-destructive">−{formatIDR(purchase.nilai_selisih)}</span>
+            <span className="font-semibold text-destructive">−{formatCurrency(purchase.nilai_selisih, currency)}</span>
           </div>
         </div>
 
@@ -285,7 +284,7 @@ function PurchaseCard({
       </div>
 
       {dialog === 'confirm' && (
-        <ConfirmPurchaseDialog purchase={purchase} developerId={developerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onHandled} />
+        <ConfirmPurchaseDialog purchase={purchase} developerId={developerId} inflationHistory={inflationHistory} currency={currency} onClose={() => setDialog(null)} onSuccess={onHandled} />
       )}
       {dialog === 'report' && (
         <ReportPurchaseDialog purchase={purchase} developerId={developerId} onClose={() => setDialog(null)} onSuccess={onHandled} />
@@ -301,6 +300,7 @@ export default function PurchaseConfirmationsPage() {
   const [purchases, setPurchases] = useState<PendingPurchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -324,6 +324,7 @@ export default function PurchaseConfirmationsPage() {
         getCommunityConfig(),
       ]);
       setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+      setCurrencyCfg(cfg ?? undefined);
 
       // Lazy eval: auto-complete pending yang expired, auto-cancel disputed yang
       // expired (deadline sama — purchase_auto_complete_at tidak berubah saat
@@ -447,7 +448,7 @@ export default function PurchaseConfirmationsPage() {
             </p>
             <div className="space-y-4">
               {purchases.map(p => (
-                <PurchaseCard key={p.nft_unit_id} purchase={p} developerId={user.id} inflationHistory={inflationHistory} onHandled={handleHandled} />
+                <PurchaseCard key={p.nft_unit_id} purchase={p} developerId={user.id} inflationHistory={inflationHistory} currency={currencyCfg} onHandled={handleHandled} />
               ))}
             </div>
           </>

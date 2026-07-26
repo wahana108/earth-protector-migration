@@ -23,6 +23,7 @@ import { getCommunityConfig } from '@/lib/community-config';
 import { KATEGORI_LABELS, type ProjectCategory } from '@/lib/types';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,14 +42,6 @@ type CommunityStats = {
   totalTopDeveloper: number;
   nftDiPool: number;
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 // ─── Konten dinamis halaman depan ──────────────────────────────────────────────
 
@@ -69,6 +62,7 @@ export function HomeClient() {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   const heroSlides = HERO_SLIDESHOW_IDS
     .map(id => PlaceHolderImages.find(img => img.id === id))
@@ -93,6 +87,7 @@ export function HomeClient() {
           getCommunityConfig(),
         ]);
         setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+        setCurrencyCfg(cfg ?? undefined);
 
         setStats({
           totalProjects: projectsSnap.size,
@@ -247,12 +242,13 @@ export function HomeClient() {
                     {project.nama_project}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {project.jumlah_nft} NFT · {formatIDR(project.harga_jual)}/unit
+                    {project.jumlah_nft} NFT · {formatCurrency(project.harga_jual, currencyCfg)}/unit
                   </p>
                   <HargaEfektifInfo
                     harga={project.harga_jual}
                     createdAt={project.created_at}
                     inflationHistory={inflationHistory}
+                    currency={currencyCfg}
                   />
                 </div>
               </Link>

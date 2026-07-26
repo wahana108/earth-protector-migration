@@ -22,14 +22,7 @@ import { cn } from '@/lib/utils';
 import { getCommunityConfig } from '@/lib/community-config';
 import { calculateEffectiveBuyback, fibonacciLargestAndSum, isLapakAktif } from '@/lib/ranking';
 import { maybeAutoRecalculate } from '@/lib/projects';
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 type DeveloperRow = {
   id: string;
@@ -54,6 +47,7 @@ type FetchResult = {
   rows: DeveloperRow[];
   minSoldNfts: number;
   minBuybackPct: number;
+  currency: CurrencyConfig;
 };
 
 async function fetchDeveloperRows(): Promise<FetchResult> {
@@ -126,6 +120,10 @@ async function fetchDeveloperRows(): Promise<FetchResult> {
     rows,
     minSoldNfts: config?.minimum_soldNfts_top_developer ?? 24,
     minBuybackPct: config?.minimum_buyback_pct ?? 50,
+    currency: {
+      currency_code: config?.currency_code, currency_locale: config?.currency_locale,
+      currency_decimals: config?.currency_decimals,
+    },
   };
 }
 
@@ -159,12 +157,13 @@ function BuybackBar({ pct }: { pct: number }) {
 
 // ─── Developer Card ───────────────────────────────────────────────────────────
 
-function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct }: {
+function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct, currency }: {
   dev: DeveloperRow;
   rank: number;
   currentUserId?: string;
   minSoldNfts: number;
   minBuybackPct: number;
+  currency: CurrencyConfig | undefined;
 }) {
   const displayName = dev.displayName ?? dev.id.slice(0, 8) + '…';
   const initial = displayName.charAt(0).toUpperCase();
@@ -193,7 +192,7 @@ function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct }:
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-sm truncate">{displayName}</p>
-              {dev.badge_kontributor && <ContributorBadge nilai={dev.total_kontribusi} />}
+              {dev.badge_kontributor && <ContributorBadge nilai={dev.total_kontribusi} currency={currency} />}
               {dev.tier === 1 && (
                 <Badge className="bg-green-600 text-white text-xs shrink-0">Top Developer</Badge>
               )}
@@ -251,7 +250,7 @@ function DeveloperCard({ dev, rank, currentUserId, minSoldNfts, minBuybackPct }:
                 'font-bold text-sm tabular-nums',
                 isPosNeraca ? 'text-green-600' : 'text-destructive',
               )}>
-                {isPosNeraca ? '+' : ''}{formatIDR(dev.total_poin)}
+                {isPosNeraca ? '+' : ''}{formatCurrency(dev.total_poin, currency)}
               </p>
               <p className="text-xs text-muted-foreground">neraca</p>
             </div>
@@ -370,6 +369,7 @@ export default function DeveloperRankingPage() {
                   currentUserId={user?.id}
                   minSoldNfts={minSoldNfts}
                   minBuybackPct={minBuybackPct}
+                  currency={fetchResult?.currency}
                 />
               ))}
             </div>

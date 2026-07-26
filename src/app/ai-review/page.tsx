@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
+import { formatCurrency } from '@/lib/format-currency';
 import {
   getTopDevsForAiReview, fetchDevLogs, aggregateDevData,
   generateDataText, buildAiReviewPrompt, parseAiOutput,
@@ -19,10 +20,6 @@ import {
   type DevProfile, type DevAggregate, type ParsedAiEntry, type AiReview,
 } from '@/lib/ai-review';
 import type { CommunityConfig } from '@/lib/types';
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
-}
 
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
@@ -356,7 +353,7 @@ export default function AiReviewPage() {
               <CardTitle className="text-base">D — Preview Penilaian</CardTitle>
               <CardDescription className="text-xs">
                 Tinjau sebelum diterapkan. Total minus:{' '}
-                <span className="font-semibold text-destructive">{formatIDR(totalMinusPreview)}</span>
+                <span className="font-semibold text-destructive">{formatCurrency(totalMinusPreview, config)}</span>
                 {' '}akan dipindah ke saldo neraca sistem.
               </CardDescription>
             </CardHeader>
@@ -388,7 +385,7 @@ export default function AiReviewPage() {
                           {e.minusNft > 0 ? `-${e.minusNft}` : '—'}
                         </td>
                         <td className="px-3 py-2 text-right font-mono text-sm">
-                          {e.minusNeraca > 0 ? <span className="text-destructive">{formatIDR(e.minusNeraca)}</span> : '—'}
+                          {e.minusNeraca > 0 ? <span className="text-destructive">{formatCurrency(e.minusNeraca, config)}</span> : '—'}
                         </td>
                       </tr>
                     ))}
@@ -438,7 +435,7 @@ export default function AiReviewPage() {
                         </div>
                         <p className="text-sm">
                           {review.entries.length} developer ·{' '}
-                          <span className="text-destructive font-medium">{formatIDR(review.total_minus)}</span> total minus
+                          <span className="text-destructive font-medium">{formatCurrency(review.total_minus, config)}</span> total minus
                         </p>
                         {review.status === 'applied' && (
                           <p className="text-xs text-muted-foreground">
@@ -491,7 +488,7 @@ export default function AiReviewPage() {
                                 </td>
                                 <td className="px-3 py-2 text-right">{entry.skor}</td>
                                 <td className="px-3 py-2 text-right font-mono">
-                                  {entry.minus_diterapkan > 0 ? formatIDR(entry.minus_diterapkan) : '—'}
+                                  {entry.minus_diterapkan > 0 ? formatCurrency(entry.minus_diterapkan, config) : '—'}
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   <span className={

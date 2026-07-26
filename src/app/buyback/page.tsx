@@ -35,14 +35,9 @@ import { getCommunityConfig } from '@/lib/community-config';
 import type { NFTUnit, ProjectCategory } from '@/lib/types';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
 import { effectiveInflationHistory, type InflationEntry } from '@/lib/inflation';
+import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatIDR(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', maximumFractionDigits: 0,
-  }).format(n);
-}
 
 type BuybackReqData = {
   id: string;
@@ -112,11 +107,12 @@ function daysUntil(date: Date | null): number | null {
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
 
 function RequestDialog({
-  unit, ownerId, inflationHistory, onClose, onSuccess,
+  unit, ownerId, inflationHistory, currency, onClose, onSuccess,
 }: {
   unit: NFTUnit;
   ownerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -152,18 +148,19 @@ function RequestDialog({
             <div className="pt-2 border-t space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga buyback</span>
-                <span className="font-bold">{formatIDR(unit.harga_beli_terakhir)}</span>
+                <span className="font-bold">{formatCurrency(unit.harga_beli_terakhir, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={unit.harga_beli_terakhir}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
                 <span className={cn('font-semibold', unit.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                  {unit.nilai_selisih > 0 ? `−${formatIDR(unit.nilai_selisih)}` : 'Tidak ada perubahan'}
+                  {unit.nilai_selisih > 0 ? `−${formatCurrency(unit.nilai_selisih, currency)}` : 'Tidak ada perubahan'}
                 </span>
               </div>
             </div>
@@ -301,12 +298,13 @@ function DisputeDialog({
 }
 
 function CompleteDialog({
-  unit, request, ownerId, inflationHistory, onClose, onSuccess,
+  unit, request, ownerId, inflationHistory, currency, onClose, onSuccess,
 }: {
   unit: NFTUnit;
   request: BuybackReqData;
   ownerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -339,18 +337,19 @@ function CompleteDialog({
             <div className="pt-2 border-t space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Harga buyback</span>
-                <span className="font-bold">{formatIDR(request.harga_buyback)}</span>
+                <span className="font-bold">{formatCurrency(request.harga_buyback, currency)}</span>
               </div>
               <HargaEfektifInfo
                 harga={request.harga_buyback}
                 createdAt={unit.created_at}
                 inflationHistory={inflationHistory}
+                currency={currency}
                 className="text-[11px] text-muted-foreground italic text-right"
               />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Efek neracamu</span>
                 <span className={cn('font-semibold', request.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                  {request.nilai_selisih > 0 ? `−${formatIDR(request.nilai_selisih)}` : 'Tidak ada perubahan'}
+                  {request.nilai_selisih > 0 ? `−${formatCurrency(request.nilai_selisih, currency)}` : 'Tidak ada perubahan'}
                 </span>
               </div>
             </div>
@@ -391,11 +390,12 @@ function CompleteDialog({
 type DialogType = 'request' | 'cancel' | 'complete' | 'dispute' | null;
 
 function BuybackCard({
-  item, ownerId, inflationHistory, onSuccess,
+  item, ownerId, inflationHistory, currency, onSuccess,
 }: {
   item: NFTWithReq;
   ownerId: string;
   inflationHistory: InflationEntry[];
+  currency: CurrencyConfig | undefined;
   onSuccess: () => void;
 }) {
   const [dialog, setDialog] = useState<DialogType>(null);
@@ -514,17 +514,18 @@ function BuybackCard({
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Harga buyback</span>
-              <span className="font-semibold">{formatIDR(nft.harga_beli_terakhir)}</span>
+              <span className="font-semibold">{formatCurrency(nft.harga_beli_terakhir, currency)}</span>
             </div>
             <HargaEfektifInfo
               harga={nft.harga_beli_terakhir}
               createdAt={nft.created_at}
               inflationHistory={inflationHistory}
+              currency={currency}
             />
             <div className="flex justify-between">
               <span className="text-muted-foreground">Efek neraca</span>
               <span className={cn('font-semibold', nft.nilai_selisih > 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                {nft.nilai_selisih > 0 ? `−${formatIDR(nft.nilai_selisih)}` : '—'}
+                {nft.nilai_selisih > 0 ? `−${formatCurrency(nft.nilai_selisih, currency)}` : '—'}
               </span>
             </div>
           </div>
@@ -539,13 +540,13 @@ function BuybackCard({
       </div>
 
       {dialog === 'request' && (
-        <RequestDialog unit={nft} ownerId={ownerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+        <RequestDialog unit={nft} ownerId={ownerId} inflationHistory={inflationHistory} currency={currency} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'cancel' && request && (
         <CancelDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'complete' && request && (
-        <CompleteDialog unit={nft} request={request} ownerId={ownerId} inflationHistory={inflationHistory} onClose={() => setDialog(null)} onSuccess={onSuccess} />
+        <CompleteDialog unit={nft} request={request} ownerId={ownerId} inflationHistory={inflationHistory} currency={currency} onClose={() => setDialog(null)} onSuccess={onSuccess} />
       )}
       {dialog === 'dispute' && request && (
         <DisputeDialog requestId={request.id} requesterId={ownerId} onClose={() => setDialog(null)} onSuccess={onSuccess} />
@@ -561,6 +562,7 @@ export default function BuybackPage() {
   const [items, setItems] = useState<NFTWithReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [inflationHistory, setInflationHistory] = useState<InflationEntry[]>([]);
+  const [currencyCfg, setCurrencyCfg] = useState<CurrencyConfig | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -576,6 +578,7 @@ export default function BuybackPage() {
         getCommunityConfig(),
       ]);
       setInflationHistory(effectiveInflationHistory(cfg?.inflation_history, cfg?.inflation_enabled));
+      setCurrencyCfg(cfg ?? undefined);
 
       const allReqs = reqsSnap.docs.map(d => toBuybackReq(d.id, d.data() as Record<string, unknown>));
 
@@ -695,7 +698,7 @@ export default function BuybackPage() {
             <p className="text-sm text-muted-foreground">{items.length} NFT tersedia untuk buyback</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map(item => (
-                <BuybackCard key={item.nft.id} item={item} ownerId={user.id} inflationHistory={inflationHistory} onSuccess={loadData} />
+                <BuybackCard key={item.nft.id} item={item} ownerId={user.id} inflationHistory={inflationHistory} currency={currencyCfg} onSuccess={loadData} />
               ))}
             </div>
           </>
