@@ -1,5 +1,5 @@
-# TMEP Technical Manifesto
-### The Mother Earth Project — Spesifikasi Konsep untuk Developer
+# Inspira Better World Technical Manifesto
+### Spesifikasi Konsep untuk Developer
 
 > Dokumen ini adalah referensi teknis untuk developer yang ingin memahami logika sistem sebelum berkontribusi pada kode.
 > Konsep ini tidak berubah dari awal — hanya implementasinya yang menyesuaikan kemampuan realisasi di setiap fase pengembangan.
@@ -19,7 +19,7 @@
 
 ## Filosofi dasar — mengapa ini beda
 
-TMEP bukan platform jual beli NFT. TMEP adalah **infrastruktur pengakuan komunitas** atas tindakan nyata di dunia.
+Inspira Better World bukan platform jual beli NFT. Inspira Better World adalah **infrastruktur pengakuan komunitas** atas tindakan nyata di dunia.
 
 ```
 NFT = Sertifikat tindakan nyata charity
@@ -38,7 +38,7 @@ Tidak ada uang yang berpindah di dalam sistem. Yang berpindah adalah **pengakuan
 Fibonacci bukan sekadar angka matematika. Ini adalah **pola pertumbuhan alam yang terbukti**: spiral galaxy, koloni semut, struktur DNA, pola daun. Semua creature menggunakan kode ini sebagai mekanisme backup dan penyebaran.
 
 ```
-Relevansi untuk TMEP:
+Relevansi untuk Inspira Better World:
 → Sistem yang menyebar mengikuti pola Fibonacci
   tidak bisa "dibunuh" dengan menghancurkan satu titik
 → Seperti koloni semut: musnahkan satu koloni,
@@ -46,7 +46,7 @@ Relevansi untuk TMEP:
 → Inilah yang membuat Bitcoin bertahan:
   bukan hanya teknologinya, tapi penyebarannya organik
 
-Implementasi di TMEP:
+Implementasi di Inspira Better World:
 Level 1: 1 node (founder)
 Level 2: 1 node tambahan (total 2)
 Level 3: 2 node tambahan (total 3) → 1,1,2,3,5,8,13...
@@ -285,7 +285,7 @@ Di Fase Advance:
 ## Multi-node federation — menuju desentralisasi
 
 ```
-Setiap instance TMEP:
+Setiap instance Inspira Better World:
 ├── Punya database sendiri (Firebase terpisah)
 ├── Punya administrator sendiri
 ├── Setup parameter sendiri
@@ -454,7 +454,7 @@ def fibonacci_largest_and_sum(N):
 # Fibonacci terbesar: 13
 ```
 
-### Implementasi JavaScript untuk platform TMEP
+### Implementasi JavaScript untuk platform Inspira Better World
 
 ```javascript
 function fibonacciLargestAndSum(N) {
@@ -477,8 +477,8 @@ function fibonacciLargestAndSum(N) {
   };
 }
 
-// Penerapan utama di TMEP:
-function calculateTMEPCapacity(userAktif) {
+// Penerapan utama di Inspira Better World:
+function calculateInspiraCapacity(userAktif) {
   const { largest, totalSum, sequence } = fibonacciLargestAndSum(userAktif);
   const prevFib = sequence[sequence.length-2] || 1;
   const nextMilestone = largest + prevFib;
@@ -530,7 +530,7 @@ User Aktif (N) | Fib Terbesar | Total Sum | Kapasitas Pool | Min Validasi
 async function recalculateFibonacciCapacity() {
   // user aktif = yang bertransaksi 30 hari terakhir
   const userAktif = await countActiveUsers();
-  const capacity = calculateTMEPCapacity(userAktif);
+  const capacity = calculateInspiraCapacity(userAktif);
   
   await updateCommunityConfig({
     kapasitas_pool_minimum: capacity.kapasitas_nft_valid,
@@ -640,7 +640,7 @@ function allocateAIResources(userAktif, totalTransactions) {
 
 ---
 
-### Filosofi implementasi Fibonacci di TMEP
+### Filosofi implementasi Fibonacci di Inspira Better World
 
 ```
 Mengapa total_sum sebagai kapasitas organik:

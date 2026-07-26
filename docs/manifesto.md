@@ -1,10 +1,10 @@
 # Earth Protector Migration Manifesto
 
-> This manifesto serves as the guiding principle for all contributors and maintainers of the Earth Protector Migration project. It outlines the vision of turning good deeds into eternal digital assets through the Mother Earth Protocol.
+> This manifesto serves as the guiding principle for all contributors and maintainers of the Earth Protector Migration project. It outlines the vision of turning good deeds into eternal digital assets through Inspira Better World.
 
 ---
 
-## 🌍 THE MOTHER EARTH PROTOCOL
+## 🌍 INSPIRA BETTER WORLD
 ## Impact Indexing Protocol (IIP) | Manifesto & Developer Brief | v1.0
 > "Mengubah Setiap Tindakan Kebaikan Menjadi Aset Digital yang Abadi"
 
@@ -22,10 +22,10 @@ Sistem donasi dan charity tradisional memiliki tiga kelemahan fundamental:
 ## II. Visi: Give Without Loss
 "Dalam dunia yang kami bayangkan, berbuat baik adalah cara terbaik untuk membangun kekayaan — yang berakar pada kepercayaan komunitas dan dampak nyata bagi bumi."
 
-**The Mother Earth Protocol (TMEP)** adalah lapisan kepercayaan (*trust layer*) yang bekerja di atas ekosistem NFT yang sudah ada. Tujuannya adalah menciptakan **Ekonomi Paralel Berbasis Kebaikan** di mana reputasi menjadi modal utama.
+**Inspira Better World** adalah lapisan kepercayaan (*trust layer*) yang bekerja di atas ekosistem NFT yang sudah ada. Tujuannya adalah menciptakan **Ekonomi Paralel Berbasis Kebaikan** di mana reputasi menjadi modal utama.
 
 ### 2.1 Stablecoin of Good Deeds
-Nilai NFT dalam TMEP tidak ditentukan oleh spekulasi pasar, melainkan oleh evaluasi komunitas dan analisis AI berdasarkan data inflasi regional (BPS/IMF), menciptakan stabilitas yang melindungi peserta dari volatilitas kripto.
+Nilai NFT dalam Inspira Better World tidak ditentukan oleh spekulasi pasar, melainkan oleh evaluasi komunitas dan analisis AI berdasarkan data inflasi regional (BPS/IMF), menciptakan stabilitas yang melindungi peserta dari volatilitas kripto.
 
 ---
 
@@ -56,9 +56,9 @@ AI (Gemini/Grok) bertindak sebagai auditor netral dengan tugas spesifik:
 ---
 
 ## V. Arsitektur Terbuka (Open Source)
-TMEP adalah **Protokol Indeks**, bukan Marketplace. 
+Inspira Better World adalah **Protokol Indeks**, bukan Marketplace. 
 - Transaksi terjadi di platform eksternal (OpenSea/Binance).
-- TMEP hanya mencatat bukti transaksi (*hash link*).
+- Inspira Better World hanya mencatat bukti transaksi (*hash link*).
 - Dirancang untuk menjadi **DAPP Otonom** yang berjalan tanpa otoritas pusat, serupa dengan filosofi Bitcoin namun berbasis pada kelimpahan kebaikan.
 
 ---

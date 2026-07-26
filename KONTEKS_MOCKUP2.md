@@ -1,4 +1,4 @@
-# KONTEKS_MOCKUP.md — The Mother Earth Project
+# KONTEKS_MOCKUP.md — Inspira Better World
 
 > Dokumen ini dibuat berdasarkan pembacaan menyeluruh seluruh source code.
 > Dibuat: 2026-05-27
@@ -7,7 +7,7 @@
 
 ## 1. GAMBARAN UMUM PROJECT
 
-**Nama:** The Mother Earth Project  
+**Nama:** Inspira Better World  
 **Deskripsi:** NFT Marketplace bertemakan lingkungan hidup. Users bisa membeli, menjual, dan membuat NFT yang secara konseptual mendanai proyek lingkungan (penanaman pohon, pembersihan laut, perlindungan satwa liar).  
 **Stack:** React 18 + TypeScript + Vite + Supabase + Tailwind CSS + shadcn/ui (Radix)  
 **Build tool:** Vite (port 8080)  

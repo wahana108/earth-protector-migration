@@ -1,4 +1,4 @@
-# CLAUDE.md — The Mother Earth Project (TMEP)
+# CLAUDE.md — Inspira Better World (TMEP)
 
 > Instruksi konteks untuk Claude CLI. Baca seluruh dokumen ini sebelum menyentuh kode.
 > Jika ada konflik antara dokumen ini dan kode, tanyakan ke developer sebelum mengubah apapun.
@@ -7,7 +7,15 @@
 
 ## Apa proyek ini?
 
-TMEP adalah platform komunitas open-source untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace spekulatif. NFT = sertifikat pengakuan tindakan nyata. Semua nilai adalah poin simbolik reputasi, bukan uang. Platform = "lapisan pencatatan sosial": transaksi nilai nyata terjadi DI LUAR platform (eksternal); platform tidak pernah memegang risiko finansial.
+> **REBRANDING (2026-07, feat/rebrand-inspira + docs/rebrand-consistency):** nama
+> publik platform kini **Inspira Better World** (sebelumnya *The Mother Earth
+> Project* / TMEP) — diganti karena tabrakan nama dengan organisasi mapan
+> motherearthproject.org. Nama teknis internal TIDAK berubah: nama repo
+> (earth-protector-migration), prefix data sertifikat TMEP-NODE-*, nama
+> koleksi/field Firestore, dan singkatan "TMEP" tetap dipakai sebagai istilah
+> kerja teknis di seluruh dokumen ini.
+
+Inspira Better World (nama teknis: TMEP) adalah platform komunitas open-source untuk mengabadikan tindakan nyata charity melalui sistem NFT berbasis konsensus. Bukan marketplace spekulatif. NFT = sertifikat pengakuan tindakan nyata. Semua nilai adalah poin simbolik reputasi, bukan uang. Platform = "lapisan pencatatan sosial": transaksi nilai nyata terjadi DI LUAR platform (eksternal); platform tidak pernah memegang risiko finansial.
 
 **Visi realistis:** Platform = ETALASE FUNGSIONAL — bukti konsep berjalan, aman diperkenalkan tanpa takut crash/overload/tagihan. Skalabilitas sengaja DIBATASI KETAT (batasan = fitur pelindung free tier). Semua batasan = parameter transparan di /parameters (nilai ≤0 = unlimited) — pengembang berpendanaan yang fork tinggal membukanya TANPA ubah kode.
 
@@ -94,7 +102,8 @@ INFLASI/DEFLASI — TAMPILAN + OTONOM ✓ (2026-07, feat/inflation-trigger-log
 COMMUNITY LINKS ✓ (2026-07, feat/community-links): /help subsection
             "Komunitas / Diskusi" — link Discord & Telegram, mengikuti
             gaya link Ekosistem yang sudah ada.
-SEO FASE 1 — RUTE PUBLIK & METADATA ✓ (2026-07, feat/seo + feat/gsc-verify):
+SEO FASE 1 — RUTE PUBLIK & METADATA ✓ (2026-07, feat/seo + feat/gsc-verify
+            + feat/rebrand-inspira + docs/rebrand-consistency):
             src/lib/public-routes.ts (sumber tunggal): / dan /help kini
             publik — middleware TIDAK redirect ke /login, dan AuthProvider
             skip AuthLoader untuk rute ini agar HTML awal berisi konten
@@ -102,16 +111,23 @@ SEO FASE 1 — RUTE PUBLIK & METADATA ✓ (2026-07, feat/seo + feat/gsc-verify):
             (dashboard, admin, transaksi, dst.) tetap digerbangi login.
             Landing (/): intro statis SSR (satu H1) DI BAWAH slideshow
             hero lama, warna brand (headline #0f5c56, body #35433f, frasa
-            kunci hijau #1f7a72). Metadata TMEP di layout.tsx (global) +
-            per-halaman (/, /help): title/description/canonical/Open
-            Graph; metadataBase = domain Vercel produksi. OG image dinamis
-            via app/opengraph-image.tsx (logo bumi + Sri Yantra). Favicon
-            dari public/tmep-logo.svg. Logo TMEP juga tampil di
-            header/sidebar (menggantikan ikon daun lama). app/robots.ts +
-            app/sitemap.ts (daftar rute publik). Verifikasi Google Search
-            Console via metadata.verification.google (JANGAN dihapus).
+            kunci hijau #1f7a72). Metadata Inspira Better World di
+            layout.tsx (global) + per-halaman (/, /help): title/
+            description/canonical/Open Graph; metadataBase = domain
+            Vercel produksi. OG image dinamis via app/opengraph-image.tsx
+            (logo bumi + Sri Yantra, teks "Inspira Better World"). Favicon
+            dari public/tmep-logo.svg (nama file TETAP tmep-logo.svg —
+            hanya teks/branding yang berganti, bukan aset). Logo "Inspira"
+            juga tampil di header/sidebar (menggantikan ikon daun lama).
+            app/robots.ts + app/sitemap.ts (daftar rute publik).
+            Verifikasi Google Search Console via
+            metadata.verification.google (JANGAN dihapus).
             /help subsection Komunitas: Discord, Telegram, YouTube
-            (@ispirabetterworld8258).
+            (@inspirabetterworld). Dokumen repo publik (MANIFESTO.md,
+            TECHNICAL_MANIFESTO.md, CONTRIBUTING.md, docs/manifesto.md,
+            KONTEKS_*.md) juga direbranding — nol perubahan kode/logika/
+            format data (prefix TMEP-NODE-* di infrastructure.ts TIDAK
+            disentuh).
             CATATAN: menambah rute publik baru = ubah HANYA
             src/lib/public-routes.ts; JANGAN buka halaman fungsional/
             sensitif. Fase 2 (listing publik crawlable, mis. /explore,
@@ -448,6 +464,21 @@ PERKAYA DATA AI: proof_link, transaction_description, timestamp detail,
 
 BADGE BERTINGKAT (perak/emas berdasar total_kontribusi) — fondasi siap.
 
+MATA UANG SEBAGAI PARAMETER (feat/currency-param): konteks — outreach
+  internasional pasca-rebranding Inspira Better World. IDR di-hardcode
+  di ~15 salinan formatIDR tersebar di komponen. Rencana: pindahkan mata
+  uang ke community_config (mis. currency_code, currency_locale) + satu
+  util formatCurrency menggantikan seluruh salinan formatIDR — memudahkan
+  fork non-IDR tanpa ubah kode.
+
+FORK GUIDE (panduan node komunitas baru): dokumen langkah fork → setup
+  Firebase project baru → isi community_config (currency, harga_dasar,
+  batasan, dst.) → daftar ke registry federasi earth-nft-instances.
+  Prinsip desain: multi-tenant DALAM SATU node DITOLAK — satu node
+  Firebase = satu komunitas independen; skala horizontal dicapai lewat
+  banyak node terfederasi (sesuai filosofi Fibonacci/multi-node di
+  ROADMAP FASE JAUH), bukan multi-tenancy di dalam satu deployment.
+
 DARK MODE TOGGLE: opsi tema terang/gelap (perlu token warna konsisten).
 
 USER AKTIF LANJUTAN: pruning paksa TERGANTIKAN lapak on/off sukarela.
@@ -488,14 +519,18 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
 
 ---
 
-> Versi: 3.6 | feat/seo + feat/gsc-verify LIVE (2026-07). SEO Fase 1: rute
-> publik (/, /help) via src/lib/public-routes.ts (sumber tunggal),
-> AuthLoader di-skip untuk rute publik agar SSR penuh, intro statis di
-> landing, metadata/OG/canonical TMEP, app/robots.ts + app/sitemap.ts,
-> verifikasi Google Search Console, logo TMEP di header. Fase 2 (listing
-> publik crawlable) belum digarap.
-> Sebelumnya (3.5): feat/inflation-trigger-log + feat/inflation-auto +
-> feat/community-links — inflasi/deflasi lapisan tampilan (manual+otonom),
-> link Discord/Telegram di /help.
+> Versi: 3.7 | feat/rebrand-inspira + docs/rebrand-consistency LIVE (2026-07).
+> REBRANDING: nama publik "The Mother Earth Project (TMEP)" → "Inspira Better
+> World" (tabrakan nama dengan motherearthproject.org) — metadata, header/
+> logo, landing, /help, dan dokumen repo publik (MANIFESTO.md,
+> TECHNICAL_MANIFESTO.md, CONTRIBUTING.md, docs/manifesto.md, KONTEKS_*.md)
+> diperbarui. Nama teknis internal (repo, TMEP-NODE-*, koleksi Firestore)
+> TIDAK berubah. Roadmap baru: feat/currency-param (mata uang jadi parameter)
+> + panduan fork node komunitas.
+> Sebelumnya (3.6): feat/seo + feat/gsc-verify — rute publik (/, /help) via
+> src/lib/public-routes.ts (sumber tunggal), AuthLoader di-skip untuk rute
+> publik agar SSR penuh, intro statis di landing, metadata/OG/canonical,
+> app/robots.ts + app/sitemap.ts, verifikasi Google Search Console. Fase 2
+> (listing publik crawlable) belum digarap.
 > Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom;
 > SEO Fase 2 (listing publik crawlable).

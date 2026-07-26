@@ -1,11 +1,13 @@
-# The Mother Earth Project (TMEP)
+# Inspira Better World
 ### Sebuah infrastruktur komunitas untuk mengabadikan tindakan nyata
+
+> Sebelumnya dikenal sebagai The Mother Earth Project (TMEP).
 
 ---
 
 ## Apa ini?
 
-TMEP adalah platform terbuka yang memberi **nilai dan pengakuan permanen** kepada tindakan nyata di dunia — menanam pohon, membersihkan sungai, memberi makan hewan terlantar, membangun ruang hijau — melalui sistem sertifikasi berbasis komunitas.
+Inspira Better World adalah platform terbuka yang memberi **nilai dan pengakuan permanen** kepada tindakan nyata di dunia — menanam pohon, membersihkan sungai, memberi makan hewan terlantar, membangun ruang hijau — melalui sistem sertifikasi berbasis komunitas.
 
 Bukan donasi. Bukan investasi. Ini adalah **rekam jejak tindakan charity** yang hidup di dalam komunitas yang menghargainya.
 
@@ -23,7 +25,7 @@ Tidak ada infrastruktur yang:
 - Mengalirkan sumber daya ke project yang relevan secara organik
 - Berjalan tanpa otoritas pusat yang memegang dana
 
-TMEP dibangun untuk mengisi celah ini.
+Inspira Better World dibangun untuk mengisi celah ini.
 
 ---
 
@@ -31,7 +33,7 @@ TMEP dibangun untuk mengisi celah ini.
 
 ### 1. Siapapun bisa membuat NFT charity
 
-Developer (sebutan untuk pembuat project di TMEP) mendaftarkan tindakan nyata mereka dalam bentuk NFT — dilengkapi bukti, tautan dokumentasi, dan nilai minimum project. NFT ini bukan sekadar gambar digital; ini adalah **sertifikat tindakan** yang bisa diverifikasi komunitasnya.
+Developer (sebutan untuk pembuat project di Inspira Better World) mendaftarkan tindakan nyata mereka dalam bentuk NFT — dilengkapi bukti, tautan dokumentasi, dan nilai minimum project. NFT ini bukan sekadar gambar digital; ini adalah **sertifikat tindakan** yang bisa diverifikasi komunitasnya.
 
 ### 2. Komunitas yang menentukan nilainya
 
@@ -48,9 +50,9 @@ Sistem mengatur dirinya sendiri.
 
 ---
 
-## Apa yang membuat TMEP berbeda?
+## Apa yang membuat Inspira Better World berbeda?
 
-| Sistem lain | TMEP |
+| Sistem lain | Inspira Better World |
 |---|---|
 | Nilai dari spekulasi pasar | Nilai dari tindakan nyata yang terverifikasi |
 | Ada pihak yang memegang dana | Hanya pool dan neraca — tidak ada otoritas |
@@ -62,9 +64,9 @@ Sistem mengatur dirinya sendiri.
 
 ## Konsep antrian likuiditas — jujur tentang apa yang dijanjikan
 
-TMEP tidak menjanjikan bahwa NFT yang sudah dibeli bisa dijual kembali dengan nilai yang sama. Yang dijanjikan adalah **antrian niat komunitas** — selama komunitas ini hidup dan berkembang, ada mekanisme yang memberi kesempatan kepada pemegang NFT untuk menukarkannya kembali.
+Inspira Better World tidak menjanjikan bahwa NFT yang sudah dibeli bisa dijual kembali dengan nilai yang sama. Yang dijanjikan adalah **antrian niat komunitas** — selama komunitas ini hidup dan berkembang, ada mekanisme yang memberi kesempatan kepada pemegang NFT untuk menukarkannya kembali.
 
-Ini disengaja. Meminta kembali apa yang sudah diberikan memang hal yang janggal secara filosofis — tapi TMEP menerimanya dengan jujur dan memberi jalan keluar yang transparan.
+Ini disengaja. Meminta kembali apa yang sudah diberikan memang hal yang janggal secara filosofis — tapi Inspira Better World menerimanya dengan jujur dan memberi jalan keluar yang transparan.
 
 Nilai sesungguhnya bukan pada harga jualnya. Nilai sesungguhnya adalah **rekam jejak permanen bahwa seseorang pernah melakukan sesuatu yang nyata**.
 
@@ -84,16 +86,21 @@ Pada titik itu, siapapun di dunia bisa mendaftarkan tindakan charitynya, menceta
 
 ## Ini proyek terbuka
 
-TMEP adalah open source. Kode, manifesto, dan dokumentasinya tersedia untuk siapapun yang ingin memahami, berkontribusi, atau melanjutkan visi ini.
+Inspira Better World adalah open source. Kode, manifesto, dan dokumentasinya tersedia untuk siapapun yang ingin memahami, berkontribusi, atau melanjutkan visi ini.
 
 Jika Anda adalah developer, peneliti, aktivis lingkungan, atau siapapun yang percaya bahwa tindakan nyata layak mendapat pengakuan yang setara — **Anda diundang untuk ikut membangun ini**.
+
+Bergabung dan berdiskusi bersama komunitas:
+- Discord: https://discord.gg/CHd7TKCMTq
+- Telegram: https://t.me/+a2fePe09QPI2Yjc1
+- YouTube: https://www.youtube.com/@inspirabetterworld
 
 ---
 
 *"Seseorang mungkin memiliki foto dan history di media sosial, tapi ketika yang disimpan adalah nilai charity — itu berbeda. Dana akan sangat mudah mengalir ke project yang relevan dan viral, dan pembangunan charity akan berjalan masif karena tidak ada batasan sumber daya yang mengalir."*
 
-— Founder, TMEP
+— Founder, Inspira Better World
 
 ---
 
-> GitHub: [github.com/TMEP] • Status: Open Source • Fase: Pengembangan logika dasar
+> GitHub: [Inspira Better World] • Status: Open Source • Fase: Pengembangan logika dasar

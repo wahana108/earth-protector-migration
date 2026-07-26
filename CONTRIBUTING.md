@@ -1,6 +1,8 @@
-# Contributing to The Mother Earth Project (TMEP)
+# Contributing to Inspira Better World
 
 Terima kasih telah tertarik untuk berkontribusi pada masa depan ekonomi kebaikan! Kami sangat menghargai bantuan Anda, baik berupa perbaikan bug, penambahan fitur, maupun penyempurnaan dokumentasi.
+
+Diskusi dan tanya jawab kontributor: [Discord](https://discord.gg/CHd7TKCMTq) · [Telegram](https://t.me/+a2fePe09QPI2Yjc1)
 
 ## Cara Berkontribusi
 
@@ -23,7 +25,7 @@ Kami sangat terbuka dengan inovasi pada protokol IIP:
 - Kirimkan PR dengan penjelasan singkat tentang apa yang Anda ubah.
 
 ## Standar Komunikasi
-TMEP adalah komunitas yang inklusif dan saling menghargai. Mari berkomunikasi dengan sopan dan fokus pada solusi bagi Bumi.
+Inspira Better World adalah komunitas yang inklusif dan saling menghargai. Mari berkomunikasi dengan sopan dan fokus pada solusi bagi Bumi.
 
 ---
 *Bersama kita abadikan setiap tindakan kebaikan.*

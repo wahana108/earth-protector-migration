@@ -1,4 +1,4 @@
-# KONTEKS_FIREBASE_TERKINI.md — The Mother Earth Protocol
+# KONTEKS_FIREBASE_TERKINI.md — Inspira Better World
 
 > Dibuat: 2026-05-27 | Update terakhir: 2026-05-27
 > Migrasi fase 1-3 selesai + semua bug B1-B5 diselesaikan.
@@ -339,5 +339,5 @@ Tidak ada filter yang saling menghalangi. Tidak ada bug.
 
 ---
 
-*TMEP — The Mother Earth Protocol | Status: 2026-05-27*
+*Inspira Better World | Status: 2026-05-27*
 *Stack: Next.js 15 + Firebase Auth + Firestore + Genkit (AI belum aktif)*
