@@ -132,6 +132,43 @@ SEO FASE 1 — RUTE PUBLIK & METADATA ✓ (2026-07, feat/seo + feat/gsc-verify
             src/lib/public-routes.ts; JANGAN buka halaman fungsional/
             sensitif. Fase 2 (listing publik crawlable, mis. /explore,
             /projects) BELUM dikerjakan.
+MATA UANG SEBAGAI PARAMETER ✓ (2026-07, feat/currency-param):
+            CommunityConfig.currency_code/currency_locale/currency_decimals
+            (default 'IDR'/'id-ID'/0, undefined-safe — user/config lama
+            tanpa field = fallback IDR otomatis, pola sama seperti
+            lapak_aktif). src/lib/format-currency.ts: formatCurrency(n,
+            config) SATU util menggantikan 16 salinan formatIDR + formatRupiah
+            + seluruh inline Intl.NumberFormat/toLocaleString di app (termasuk
+            HargaEfektifInfo, ContributorBadge, admin, pesan error
+            createProject). Currency di-thread sebagai prop lewat tiap
+            subkomponen — nol read tambahan kecuali transactions/page.tsx
+            (+1 read, dulu tak fetch config sama sekali). create/page.tsx:
+            step="100000"/"1000" → step="any" (fix bug asumsi skala IDR
+            di form nilai project/harga jual). buildInflationPrompt terima
+            currencyLabel (default 'Rupiah Indonesia', backward-compatible).
+            /parameters: card baru "Mata Uang" (edit + read-only). SENGAJA
+            DIKECUALIKAN (kosmetik, admin-only, jarang terpicu): locale
+            TANGGAL (toLocaleDateString tetap id-ID di seluruh app, scope
+            terpisah dari currency_locale) dan infrastructure.ts
+            (checkSaldoTersediaTx, migrateOldSisaKeSaldoTersedia — tetap
+            format IDR, signature TIDAK diubah). Nol perubahan logika neraca
+            (ai-review*, inflation-server.ts, firestore.rules tidak disentuh).
+FORK GUIDE ✓ (2026-07, docs/fork-guide): FORK_GUIDE.md di root repo —
+            panduan lengkap fork → Firebase project baru (Firestore + Auth
+            email/password & Google + email verification) → .env (tabel
+            tiap variabel) → deploy firestore.rules+indexes → deploy Vercel
+            + GitHub Secrets 3 cron → konfigurasi community_config via
+            /parameters (TEKANKAN currency_code/locale/decimals + harga_dasar/
+            batas_atas dalam mata uang sendiri) → daftar ke registry
+            earth-nft-instances (format instances.json dari
+            src/app/instances/page.tsx). Ditautkan dari README.md,
+            CONTRIBUTING.md, dan /help subsection Ekosistem. Known
+            limitations didokumentasikan sadar (UI Bahasa Indonesia, locale
+            tanggal id-ID, infrastructure.ts format IDR — lihat bagian di
+            atas). Prinsip desain: multi-tenant DALAM SATU node DITOLAK —
+            satu node Firebase = satu komunitas independen; skala horizontal
+            via banyak node terfederasi (filosofi Fibonacci/multi-node di
+            ROADMAP FASE JAUH), bukan multi-tenancy dalam satu deployment.
 ```
 
 ---
@@ -464,21 +501,6 @@ PERKAYA DATA AI: proof_link, transaction_description, timestamp detail,
 
 BADGE BERTINGKAT (perak/emas berdasar total_kontribusi) — fondasi siap.
 
-MATA UANG SEBAGAI PARAMETER (feat/currency-param): konteks — outreach
-  internasional pasca-rebranding Inspira Better World. IDR di-hardcode
-  di ~15 salinan formatIDR tersebar di komponen. Rencana: pindahkan mata
-  uang ke community_config (mis. currency_code, currency_locale) + satu
-  util formatCurrency menggantikan seluruh salinan formatIDR — memudahkan
-  fork non-IDR tanpa ubah kode.
-
-FORK GUIDE (panduan node komunitas baru): dokumen langkah fork → setup
-  Firebase project baru → isi community_config (currency, harga_dasar,
-  batasan, dst.) → daftar ke registry federasi earth-nft-instances.
-  Prinsip desain: multi-tenant DALAM SATU node DITOLAK — satu node
-  Firebase = satu komunitas independen; skala horizontal dicapai lewat
-  banyak node terfederasi (sesuai filosofi Fibonacci/multi-node di
-  ROADMAP FASE JAUH), bukan multi-tenancy di dalam satu deployment.
-
 DARK MODE TOGGLE: opsi tema terang/gelap (perlu token warna konsisten).
 
 USER AKTIF LANJUTAN: pruning paksa TERGANTIKAN lapak on/off sukarela.
@@ -519,18 +541,18 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
 
 ---
 
-> Versi: 3.7 | feat/rebrand-inspira + docs/rebrand-consistency LIVE (2026-07).
-> REBRANDING: nama publik "The Mother Earth Project (TMEP)" → "Inspira Better
-> World" (tabrakan nama dengan motherearthproject.org) — metadata, header/
-> logo, landing, /help, dan dokumen repo publik (MANIFESTO.md,
-> TECHNICAL_MANIFESTO.md, CONTRIBUTING.md, docs/manifesto.md, KONTEKS_*.md)
-> diperbarui. Nama teknis internal (repo, TMEP-NODE-*, koleksi Firestore)
-> TIDAK berubah. Roadmap baru: feat/currency-param (mata uang jadi parameter)
-> + panduan fork node komunitas.
-> Sebelumnya (3.6): feat/seo + feat/gsc-verify — rute publik (/, /help) via
-> src/lib/public-routes.ts (sumber tunggal), AuthLoader di-skip untuk rute
-> publik agar SSR penuh, intro statis di landing, metadata/OG/canonical,
-> app/robots.ts + app/sitemap.ts, verifikasi Google Search Console. Fase 2
-> (listing publik crawlable) belum digarap.
+> Versi: 3.8 | feat/currency-param + docs/fork-guide LIVE (2026-07).
+> MATA UANG PARAMETER: CommunityConfig.currency_code/currency_locale/
+> currency_decimals (default IDR/id-ID/0) + util formatCurrency
+> menggantikan seluruh format IDR hardcode di app — fork non-IDR (mis.
+> USD) tinggal ganti 3 field di /parameters, TANPA ubah kode. Dikecualikan
+> sadar: locale tanggal (tetap id-ID) dan infrastructure.ts (2 fungsi,
+> format IDR kosmetik). FORK GUIDE: FORK_GUIDE.md — panduan lengkap
+> mendirikan node komunitas baru (Firebase → Vercel → community_config →
+> registry earth-nft-instances), ditautkan dari README/CONTRIBUTING/help.
+> Sebelumnya (3.7): feat/rebrand-inspira + docs/rebrand-consistency —
+> rebranding nama publik "The Mother Earth Project (TMEP)" → "Inspira
+> Better World" (tabrakan nama dengan motherearthproject.org); nama
+> teknis internal (repo, TMEP-NODE-*, koleksi Firestore) TIDAK berubah.
 > Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom;
 > SEO Fase 2 (listing publik crawlable).
