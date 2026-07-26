@@ -45,8 +45,8 @@ export function effectiveInflationHistory(
 // ─── Prompt baku manual-bridge (pola sama dengan buildAiReviewPrompt) ───────
 // Dipakai ulang oleh versi otonom kelak — tahun disuntik dinamis, tidak ada
 // data developer yang diekspor (inflasi bukan penilaian per-developer).
-export function buildInflationPrompt(tahun: number): string {
-  return `Kamu adalah asisten data ekonomi untuk platform komunitas NFT nirlaba. Beri estimasi inflasi tahunan Rupiah Indonesia untuk tahun ${tahun}. Ini bukan keputusan final — hanya estimasi transparan yang ditinjau administrator.
+export function buildInflationPrompt(tahun: number, currencyLabel = 'Rupiah Indonesia'): string {
+  return `Kamu adalah asisten data ekonomi untuk platform komunitas NFT nirlaba. Beri estimasi inflasi tahunan ${currencyLabel} untuk tahun ${tahun}. Ini bukan keputusan final — hanya estimasi transparan yang ditinjau administrator.
 INSTRUKSI:
 - Berikan satu bilangan bulat persen (boleh negatif = deflasi).
 - Gunakan data resmi terbaru (mis. BPS) bila ada; jika tahun berjalan belum lengkap, beri estimasi terbaik + sebutkan dasarnya.

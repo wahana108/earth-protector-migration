@@ -59,7 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── 7. Call Gemini (fallback chain) ────────────────────────────────────────
-  const prompt = buildInflationPrompt(tahunTarget);
+  const prompt = buildInflationPrompt(tahunTarget, config.currency_code ?? 'Rupiah Indonesia');
 
   // gemini-3-flash tidak ada di @genkit-ai/google-genai@1.20.0 → tidak disertakan
   const MODEL_CANDIDATES = [...new Set([
