@@ -163,6 +163,9 @@ export type CommunityConfig = {
   inflation_enabled: boolean;
   inflation_auto_enabled: boolean;
   inflation_history?: Array<{ tahun: number; pct: number }>;
+  currency_code?: string;
+  currency_locale?: string;
+  currency_decimals?: number;
   updated_at: Date;
   updated_by: string;
 };

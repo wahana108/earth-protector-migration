@@ -47,6 +47,9 @@ export const DEFAULT_COMMUNITY_CONFIG: Omit<CommunityConfig, 'updated_at' | 'upd
   inflation_enabled: true,
   inflation_auto_enabled: false,
   inflation_history: [],
+  currency_code: 'IDR',
+  currency_locale: 'id-ID',
+  currency_decimals: 0,
 };
 
 export async function getCommunityConfig(): Promise<CommunityConfig | null> {
