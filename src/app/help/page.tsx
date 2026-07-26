@@ -14,6 +14,7 @@ import { SITE_URL } from '@/lib/site-config';
 
 const GITHUB_PLATFORM = 'https://github.com/wahana108/earth-protector-migration';
 const GITHUB_INSTANCES = 'https://github.com/wahana108/earth-nft-instances';
+const FORK_GUIDE_URL = `${GITHUB_PLATFORM}/blob/main/FORK_GUIDE.md`;
 const DISCORD_URL = 'https://discord.gg/CHd7TKCMTq';
 const TELEGRAM_URL = 'https://t.me/+a2fePe09QPI2Yjc1';
 const YOUTUBE_URL = 'https://www.youtube.com/@inspirabetterworld';
@@ -391,6 +392,17 @@ export default function HelpPage() {
                     className="text-primary hover:underline inline-flex items-center gap-1"
                   >
                     earth-nft-instances — Community Registry
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={FORK_GUIDE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Dirikan komunitas Anda sendiri → Fork Guide
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </li>

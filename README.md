@@ -71,6 +71,13 @@ Platform mendukung review anomali developer otomatis menggunakan Gemini API, tan
 
 Workflow `.github/workflows/monthly-ai-review.yml` akan aktif otomatis setelah fork. Gunakan tombol *Run workflow* di GitHub Actions tab untuk test manual pertama kali.
 
+## 🌱 Dirikan Komunitas Anda Sendiri
+
+Ingin menjalankan node "Inspira Better World" independen dengan mata
+uang dan admin Anda sendiri (bukan berkontribusi ke repo ini)? Baca
+[Fork Guide](FORK_GUIDE.md) — panduan lengkap fork → Firebase → Vercel
+→ konfigurasi → daftar ke registry komunitas.
+
 ## 🤝 Kontribusi
 Kami menyambut kontribusi dari para pecinta lingkungan dan pengembang! Silakan baca [Panduan Kontribusi](CONTRIBUTING.md) dan [Kode Etik](CODE_OF_CONDUCT.md) kami untuk memulai.
 

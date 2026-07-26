@@ -4,6 +4,10 @@ Terima kasih telah tertarik untuk berkontribusi pada masa depan ekonomi kebaikan
 
 Diskusi dan tanya jawab kontributor: [Discord](https://discord.gg/CHd7TKCMTq) · [Telegram](https://t.me/+a2fePe09QPI2Yjc1)
 
+> Ingin mendirikan komunitas independen Anda sendiri (bukan
+> berkontribusi ke repo ini)? Itu bukan "kontribusi" dalam arti PR —
+> baca [Fork Guide](FORK_GUIDE.md) untuk panduan lengkapnya.
+
 ## Cara Berkontribusi
 
 ### 1. Melaporkan Bug
