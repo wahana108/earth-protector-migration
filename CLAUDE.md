@@ -169,6 +169,35 @@ FORK GUIDE ✓ (2026-07, docs/fork-guide): FORK_GUIDE.md di root repo —
             satu node Firebase = satu komunitas independen; skala horizontal
             via banyak node terfederasi (filosofi Fibonacci/multi-node di
             ROADMAP FASE JAUH), bukan multi-tenancy dalam satu deployment.
+ANTI-SPAM REPORTS ✓ (2026-08, feat/anti-spam-reports): rate limit harian
+            baru — field reports & claims di DailyUsage/rate-limit.ts,
+            parameter max_reports_per_user_per_day (3), max_reports_
+            global_per_day (50), max_claims_per_user_per_day (2), semua
+            diatur dari /parameters card "Batas Harian" (0 = unlimited).
+            Disisipkan di reportPurchase, disputeBuybackRequest,
+            reportComment, submitReport, submitInfrastructureClaim.
+            DEDUP laporan transaksi PERMANEN via doc ID deterministik
+            ${reporterId}_${transactionId} + rules reports hanya allow
+            create (bukan update) → laporan kedua otomatis ditolak
+            server-side. Rules reports kini hasOnly + userId ==
+            auth.uid + status=='pending' + cek awalan ID pada create DAN
+            read (cegah serobot slot dedup orang lain); read non-admin
+            hanya get() milik sendiri, list tetap admin-only. Koleksi
+            reports yang sebelumnya YATIM (tak pernah dibaca siapa pun)
+            kini punya admin consumer di /admin/reports: section "Laporan
+            Transaksi" + "Paling Sering Dilaporkan" (agregasi in-memory
+            pelapor UNIK aktif dari purchase_disputes + reports; snapshot
+            reporter_lapak_aktif ditulis saat laporan dibuat — BUKAN
+            counter di dokumen user, demi keamanan rules increment).
+            limit(50) ditambahkan ke loadSuspendedUsers, loadDisputes,
+            getPendingInfrastructureClaims, getPendingBlocks,
+            fetchFlaggedComments. isBlocked + isSuspended kini dicek di
+            semua titik report. HOTFIX TERPISAH fix/home-public-query
+            (regresi feat/seo, ditemukan & diperbaiki di tengah proses):
+            halaman depan publik (/) menjalankan query users (butuh
+            auth) untuk pengunjung anonim → popup unhandled rejection;
+            kini query di-guard useAuth() + try/catch sungguhan (bukan
+            cuma finally).
 ```
 
 ---
@@ -453,6 +482,28 @@ DEPRECATED: sertifikat NFT pool (double-debit; @deprecated, UI hidden).
   sebelum developer bilang "implementasikan" — sekalipun yakin.
   Investigasi read-only (grep/read/cat) boleh otomatis; gerbang ada
   tepat sebelum perubahan kode.
+- BATCH FIRESTORE = SEMUA-ATAU-TIDAK: satu operasi dalam batch melanggar
+  rules → SELURUH batch permission-denied, termasuk operasi lain yang
+  sendirian valid. Insiden nyata: counter global baru (daily_stats.reports)
+  ditulis dalam batch yang sama dengan dokumen laporan valid, tapi
+  hasOnly() daily_stats belum memuat field itu → SEMUA laporan pertama
+  gagal. Setiap counter/field baru yang ditulis dalam batch WAJIB dicek
+  masuk allowlist rules SEMUA dokumen yang disentuh batch itu, bukan
+  cuma dokumen utamanya.
+- JANGAN samakan semua permission-denied dengan "sudah pernah"/duplikat —
+  cek keberadaan dokumen dulu (getDoc) sebelum menyimpulkan, dan bedakan
+  pesan error per penyebab. Permission-denied bisa berarti banyak hal
+  (rules field belum diizinkan, dsb) — pesan yang salah menyamarkan bug
+  rules sungguhan sebagai "perilaku normal".
+- RUTE PUBLIK (public-routes.ts) WAJIB diaudit query Firestore-nya SETIAP
+  kali ditambah: pengunjung belum login tidak punya request.auth, jadi
+  query yang butuh isAuth() (mis. list users) akan permission-denied.
+  Insiden nyata (fix/home-public-query, regresi feat/seo): halaman depan
+  jalankan query users tanpa guard → unhandled rejection untuk pengunjung
+  anonim & Googlebot. Pola aman: guard query yang butuh auth dengan
+  useAuth() (skip/substitusi untuk anon), dan bungkus efek data-fetching
+  halaman publik dengan try/catch sungguhan (bukan cuma finally) supaya
+  kegagalan apa pun turun jadi state kosong/parsial, tidak pernah crash.
 ```
 
 ---
@@ -510,6 +561,31 @@ AKUN UNVERIFIED LAMA (dari sebelum verified-signup): 5 akun tester
   (luki_gama, jono, agus108, gogreen2371, onooppo011) — putuskan manual
   via /admin (suspend) atau Firebase Console. Tidak dihapus otomatis.
 
+VERSI PUBLIK "PALING SERING DILAPORKAN": saat ini admin-only di
+  /admin/reports. Tampilkan bersanding /top-developers dengan gate
+  min_unique_reporters_public + konteks rasio (pelapor unik vs volume
+  transaksi) — sensitif secara sosial, ditunda sengaja dari
+  feat/anti-spam-reports.
+
+KONSOLIDASI reports & purchase_disputes: dua jalur lapor transaksi
+  dengan skema data berbeda (reports dari /transactions, purchase_disputes
+  dari reportPurchase/disputeBuybackRequest) dan admin consumer terpisah.
+  Butuh migrasi data + keputusan skema tunggal sebelum digabung.
+
+CURSOR PAGINATION (startAfter) DI ADMIN: limit() yang ditambahkan
+  feat/anti-spam-reports (loadDisputes, loadSuspendedUsers, dst.) TANPA
+  orderBy di beberapa tempat (fetchFlaggedComments, getPendingBlocks) —
+  jadi membatasi BIAYA read worst-case, BUKAN menjamin N-terbaru. Cursor
+  sungguhan belum ada presedennya di codebase ini.
+
+PENGETATAN RULES purchase_disputes: masih `allow create: if isAuth();`
+  tanpa hasOnly() (beda dengan reports yang sudah dikeraskan) — sengaja
+  ditunda saat feat/anti-spam-reports supaya scope tidak melebar.
+
+COOLDOWN ANTAR-REPORT: manfaat marginal di atas kombinasi rate limit +
+  dedup permanen yang sudah ada (feat/anti-spam-reports) — kandidat
+  ditambahkan hanya jika terbukti perlu.
+
 KNOWN ISSUES (terdokumentasi sadar):
 - Gemini key BARU tanpa free tier → pakai key lama/billing; fallback
   chain + GEMINI_MODEL env = mitigasi lineup model berubah.
@@ -541,18 +617,26 @@ FASE JAUH: multi-node federation aktif, snapshot/backup GitHub,
 
 ---
 
-> Versi: 3.8 | feat/currency-param + docs/fork-guide LIVE (2026-07).
-> MATA UANG PARAMETER: CommunityConfig.currency_code/currency_locale/
-> currency_decimals (default IDR/id-ID/0) + util formatCurrency
-> menggantikan seluruh format IDR hardcode di app — fork non-IDR (mis.
-> USD) tinggal ganti 3 field di /parameters, TANPA ubah kode. Dikecualikan
-> sadar: locale tanggal (tetap id-ID) dan infrastructure.ts (2 fungsi,
-> format IDR kosmetik). FORK GUIDE: FORK_GUIDE.md — panduan lengkap
-> mendirikan node komunitas baru (Firebase → Vercel → community_config →
-> registry earth-nft-instances), ditautkan dari README/CONTRIBUTING/help.
-> Sebelumnya (3.7): feat/rebrand-inspira + docs/rebrand-consistency —
-> rebranding nama publik "The Mother Earth Project (TMEP)" → "Inspira
-> Better World" (tabrakan nama dengan motherearthproject.org); nama
-> teknis internal (repo, TMEP-NODE-*, koleksi Firestore) TIDAK berubah.
+> Versi: 3.9 | feat/anti-spam-reports + fix/home-public-query LIVE (2026-08).
+> ANTI-SPAM REPORTS: rate limit harian baru (reports/claims di
+> DailyUsage/rate-limit.ts, parameter max_reports_per_user_per_day (3)/
+> max_reports_global_per_day (50)/max_claims_per_user_per_day (2) —
+> diatur dari /parameters, 0 = unlimited). Dedup laporan transaksi
+> PERMANEN via ID deterministik ${reporterId}_${transactionId} + rules
+> reports diperketat (hasOnly, cek awalan ID di create DAN read) —
+> laporan kedua otomatis ditolak server-side. Koleksi reports (sebelumnya
+> YATIM, tak pernah dibaca) kini punya admin consumer di /admin/reports:
+> "Laporan Transaksi" + "Paling Sering Dilaporkan" (agregasi pelapor unik
+> aktif, snapshot reporter_lapak_aktif — bukan counter di dokumen user).
+> limit(50) ditambahkan ke lima query admin yang sebelumnya tanpa batas.
+> HOTFIX TERPISAH fix/home-public-query (regresi feat/seo): halaman
+> depan publik menjalankan query users (butuh auth) untuk pengunjung
+> anonim → unhandled rejection; kini di-guard useAuth() + try/catch
+> sungguhan.
+> Sebelumnya (3.8): feat/currency-param + docs/fork-guide —
+> CommunityConfig.currency_code/currency_locale/currency_decimals + util
+> formatCurrency menggantikan format IDR hardcode di app; FORK_GUIDE.md
+> panduan lengkap mendirikan node komunitas baru.
 > Menuju: sanggahan otonom, verifikasi klaim AI, moderasi user otonom;
-> SEO Fase 2 (listing publik crawlable).
+> SEO Fase 2 (listing publik crawlable); versi publik "paling sering
+> dilaporkan" di /top-developers; konsolidasi reports+purchase_disputes.
