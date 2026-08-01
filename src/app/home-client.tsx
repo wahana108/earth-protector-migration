@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { getPlaceholder } from '@/lib/category-placeholders';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
 import { getCommunityConfig } from '@/lib/community-config';
 import { KATEGORI_LABELS, type ProjectCategory } from '@/lib/types';
 import { HargaEfektifInfo } from '@/components/harga-efektif';
@@ -39,7 +40,10 @@ type RecentProject = {
 
 type CommunityStats = {
   totalProjects: number;
-  totalTopDeveloper: number;
+  // undefined untuk pengunjung anonim — query users where('level','==','top_developer')
+  // butuh auth (firestore.rules users: allow read: if isAuth()), jadi tile ini
+  // disembunyikan (bukan tampil "0" yang menyesatkan) sampai user login.
+  totalTopDeveloper: number | undefined;
   nftDiPool: number;
 };
 
@@ -58,6 +62,7 @@ const categories = [
 ];
 
 export function HomeClient() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<CommunityStats | null>(null);
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,9 +85,15 @@ export function HomeClient() {
   useEffect(() => {
     async function load() {
       try {
+        // Halaman ini publik (lihat public-routes.ts) — pengunjung belum login TIDAK
+        // punya izin query 'users' (firestore.rules: allow read if isAuth()), jadi
+        // query top_developer hanya dijalankan bila sudah login. Ketiga sumber data
+        // lain (projects, pool_rekomendasi, community_config) memang publik.
         const [projectsSnap, topDevSnap, poolSnap, cfg] = await Promise.all([
           getDocs(collection(db, 'projects')),
-          getDocs(query(collection(db, 'users'), where('level', '==', 'top_developer'))),
+          user
+            ? getDocs(query(collection(db, 'users'), where('level', '==', 'top_developer')))
+            : Promise.resolve(null),
           getDoc(doc(db, 'pool_rekomendasi', 'v1')),
           getCommunityConfig(),
         ]);
@@ -91,7 +102,7 @@ export function HomeClient() {
 
         setStats({
           totalProjects: projectsSnap.size,
-          totalTopDeveloper: topDevSnap.size,
+          totalTopDeveloper: topDevSnap ? topDevSnap.size : undefined,
           nftDiPool: poolSnap.exists() ? ((poolSnap.data().jumlah_nft_valid as number) ?? 0) : 0,
         });
 
@@ -110,12 +121,16 @@ export function HomeClient() {
             created_at: (data.created_at as Timestamp)?.toDate?.() ?? new Date(),
           };
         }));
+      } catch (err) {
+        // Halaman publik — kegagalan apa pun turun jadi state kosong/parsial,
+        // JANGAN pernah unhandled rejection (dilihat Googlebot & pengunjung anonim).
+        console.error('HomeClient: gagal memuat data halaman depan', err);
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, []);
+  }, [user]);
 
   return (
     <>
@@ -160,11 +175,11 @@ export function HomeClient() {
       <section>
         <h2 className="text-2xl font-headline font-semibold mb-6">Komunitas Inspira</h2>
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
+          <div className={user ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-4'}>
+            {(user ? [1, 2, 3] : [1, 2]).map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
         ) : stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={stats.totalTopDeveloper !== undefined ? 'grid grid-cols-1 sm:grid-cols-3 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 gap-4'}>
             <Card className="bg-primary/5 border-primary/20">
               <CardContent className="p-6 flex items-center gap-4">
                 <FolderOpen className="h-8 w-8 text-primary shrink-0" />
@@ -174,15 +189,17 @@ export function HomeClient() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-primary/5 border-primary/20">
-              <CardContent className="p-6 flex items-center gap-4">
-                <Users className="h-8 w-8 text-primary shrink-0" />
-                <div>
-                  <p className="text-3xl font-bold">{stats.totalTopDeveloper}</p>
-                  <p className="text-sm text-muted-foreground">Top Developer</p>
-                </div>
-              </CardContent>
-            </Card>
+            {stats.totalTopDeveloper !== undefined && (
+              <Card className="bg-primary/5 border-primary/20">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <Users className="h-8 w-8 text-primary shrink-0" />
+                  <div>
+                    <p className="text-3xl font-bold">{stats.totalTopDeveloper}</p>
+                    <p className="text-sm text-muted-foreground">Top Developer</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card className="bg-primary/5 border-primary/20">
               <CardContent className="p-6 flex items-center gap-4">
                 <Layers className="h-8 w-8 text-primary shrink-0" />
