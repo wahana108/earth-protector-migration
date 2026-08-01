@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  collectionGroup, query, orderBy, limit, getDocs,
-  addDoc, collection, Timestamp,
+  collectionGroup, query, orderBy, limit, getDocs, Timestamp,
 } from 'firebase/firestore';
 import { ArrowLeftRight, Flag, Search } from 'lucide-react';
 
@@ -23,6 +22,8 @@ import { cn } from '@/lib/utils';
 import type { NeracaLog } from '@/lib/types';
 import { getCommunityConfig } from '@/lib/community-config';
 import { formatCurrency, type CurrencyConfig } from '@/lib/format-currency';
+import { submitReport, ReportError } from '@/lib/firestore';
+import { RateLimitError } from '@/lib/rate-limit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,21 +92,21 @@ function ReportDialog({
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleSubmit() {
     if (!reason.trim()) return;
     setLoading(true);
+    setError('');
     try {
-      await addDoc(collection(db, 'reports'), {
-        transactionId: entry.id,
-        nft_unit_id: entry.nft_unit_id,
-        reported_user_id: entry.userId,
-        userId: reporterId,
-        reason: reason.trim(),
-        status: 'pending',
-        createdAt: Timestamp.now(),
-      });
+      await submitReport(reporterId, entry.id, entry.nft_unit_id, entry.userId, reason.trim());
       setDone(true);
+    } catch (err: unknown) {
+      setError(
+        err instanceof RateLimitError || err instanceof ReportError
+          ? err.message
+          : 'Gagal mengirim laporan. Coba lagi.',
+      );
     } finally {
       setLoading(false);
     }
@@ -138,6 +139,11 @@ function ReportDialog({
                 onChange={(e) => setReason(e.target.value)}
               />
             </div>
+            {error && (
+              <p className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
+                {error}
+              </p>
+            )}
           </div>
         )}
         <DialogFooter>

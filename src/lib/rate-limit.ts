@@ -18,6 +18,8 @@ type DailyUsage = {
   transactions: number;
   projects: number;
   comments: number;
+  reports: number;
+  claims: number;
 };
 
 type UsageField = keyof Omit<DailyUsage, 'date'>;
@@ -41,14 +43,16 @@ export function checkAndIncrementUserUsage(
   const raw = userData.daily_usage as Partial<DailyUsage> | undefined;
   const usage: DailyUsage =
     !raw || raw.date !== today
-      ? { date: today, transactions: 0, projects: 0, comments: 0 }
-      : { transactions: 0, projects: 0, comments: 0, ...raw, date: today };
+      ? { date: today, transactions: 0, projects: 0, comments: 0, reports: 0, claims: 0 }
+      : { transactions: 0, projects: 0, comments: 0, reports: 0, claims: 0, ...raw, date: today };
 
   if (usage[field] >= limit) {
     const label: Record<UsageField, string> = {
       transactions: 'transaksi',
       projects: 'project',
       comments: 'komentar',
+      reports: 'laporan',
+      claims: 'klaim',
     };
     throw new RateLimitError(
       `Batas ${label[field]} harian tercapai (${limit}/hari). Coba lagi besok.`,
@@ -67,7 +71,7 @@ export function checkAndIncrementUserUsage(
 // sebagai proteksi kasar; full runTransaction akan menambah kompleksitas signifikan
 // untuk manfaat yang tidak sebanding pada use case ini.
 export async function checkGlobalDailyLimit(
-  field: 'projects' | 'comments',
+  field: 'projects' | 'comments' | 'reports',
   limit: number,
 ): Promise<void> {
   if (limit <= 0) return;
@@ -76,7 +80,7 @@ export async function checkGlobalDailyLimit(
   const current = snap.exists() ? ((snap.data()[field] as number) ?? 0) : 0;
 
   if (current >= limit) {
-    const label = field === 'projects' ? 'project komunitas' : 'komentar komunitas';
+    const label = field === 'projects' ? 'project komunitas' : field === 'comments' ? 'komentar komunitas' : 'laporan komunitas';
     throw new RateLimitError(
       `Batas ${label} harian tercapai. Ini melindungi kapasitas node. Coba lagi besok.`,
     );

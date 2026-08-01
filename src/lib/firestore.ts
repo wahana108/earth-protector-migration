@@ -17,6 +17,10 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { NFT, User, NFTCategory, TopDeveloper, BuybackRequest, Transaction, Report } from './types';
+import { getCommunityConfig } from './community-config';
+import { checkAndIncrementUserUsage, checkGlobalDailyLimit, getTodayString } from './rate-limit';
+import { isBlocked } from './blocks';
+import { isSuspended, isLapakAktif } from './ranking';
 
 export const CATEGORY_LABELS: Record<NFTCategory, string> = {
   tree_planting: 'Tree Planting',
@@ -393,10 +397,19 @@ export async function updateUserDisplayName(userId: string, displayName: string)
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
+export class ReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReportError';
+  }
+}
+
 function toReport(id: string, data: Record<string, any>): Report {
   return {
     id,
     transactionId: data.transactionId,
+    nft_unit_id: data.nft_unit_id,
+    reported_user_id: data.reported_user_id,
     userId: data.userId,
     reason: data.reason,
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
@@ -404,21 +417,93 @@ function toReport(id: string, data: Record<string, any>): Report {
     resolvedBy: data.resolvedBy,
     resolvedAt: data.resolvedAt instanceof Timestamp ? data.resolvedAt.toDate() : undefined,
     resolutionNotes: data.resolutionNotes,
+    reporter_lapak_aktif: data.reporter_lapak_aktif,
   };
 }
 
-export async function createReport(transactionId: string, userId: string, reason: string): Promise<void> {
-  await addDoc(collection(db, 'reports'), {
+// Laporkan entri log transaksi (dari /transactions) — dedup PERMANEN via ID
+// deterministik `${reporterId}_${transactionId}`: laporan kedua terhadap
+// transaksi yang sama otomatis ditolak firestore.rules (allow create saja,
+// bukan update — lihat match /reports). Rate limit + blocklist + suspend
+// sama seperti titik report lain (reportPurchase, reportComment).
+export async function submitReport(
+  reporterId: string,
+  transactionId: string,
+  nftUnitId: string,
+  reportedUserId: string,
+  reason: string,
+): Promise<void> {
+  const reportRef = doc(db, 'reports', `${reporterId}_${transactionId}`);
+
+  // Cek dedup secara EKSPLISIT dulu (1 read) — supaya permission-denied yang
+  // tersisa setelah ini dijamin BUKAN soal duplikat, dan tidak disamaratakan
+  // begitu saja (lihat insiden: bug lain di daily_stats sempat membuat SEMUA
+  // laporan pertama pun tertolak, tapi pesan errornya salah menuduh duplikat).
+  const existing = await getDoc(reportRef);
+  if (existing.exists()) {
+    throw new ReportError('Anda sudah melaporkan transaksi ini.');
+  }
+
+  const reporterRef = doc(db, 'users', reporterId);
+  const [config, reporterSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(reporterRef),
+  ]);
+  if (isSuspended(reporterSnap.data())) {
+    throw new ReportError('Akun Anda ditangguhkan administrator.');
+  }
+  if (reportedUserId && reportedUserId !== reporterId) {
+    const blocked = await isBlocked(reporterId, reportedUserId);
+    if (blocked) throw new ReportError('Tidak bisa melaporkan user yang diblokir/memblokir Anda.');
+  }
+  const reportsGlobalLimit = config?.max_reports_global_per_day ?? 50;
+  await checkGlobalDailyLimit('reports', reportsGlobalLimit);
+
+  const reporterData = reporterSnap.data() ?? {};
+  const batch = writeBatch(db);
+  checkAndIncrementUserUsage(
+    batch, reporterRef, reporterData, 'reports',
+    config?.max_reports_per_user_per_day ?? 3,
+  );
+  if (reportsGlobalLimit > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { reports: increment(1) }, { merge: true });
+  }
+  batch.set(reportRef, {
     transactionId,
-    userId,
+    nft_unit_id: nftUnitId,
+    reported_user_id: reportedUserId,
+    userId: reporterId,
     reason,
     status: 'pending',
     createdAt: Timestamp.now(),
+    reporter_lapak_aktif: isLapakAktif(reporterData),
   });
+
+  try {
+    await batch.commit();
+  } catch (err: unknown) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === 'permission-denied') {
+      // Sudah dipastikan bukan duplikat di atas — tapi cek ulang untuk race
+      // (dua submit bersamaan): kalau memang sekarang sudah ada, itu memang
+      // duplikat. Kalau tidak, ini masalah rules/field lain — JANGAN
+      // ditutupi, log detailnya supaya kelas bug ini tidak tersamar lagi.
+      const recheck = await getDoc(reportRef);
+      if (recheck.exists()) {
+        throw new ReportError('Anda sudah melaporkan transaksi ini.');
+      }
+      console.error('submitReport: permission-denied tapi bukan duplikat', err);
+      throw new ReportError(
+        'Laporan ditolak oleh sistem (bukan karena duplikat). Coba lagi; jika berulang, hubungi admin.',
+      );
+    }
+    console.error('submitReport: gagal mengirim laporan', err);
+    throw err;
+  }
 }
 
-export async function fetchAllReports(): Promise<Report[]> {
-  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+export async function fetchAllReports(maxCount = 50): Promise<Report[]> {
+  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(maxCount));
   const snap = await getDocs(q);
   return snap.docs.map(d => toReport(d.id, d.data()));
 }
@@ -435,6 +520,58 @@ export async function resolveReport(
     resolvedAt: Timestamp.now(),
     ...(resolutionNotes ? { resolutionNotes } : {}),
   });
+}
+
+// ─── Ringkasan "paling sering dilaporkan" (admin-only) ─────────────────────────
+// Agregasi in-memory dari purchase_disputes + reports, dihitung dari PELAPOR
+// UNIK (bukan jumlah laporan) yang aktif (reporter_lapak_aktif, snapshot di
+// titik tulis — nol read tambahan). Sengaja BUKAN denormalized counter di
+// dokumen user target: field itu akan masuk daftar hasOnly() publik-increment
+// di rules users, yang hanya membatasi NAMA field bukan besaran delta — siapa
+// pun yang auth bisa meng-increment tanpa batas nilai. Full-read + filter
+// in-memory (pola /top-developers) lebih aman selama skala node kecil.
+export type ReportSummaryEntry = {
+  targetUserId: string;
+  uniqueReporters: number;
+};
+
+export async function getMostReportedSummary(maxCount = 200): Promise<ReportSummaryEntry[]> {
+  const [disputeSnap, reportSnap] = await Promise.all([
+    getDocs(query(collection(db, 'purchase_disputes'), orderBy('created_at', 'desc'), limit(maxCount))),
+    getDocs(query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(maxCount))),
+  ]);
+
+  const reportersByTarget = new Map<string, Set<string>>();
+  function addReporter(targetId: string | undefined, reporterId: string | undefined, reporterActive: boolean) {
+    if (!targetId || !reporterId || !reporterActive) return;
+    if (!reportersByTarget.has(targetId)) reportersByTarget.set(targetId, new Set());
+    reportersByTarget.get(targetId)!.add(reporterId);
+  }
+
+  disputeSnap.docs.forEach(d => {
+    const data = d.data();
+    const type = (data.type as string) ?? 'purchase';
+    const sellerId = data.seller_id as string | undefined;
+    const buyerId = data.buyer_id as string | undefined;
+    // reporter_id ditulis untuk dispute baru; dispute lama (sebelum field ini
+    // ada) diinferensi dari type — purchase dilaporkan seller, buyback oleh buyer.
+    const reporterId = (data.reporter_id as string | undefined) ?? (type === 'purchase' ? sellerId : buyerId);
+    const targetId = type === 'purchase' ? buyerId : sellerId;
+    addReporter(targetId, reporterId, (data.reporter_lapak_aktif as boolean) ?? false);
+  });
+
+  reportSnap.docs.forEach(d => {
+    const data = d.data();
+    addReporter(
+      data.reported_user_id as string | undefined,
+      data.userId as string | undefined,
+      (data.reporter_lapak_aktif as boolean) ?? false,
+    );
+  });
+
+  return [...reportersByTarget.entries()]
+    .map(([targetUserId, reporters]) => ({ targetUserId, uniqueReporters: reporters.size }))
+    .sort((a, b) => b.uniqueReporters - a.uniqueReporters);
 }
 
 // ─── Top Developers ───────────────────────────────────────────────────────────

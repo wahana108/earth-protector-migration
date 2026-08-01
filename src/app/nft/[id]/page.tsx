@@ -299,12 +299,15 @@ function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, 
     }
   }
 
-  async function handleReport(commentId: string) {
+  async function handleReport(commentId: string, commentAuthorId: string) {
+    if (!currentUserId) return;
     try {
-      await reportComment(nftId, commentId);
+      await reportComment(nftId, commentId, currentUserId, commentAuthorId);
       localStorage.setItem(`tmep_reported_${commentId}`, '1');
       setReportedSet(prev => new Set(prev).add(commentId));
-    } catch { /* silent */ }
+    } catch (err: unknown) {
+      setError(err instanceof RateLimitError ? err.message : err instanceof Error ? err.message : 'Gagal melaporkan komentar. Coba lagi.');
+    }
   }
 
   async function handlePin(commentId: string) {
@@ -465,7 +468,7 @@ function CommentSection({ nftId, nftOwnerId, projectDeveloperId, currentUserId, 
                       ) : currentUserId ? (
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
+                            onClick={() => !reportedSet.has(c.id) && handleReport(c.id, c.user_id)}
                             disabled={reportedSet.has(c.id)}
                             className={cn(
                               'p-0.5 transition-colors',
