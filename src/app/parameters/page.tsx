@@ -53,6 +53,9 @@ type EditValues = {
   max_comments_per_user_per_day: number;
   max_projects_global_per_day: number;
   max_comments_global_per_day: number;
+  max_reports_per_user_per_day: number;
+  max_reports_global_per_day: number;
+  max_claims_per_user_per_day: number;
   ai_governance_enabled: boolean;
   ai_review_history_limit: number;
   ai_review_history_days: number;
@@ -99,6 +102,9 @@ function configToEdit(c: CommunityConfig): EditValues {
     max_comments_per_user_per_day: c.max_comments_per_user_per_day ?? 30,
     max_projects_global_per_day: c.max_projects_global_per_day ?? 20,
     max_comments_global_per_day: c.max_comments_global_per_day ?? 300,
+    max_reports_per_user_per_day: c.max_reports_per_user_per_day ?? 3,
+    max_reports_global_per_day: c.max_reports_global_per_day ?? 50,
+    max_claims_per_user_per_day: c.max_claims_per_user_per_day ?? 2,
     ai_governance_enabled: c.ai_governance_enabled ?? false,
     ai_review_history_limit: c.ai_review_history_limit ?? 50,
     ai_review_history_days: c.ai_review_history_days ?? 50,
@@ -144,6 +150,9 @@ function editToConfig(e: EditValues): Partial<Omit<CommunityConfig, 'updated_at'
     max_comments_per_user_per_day: e.max_comments_per_user_per_day,
     max_projects_global_per_day: e.max_projects_global_per_day,
     max_comments_global_per_day: e.max_comments_global_per_day,
+    max_reports_per_user_per_day: e.max_reports_per_user_per_day,
+    max_reports_global_per_day: e.max_reports_global_per_day,
+    max_claims_per_user_per_day: e.max_claims_per_user_per_day,
     ai_governance_enabled: e.ai_governance_enabled,
     ai_review_history_limit: e.ai_review_history_limit,
     ai_review_history_days: e.ai_review_history_days,
@@ -566,6 +575,12 @@ export default function ParametersPage() {
                     onChange={v => setField('max_projects_global_per_day', v as number)} />
                   <EditRow label="Komentar global/hari" value={editValues.max_comments_global_per_day}
                     onChange={v => setField('max_comments_global_per_day', v as number)} />
+                  <EditRow label="Laporan per user/hari" value={editValues.max_reports_per_user_per_day}
+                    onChange={v => setField('max_reports_per_user_per_day', v as number)} />
+                  <EditRow label="Laporan global/hari" value={editValues.max_reports_global_per_day}
+                    onChange={v => setField('max_reports_global_per_day', v as number)} />
+                  <EditRow label="Klaim lencana per user/hari" value={editValues.max_claims_per_user_per_day}
+                    onChange={v => setField('max_claims_per_user_per_day', v as number)} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Nilai 0 = tak terbatas. Batasan melindungi node dari overload.
@@ -878,6 +893,12 @@ export default function ParametersPage() {
                     value={(config.max_projects_global_per_day ?? 20) <= 0 ? 'Tak terbatas' : `${config.max_projects_global_per_day ?? 20}/hari`} />
                   <ParamRow label="Komentar global/hari"
                     value={(config.max_comments_global_per_day ?? 300) <= 0 ? 'Tak terbatas' : `${config.max_comments_global_per_day ?? 300}/hari`} />
+                  <ParamRow label="Laporan per user/hari"
+                    value={(config.max_reports_per_user_per_day ?? 3) <= 0 ? 'Tak terbatas' : `${config.max_reports_per_user_per_day ?? 3}/hari`} />
+                  <ParamRow label="Laporan global/hari"
+                    value={(config.max_reports_global_per_day ?? 50) <= 0 ? 'Tak terbatas' : `${config.max_reports_global_per_day ?? 50}/hari`} />
+                  <ParamRow label="Klaim lencana per user/hari"
+                    value={(config.max_claims_per_user_per_day ?? 2) <= 0 ? 'Tak terbatas' : `${config.max_claims_per_user_per_day ?? 2}/hari`} />
                   <div className="pt-2 pb-1">
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Nilai 0 = tak terbatas. Batasan melindungi node dari overload.
