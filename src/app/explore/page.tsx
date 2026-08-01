@@ -381,13 +381,14 @@ function CommentPanel({
     }
   }
 
-  async function handleReport(commentId: string) {
+  async function handleReport(commentId: string, commentAuthorId: string) {
+    if (!currentUserId) return;
     try {
-      await reportComment(nftId, commentId);
+      await reportComment(nftId, commentId, currentUserId, commentAuthorId);
       localStorage.setItem(`tmep_reported_${commentId}`, '1');
       setReportedSet((prev) => new Set(prev).add(commentId));
-    } catch {
-      // silent fail
+    } catch (err: unknown) {
+      setError(err instanceof RateLimitError ? err.message : err instanceof Error ? err.message : 'Gagal melaporkan komentar. Coba lagi.');
     }
   }
 
@@ -461,7 +462,7 @@ function CommentPanel({
                       </button>
                     ) : currentUserId ? (
                       <button
-                        onClick={() => !reportedSet.has(c.id) && handleReport(c.id)}
+                        onClick={() => !reportedSet.has(c.id) && handleReport(c.id, c.user_id)}
                         disabled={reportedSet.has(c.id)}
                         className={cn(
                           'p-0.5 rounded transition-colors',

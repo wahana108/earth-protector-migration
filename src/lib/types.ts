@@ -18,6 +18,8 @@ export type DailyUsage = {
   transactions: number;
   projects: number;
   comments: number;
+  reports: number;
+  claims: number;
 };
 
 export type User = {
@@ -111,6 +113,8 @@ export type TopDeveloper = {
 export type Report = {
   id: string;
   transactionId: string;
+  nft_unit_id?: string;
+  reported_user_id?: string;
   userId: string;
   reason: string;
   createdAt: Date;
@@ -118,6 +122,9 @@ export type Report = {
   resolvedBy?: string;
   resolvedAt?: Date;
   resolutionNotes?: string;
+  // Snapshot lapak_aktif pelapor di titik waktu laporan dibuat — dipakai agregasi
+  // "paling sering dilaporkan" (hitung hanya pelapor aktif) tanpa read tambahan.
+  reporter_lapak_aktif?: boolean;
 };
 
 export type CommunityConfig = {
@@ -143,6 +150,10 @@ export type CommunityConfig = {
   max_comments_per_user_per_day: number;
   max_projects_global_per_day: number;
   max_comments_global_per_day: number;
+  max_reports_per_user_per_day: number;
+  max_reports_global_per_day: number;
+  max_claims_per_user_per_day: number;
+  min_unique_reporters_public: number;
   ai_governance_enabled: boolean;
   ai_review_history_limit: number;
   ai_review_history_days: number;

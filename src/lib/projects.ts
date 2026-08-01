@@ -1429,13 +1429,35 @@ export async function disputeBuybackRequest(
 
   const nftUnitId = request.nft_unit_id as string;
   const sellerId = request.seller_id as string;
+
+  const requesterRef = doc(db, 'users', requesterId);
+  const [config, requesterSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(requesterRef),
+  ]);
+  if (isSuspended(requesterSnap.data())) throw new BuybackRequestError('Akun Anda ditangguhkan administrator.');
+  const blocked = await isBlocked(requesterId, sellerId);
+  if (blocked) throw new BuybackRequestError('Tidak bisa melaporkan user yang diblokir/memblokir Anda.');
+  const reportsGlobalLimit = config?.max_reports_global_per_day ?? 50;
+  await checkGlobalDailyLimit('reports', reportsGlobalLimit);
+
+  const requesterData = requesterSnap.data() ?? {};
   const batch = writeBatch(db);
+  checkAndIncrementUserUsage(
+    batch, requesterRef, requesterData, 'reports',
+    config?.max_reports_per_user_per_day ?? 3,
+  );
+  if (reportsGlobalLimit > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { reports: increment(1) }, { merge: true });
+  }
   batch.update(requestRef, { status: 'disputed', updated_at: serverTimestamp() });
   batch.update(doc(db, 'nft_units', nftUnitId), { buyback_pending: false });
   batch.set(doc(collection(db, 'purchase_disputes')), {
     nft_unit_id: nftUnitId,
     seller_id: sellerId,
     buyer_id: requesterId,
+    reporter_id: requesterId,
+    reporter_lapak_aktif: isLapakAktif(requesterData),
     type: 'buyback',
     reason,
     status: 'pending_admin',
@@ -1554,11 +1576,31 @@ export async function reportPurchase(
   if (nft.purchase_status !== 'pending') throw new PurchaseError('Transaksi ini sudah tidak bisa dilaporkan.');
 
   const buyerId = nft.owner_id as string;
+  const developerRef = doc(db, 'users', developerId);
+  const [config, developerSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(developerRef),
+  ]);
+  if (isSuspended(developerSnap.data())) throw new PurchaseError('Akun Anda ditangguhkan administrator.');
+  const blocked = await isBlocked(developerId, buyerId);
+  if (blocked) throw new PurchaseError('Tidak bisa melaporkan user yang diblokir/memblokir Anda.');
+  const reportsGlobalLimit = config?.max_reports_global_per_day ?? 50;
+  await checkGlobalDailyLimit('reports', reportsGlobalLimit);
+
+  const developerData = developerSnap.data() ?? {};
   const batch = writeBatch(db);
+  checkAndIncrementUserUsage(
+    batch, developerRef, developerData, 'reports',
+    config?.max_reports_per_user_per_day ?? 3,
+  );
+  if (reportsGlobalLimit > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { reports: increment(1) }, { merge: true });
+  }
   batch.update(doc(db, 'nft_units', nftUnitId), { purchase_status: 'disputed' });
-  batch.update(doc(db, 'users', developerId), { pending_seller_actions: increment(-1) });
+  batch.update(developerRef, { pending_seller_actions: increment(-1) });
   batch.set(doc(collection(db, 'purchase_disputes')), {
     nft_unit_id: nftUnitId, seller_id: developerId, buyer_id: buyerId,
+    reporter_id: developerId, reporter_lapak_aktif: isLapakAktif(developerData),
     type: 'purchase', reason, status: 'pending_admin', created_at: serverTimestamp(),
   });
   await batch.commit();

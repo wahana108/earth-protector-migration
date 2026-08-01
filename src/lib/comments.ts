@@ -151,10 +151,34 @@ export async function deleteComment(nftUnitId: string, commentId: string): Promi
   await batch.commit();
 }
 
-export async function reportComment(nftUnitId: string, commentId: string): Promise<void> {
-  await updateDoc(doc(db, 'nft_units', nftUnitId, 'comments', commentId), {
-    anomali_flag: true,
-  });
+export async function reportComment(
+  nftUnitId: string,
+  commentId: string,
+  reporterId: string,
+  commentAuthorId?: string,
+): Promise<void> {
+  const reporterRef = doc(db, 'users', reporterId);
+  const [config, reporterSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(reporterRef),
+  ]);
+  if (isSuspended(reporterSnap.data())) throw new Error('Akun Anda ditangguhkan administrator.');
+  if (commentAuthorId && commentAuthorId !== reporterId) {
+    const blocked = await isBlocked(reporterId, commentAuthorId);
+    if (blocked) throw new Error('Tidak bisa melaporkan user yang diblokir/memblokir Anda.');
+  }
+  await checkGlobalDailyLimit('reports', config?.max_reports_global_per_day ?? 50);
+
+  const batch = writeBatch(db);
+  checkAndIncrementUserUsage(
+    batch, reporterRef, reporterSnap.data() ?? {}, 'reports',
+    config?.max_reports_per_user_per_day ?? 3,
+  );
+  if ((config?.max_reports_global_per_day ?? 50) > 0) {
+    batch.set(doc(db, 'daily_stats', getTodayString()), { reports: increment(1) }, { merge: true });
+  }
+  batch.update(doc(db, 'nft_units', nftUnitId, 'comments', commentId), { anomali_flag: true });
+  await batch.commit();
 }
 
 export async function ignoreComment(nftUnitId: string, commentId: string): Promise<void> {
@@ -163,10 +187,14 @@ export async function ignoreComment(nftUnitId: string, commentId: string): Promi
   });
 }
 
-export async function fetchFlaggedComments(): Promise<FlaggedComment[]> {
+// Tidak ada orderBy di query (hindari index komposit collectionGroup) — sort waktu
+// di JS setelah fetch. limit() membatasi biaya read worst-case scan collectionGroup,
+// bukan menjamin N komentar TERBARU (urutan sebelum limit tidak dijamin per-waktu).
+export async function fetchFlaggedComments(maxCount = 50): Promise<FlaggedComment[]> {
   const q = query(
     collectionGroup(db, 'comments'),
     where('anomali_flag', '==', true),
+    limit(maxCount),
   );
   const snap = await getDocs(q);
 

@@ -183,10 +183,38 @@ service cloud.firestore {
     }
 
     // ─── reports/{reportId} ───────────────────────────────────────────────────
-    // User bisa membuat laporan, hanya admin yang bisa membaca dan mengelola.
+    // User bisa membuat laporan. Listing/kelola penuh admin-only; non-admin
+    // hanya bisa GET dokumen dengan ID milik sendiri (lihat allow read).
+    // Dedup PERMANEN: ID dokumen deterministik `${reporterId}_${transactionId}`
+    // (lihat submitReport di lib/firestore.ts) — allow create HANYA berlaku saat
+    // dokumen belum ada; percobaan laporan kedua ke ID yang sama otomatis
+    // dievaluasi sebagai update (ditolak, bukan admin) → permission-denied.
     match /reports/{reportId} {
-      allow read:          if isAdmin();
-      allow create:        if isAuth();
+      // Non-admin hanya boleh GET doc yang ID-nya berprefix UID mereka sendiri
+      // (skema ID deterministik `${reporterId}_${transactionId}` di submitReport)
+      // — dibutuhkan submitReport untuk cek dedup (getDoc) SEBELUM menulis.
+      // Murni cek path (bukan resource.data), jadi tetap berlaku saat dokumen
+      // belum ada (resource == null, hasil "not found" bukan permission-denied).
+      // Tidak membuka laporan MILIK USER LAIN — itu tetap admin-only.
+      allow read: if isAdmin() ||
+        (isAuth() && reportId.split('_')[0] == request.auth.uid);
+      // reportId prefix WAJIB cocok juga di create (bukan hanya userId di data)
+      // — tanpa ini, siapa pun bisa membuat dokumen ber-ID `${uidKorban}_${txId}`
+      // (dengan data.userId = uid mereka sendiri, tetap lolos cek di atas) untuk
+      // menyerobot slot dedup milik korban, sehingga korban keliru dianggap
+      // "sudah melaporkan" transaksi yang belum pernah ia laporkan sendiri.
+      allow create: if isAuth() &&
+        reportId.split('_')[0] == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.reason is string &&
+        request.resource.data.reason.size() > 0 &&
+        request.resource.data.transactionId is string &&
+        request.resource.data.reported_user_id is string &&
+        request.resource.data.keys().hasOnly([
+          'transactionId', 'nft_unit_id', 'reported_user_id', 'userId',
+          'reason', 'status', 'createdAt', 'reporter_lapak_aktif',
+        ]);
       allow update, delete: if isAdmin();
     }
 
@@ -357,12 +385,12 @@ service cloud.firestore {
     }
 
     // ─── daily_stats/{date} ──────────────────────────────────────────────────
-    // Counter harian global untuk rate limiting (project & komentar).
-    // Dibatasi ketat: hanya dua field yang diizinkan untuk mencegah penyalahgunaan.
+    // Counter harian global untuk rate limiting (project, komentar, laporan).
+    // Dibatasi ketat: hanya field yang diizinkan untuk mencegah penyalahgunaan.
     match /daily_stats/{date} {
       allow read: if true;
       allow write: if isAuth() &&
-        request.resource.data.keys().hasOnly(['projects', 'comments']);
+        request.resource.data.keys().hasOnly(['projects', 'comments', 'reports']);
     }
 
     // ─── infrastructure_payments/{paymentId} ─────────────────────────────────

@@ -1,7 +1,7 @@
 import { db } from './firebase';
 import {
   collection, doc, addDoc, deleteDoc, getDocs, updateDoc,
-  query, where, serverTimestamp, Timestamp,
+  query, where, serverTimestamp, Timestamp, limit,
 } from 'firebase/firestore';
 import type { UserBlock } from './types';
 
@@ -52,10 +52,13 @@ export async function getBlockList(userId: string): Promise<UserBlock[]> {
 }
 
 // Semua blokir yang belum ditinjau admin (untuk halaman /admin).
-export async function getPendingBlocks(): Promise<UserBlock[]> {
+// Tidak ada orderBy di query (hindari index komposit) — sort waktu di JS,
+// limit() hanya membatasi biaya read worst-case, bukan menjamin N terbaru.
+export async function getPendingBlocks(maxCount = 50): Promise<UserBlock[]> {
   const snap = await getDocs(query(
     collection(db, 'user_blocks'),
     where('reviewed_by_admin', '==', false),
+    limit(maxCount),
   ));
   return snap.docs
     .map(d => toUserBlock(d.id, d.data() as Record<string, unknown>))

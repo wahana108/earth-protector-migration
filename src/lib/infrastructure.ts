@@ -5,6 +5,7 @@ import {
   type Transaction, type DocumentReference, type QueryDocumentSnapshot, type DocumentData,
 } from 'firebase/firestore';
 import { getCommunityConfig } from './community-config';
+import { checkAndIncrementUserUsage } from './rate-limit';
 import type { ContributorCertificate, InfrastructureClaim, InfrastructurePayment } from './types';
 
 export type InfrastructureFundStatus = {
@@ -276,10 +277,20 @@ export async function submitInfrastructureClaim(
   buktiLink: string,
   keterangan: string,
 ): Promise<void> {
+  const userRef = doc(db, 'users', userId);
+  const [config, userSnap] = await Promise.all([
+    getCommunityConfig(),
+    getDoc(userRef),
+  ]);
+
   const claimRef = doc(collection(db, 'infrastructure_claims'));
   const neracaLogRef = doc(collection(db, 'users', userId, 'neraca_log'));
 
   const batch = writeBatch(db);
+  checkAndIncrementUserUsage(
+    batch, userRef, userSnap.data() ?? {}, 'claims',
+    config?.max_claims_per_user_per_day ?? 2,
+  );
   batch.set(claimRef, {
     user_id: userId,
     user_nama: userNama,
@@ -380,11 +391,12 @@ export async function getUserClaims(userId: string): Promise<InfrastructureClaim
   return snap.docs.map(mapInfrastructureClaim);
 }
 
-export async function getPendingInfrastructureClaims(): Promise<InfrastructureClaim[]> {
+export async function getPendingInfrastructureClaims(maxCount = 50): Promise<InfrastructureClaim[]> {
   const snap = await getDocs(query(
     collection(db, 'infrastructure_claims'),
     where('status', '==', 'pending'),
     orderBy('created_at', 'desc'),
+    limit(maxCount),
   ));
   return snap.docs.map(mapInfrastructureClaim);
 }

@@ -662,7 +662,7 @@ export default function AdminPage() {
   async function loadSuspendedUsers() {
     setLoadingSuspended(true);
     try {
-      const snap = await getDocs(query(collection(db, 'users'), where('suspended_by_admin', '==', true)));
+      const snap = await getDocs(query(collection(db, 'users'), where('suspended_by_admin', '==', true), limit(50)));
       setSuspendedUsers(snap.docs.map(d => ({
         id: d.id,
         displayName: (d.data().displayName as string) ?? 'User',
@@ -871,6 +871,7 @@ export default function AdminPage() {
         collection(db, 'purchase_disputes'),
         where('status', '==', 'pending_admin'),
         orderBy('created_at', 'desc'),
+        limit(50),
       ));
 
       if (snap.empty) { setDisputes([]); return; }
