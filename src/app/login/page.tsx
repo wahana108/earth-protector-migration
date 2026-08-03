@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { LoginForm } from "@/components/auth-components";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,9 @@ export default function LoginPage() {
             <CardDescription>Sign in to continue to Earth Sanctuary</CardDescription>
         </CardHeader>
         <CardContent>
-            <LoginForm />
+            <Suspense fallback={<div className="text-sm text-muted-foreground text-center py-8">Memuat...</div>}>
+              <LoginForm />
+            </Suspense>
         </CardContent>
       </Card>
     </AuthLayout>

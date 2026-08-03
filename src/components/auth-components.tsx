@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
@@ -49,6 +49,38 @@ function GoogleIcon() {
     </svg>
   );
 }
+
+function hasSessionCookie(): boolean {
+  return document.cookie.split('; ').some((c) => c.startsWith('__session='));
+}
+
+// Cookie __session ditulis oleh onAuthStateChanged (use-auth.tsx) di rantai
+// promise TERPISAH dari sign-in ini — polling singkat menutup race antara
+// navigasi dan penulisan cookie, alih-alih navigasi buta sebelum cookie
+// benar-benar ada (lihat investigasi fix/login-reliability).
+async function waitForSessionCookie(timeoutMs = 5000, intervalMs = 50): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (hasSessionCookie()) return true;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return hasSessionCookie();
+}
+
+// Navigasi full-page (bukan router.push) supaya cookie yang baru ditulis
+// dijamin ikut terkirim di request yang dibaca middleware.
+async function awaitSessionAndRedirect(target: string): Promise<boolean> {
+  const ready = await waitForSessionCookie();
+  if (!ready) return false;
+  window.location.assign(target);
+  return true;
+}
+
+function isSafeRedirectPath(path: string | null): path is string {
+  return !!path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
+}
+
+const SESSION_TIMEOUT_MESSAGE = 'Gagal menyiapkan sesi. Periksa koneksi Anda lalu coba lagi.';
 
 function ForgotPasswordDialog({ onClose }: { onClose: () => void }) {
   const { requestPasswordReset } = useAuth();
@@ -124,7 +156,7 @@ const signUpSchema = z.object({
 });
 
 export function LoginForm() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn, signInWithGoogle, resendVerificationEmailFor } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [unverifiedCredentials, setUnverifiedCredentials] = useState<AuthCredentials | null>(null);
@@ -133,11 +165,15 @@ export function LoginForm() {
   const [isResending, setIsResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [preparingSession, setPreparingSession] = useState(false);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   });
+
+  const fromParam = searchParams.get('from');
+  const redirectTarget = isSafeRedirectPath(fromParam) ? fromParam : '/explore';
 
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
     setIsLoading(true);
@@ -146,17 +182,24 @@ export function LoginForm() {
     setResent(false);
     try {
       await signIn(values);
-      router.push('/explore');
     } catch (err: any) {
+      setIsLoading(false);
       if (err instanceof UnverifiedEmailError) {
         setError(err.message);
         setUnverifiedCredentials(values);
       } else {
         setError(err.message || 'An unexpected error occurred.');
       }
-    } finally {
-      setIsLoading(false);
+      return;
     }
+    setPreparingSession(true);
+    const ok = await awaitSessionAndRedirect(redirectTarget);
+    if (!ok) {
+      setError(SESSION_TIMEOUT_MESSAGE);
+      setIsLoading(false);
+      setPreparingSession(false);
+    }
+    // Sukses: state sengaja dibiarkan "loading" — halaman sedang navigasi pergi.
   };
 
   const handleResend = async () => {
@@ -177,12 +220,19 @@ export function LoginForm() {
     setError(null);
     try {
       await signInWithGoogle();
-      router.push('/explore');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google.');
-    } finally {
       setIsGoogleLoading(false);
+      setError(err.message || 'Failed to sign in with Google.');
+      return;
     }
+    setPreparingSession(true);
+    const ok = await awaitSessionAndRedirect(redirectTarget);
+    if (!ok) {
+      setError(SESSION_TIMEOUT_MESSAGE);
+      setIsGoogleLoading(false);
+      setPreparingSession(false);
+    }
+    // Sukses: state sengaja dibiarkan "loading" — halaman sedang navigasi pergi.
   };
 
   return (
@@ -224,7 +274,7 @@ export function LoginForm() {
         ) : (
           <GoogleIcon />
         )}
-        Sign in with Google
+        {isGoogleLoading && preparingSession ? 'Menyiapkan sesi...' : 'Sign in with Google'}
       </Button>
 
       <div className="flex items-center gap-4">
@@ -263,7 +313,7 @@ export function LoginForm() {
           />
           <Button type="submit" className="w-full" disabled={isLoading || isGoogleLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In with Email
+            {isLoading && preparingSession ? 'Menyiapkan sesi...' : 'Sign In with Email'}
           </Button>
         </form>
       </Form>
@@ -293,12 +343,12 @@ export function LoginForm() {
 }
 
 export function SignUpForm() {
-  const router = useRouter();
   const { signUp, signInWithGoogle } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
+  const [preparingSession, setPreparingSession] = useState(false);
 
   const form = useForm<z.infer<typeof signUpSchema>>({
     resolver: zodResolver(signUpSchema),
@@ -323,12 +373,19 @@ export function SignUpForm() {
     setError(null);
     try {
       await signInWithGoogle();
-      router.push('/explore');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google.');
-    } finally {
       setIsGoogleLoading(false);
+      setError(err.message || 'Failed to sign in with Google.');
+      return;
     }
+    setPreparingSession(true);
+    const ok = await awaitSessionAndRedirect('/explore');
+    if (!ok) {
+      setError(SESSION_TIMEOUT_MESSAGE);
+      setIsGoogleLoading(false);
+      setPreparingSession(false);
+    }
+    // Sukses: state sengaja dibiarkan "loading" — halaman sedang navigasi pergi.
   };
 
   if (signedUpEmail) {
@@ -367,7 +424,7 @@ export function SignUpForm() {
         ) : (
           <GoogleIcon />
         )}
-        Continue with Google
+        {isGoogleLoading && preparingSession ? 'Menyiapkan sesi...' : 'Continue with Google'}
       </Button>
 
       <div className="flex items-center gap-4">

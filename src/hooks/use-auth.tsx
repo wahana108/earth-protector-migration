@@ -120,6 +120,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isModerator, setIsModerator] = useState(false);
 
   useEffect(() => {
+    // Secure hanya ditambahkan di https — di http localhost (dev) atribut
+    // Secure membuat browser menolak menyimpan cookie sama sekali.
+    const secureAttr = window.location.protocol === "https:" ? "; Secure" : "";
+
     const unsubscribe = auth.onAuthStateChanged(async (userState) => {
       // Defense-in-depth: signUpWithEmail/signInWithEmail sudah signOut sendiri
       // saat unverified, tapi jalur ini menutup celah sesi unverified yang
@@ -132,9 +136,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSuperAdmin(false);
         setIsAdmin(false);
         setIsModerator(false);
-        document.cookie = "__session=; path=/; Max-Age=0";
+        document.cookie = `__session=; path=/; Max-Age=0${secureAttr}`;
         setLoading(false);
         return;
+      }
+
+      // Cookie ditulis SEGERA di sini — begitu sesi Firebase dinyatakan sah
+      // (sudah lolos gerbang unverified di atas) — SEBELUM fetchUserProfile/
+      // getCommunityConfig yang melakukan beberapa round-trip Firestore tanpa
+      // cache. Cookie hanya menandai "Firebase-authenticated", bukan "profil
+      // termuat", supaya pemanggil (auth-components.tsx) yang menunggu cookie
+      // ini sebelum navigasi tidak ikut menunggu beban fetch yang tak terkait.
+      if (userState) {
+        document.cookie = `__session=1; path=/; SameSite=Lax${secureAttr}`;
+      } else {
+        document.cookie = `__session=; path=/; Max-Age=0${secureAttr}`;
       }
 
       setFirebaseUser(userState);
@@ -160,14 +176,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsModerator(false);
           }
         }
-
-        document.cookie = "__session=1; path=/; SameSite=Lax";
       } else {
         setUser(null);
         setIsSuperAdmin(false);
         setIsAdmin(false);
         setIsModerator(false);
-        document.cookie = "__session=; path=/; Max-Age=0";
       }
       setLoading(false);
     });
