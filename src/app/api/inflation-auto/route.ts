@@ -4,6 +4,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { buildInflationPrompt, parseInflationOutput } from '@/lib/inflation';
 import { recordInflationAdmin } from '@/lib/inflation-server';
 import { ai } from '@/ai/genkit';
+import { MODEL_CANDIDATES } from '@/lib/ai-models';
 
 function err500(step: string, msg: string) {
   console.error(`[inflation-auto] step=${step} error:`, msg);
@@ -61,16 +62,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── 7. Call Gemini (fallback chain) ────────────────────────────────────────
   const prompt = buildInflationPrompt(tahunTarget, config.currency_code ?? 'Rupiah Indonesia');
 
-  // gemini-3-flash tidak ada di @genkit-ai/google-genai@1.20.0 → tidak disertakan
-  const MODEL_CANDIDATES = [...new Set([
-    process.env.GEMINI_MODEL,
-    'googleai/gemini-2.5-flash-lite',
-    'googleai/gemini-2.5-flash',
-    'googleai/gemini-2.5-pro',
-    'googleai/gemini-2.0-flash-lite',
-    'googleai/gemini-2.0-flash',
-  ].filter(Boolean) as string[])];
-
   let geminiText = '';
   let modelUsed = '';
   let lastGeminiError = '';
@@ -79,7 +70,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (const model of MODEL_CANDIDATES) {
     triedModels.push(model);
     try {
-      const response = await ai.generate({ model, prompt, config: { temperature: 0.15 } });
+      const response = await ai.generate({ model, prompt, config: { temperature: 0.15, maxOutputTokens: 8000 } });
       geminiText = response.text;
       modelUsed = model;
       console.log(`[inflation-auto] gemini success model=${model}, raw (first 300):`, geminiText.substring(0, 300));
