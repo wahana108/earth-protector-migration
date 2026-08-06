@@ -225,8 +225,32 @@
         { "fieldPath": "user_id",      "order": "ASCENDING"  },
         { "fieldPath": "purchased_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "infrastructure_claims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status",     "order": "ASCENDING"  },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "infrastructure_claims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id",    "order": "ASCENDING"  },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "comments",
+      "fieldPath": "anomali_flag",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }
 

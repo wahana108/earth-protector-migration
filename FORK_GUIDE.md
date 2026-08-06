@@ -93,8 +93,10 @@ firebase deploy --only firestore
 ```
 
 Ini men-deploy rules (`firestore.rules`) dan composite index
-(`firestore.indexes.json`, 232 baris — dipakai oleh query kategori/harga/
-like di `/explore`, `/pool`, dsb.) sekaligus. Karena ini node BARU tanpa
+(`firestore.indexes.json` — dipakai oleh query kategori/harga/
+like di `/explore`, `/pool`, dsb., serta query admin seperti antrian
+klaim infrastruktur & komentar terlaporkan) sekaligus. Karena ini node
+BARU tanpa
 traffic produksi, tidak ada isu urutan deploy rules-vs-kode yang perlu
 dikhawatirkan (isu itu hanya relevan untuk fork yang SUDAH live — lihat
 `CLAUDE.md` bagian "URUTAN DEPLOY RULES vs KODE").
