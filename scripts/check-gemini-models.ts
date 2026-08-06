@@ -40,6 +40,15 @@ const EXPLICIT_CANDIDATES = [
   'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
+  // Putaran 2 — generasi baru terlihat di /v1beta/models tapi belum diuji.
+  // Alasan diuji: alias "-latest" bisa berubah isinya diam-diam (terbukti
+  // gemini-pro-latest kini me-resolve ke gemini-3.1-pro) — rantai final
+  // butuh nama eksplisit yang perilakunya stabil, alias cuma jaring pengaman.
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
 ];
 
 // Kandidat alias "rolling" Google (selalu menunjuk versi stabil terbaru dari
@@ -125,12 +134,17 @@ async function callViaGenkit(model: string): Promise<Result> {
   }
 }
 
+const CALL_DELAY_MS = 2500;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function main() {
   const available = await listAvailableModels();
 
   console.log('\n=== (b) Panggilan nyata lewat Genkit (jalur sama dengan website) ===\n');
   const results: Result[] = [];
-  for (const model of ALL_CANDIDATES) {
+  for (let i = 0; i < ALL_CANDIDATES.length; i++) {
+    const model = ALL_CANDIDATES[i];
+    if (i > 0) await sleep(CALL_DELAY_MS); // jeda antar-panggilan — hindari 429 per-menit mencemari hasil
     process.stdout.write(`  Testing googleai/${model} ... `);
     const result = await callViaGenkit(model);
     console.log(`${result.status}${result.status === 'OK' ? ' ' + result.detail : ' — ' + result.detail}`);
