@@ -112,14 +112,19 @@ async function callViaGenkit(model: string): Promise<Result> {
   const ai = genkit({ plugins: [googleAI({ apiKey: API_KEY })] });
 
   try {
+    // maxOutputTokens 4000 (bukan nilai kecil seperti 50) — model generasi
+    // baru (2.5+/3.x) menghitung "thinking tokens" ke budget output yang sama;
+    // budget kecil menghasilkan respons KOSONG yang menyesatkan (terlihat
+    // gagal padahal model sebenarnya OK). Terbukti di putaran 1 script ini:
+    // gemini-3.5-flash & gemini-flash-latest kosong dengan maxOutputTokens:50.
     const response = await ai.generate({
       model: `googleai/${model}`,
       prompt: 'Balas HANYA dengan satu kata: OK',
-      config: { temperature: 0, maxOutputTokens: 50 },
+      config: { temperature: 0, maxOutputTokens: 4000 },
     });
     const text = response.text?.trim() ?? '';
     if (!text) {
-      return { model, status: 'ERROR', detail: 'Respons kosong (cek apakah maxOutputTokens habis oleh thinking tokens)' };
+      return { model, status: 'ERROR', detail: 'Respons kosong walau maxOutputTokens=4000 (bukan sekadar thinking-token starvation)' };
     }
     return { model, status: 'OK', detail: `"${text.substring(0, 60)}"` };
   } catch (e: unknown) {
